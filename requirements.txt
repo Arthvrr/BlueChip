@@ -1,2 +1,5 @@
+streamlit
 yfinance
-currency_converter
+pandas
+plotly
+PIL
