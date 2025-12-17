@@ -128,7 +128,7 @@ if not st.session_state.portfolio.empty:
     df['Div_Unitaire_Native'] = df['Ticker'].map(dividends_map)
     df['Div_Unitaire_EUR'] = df.apply(lambda r: to_eur(r, 'Div_Unitaire_Native'), axis=1)
     df['Total_Div_Annuel_EUR'] = df['Div_Unitaire_EUR'] * df['Quantité']
-    df['Yield_%'] = (df['Div_Unitaire_EUR'] / df['Prix Actuel (€)']) * 100
+    df['Yield (%)'] = (df['Div_Unitaire_EUR'] / df['Prix Actuel (€)']) * 100
 
     valeur_actions = df['Valeur Actuelle (€)'].sum()
     valeur_pf_actuelle = valeur_actions + st.session_state.cash
@@ -147,19 +147,19 @@ if not st.session_state.portfolio.empty:
 
     # --- 6. TABLEAU ---
     st.subheader("📝 Détails des positions")
-    cols = ['Ticker', 'Quantité', 'Yield_%', 'Prix Achat ($ ou €)', 'Prix Actuel (Native)', 'Valeur Actuelle (€)', 'Plus-value (€)', 'Perf %']
+    cols = ['Ticker', 'Quantité', 'Yield (%)', 'Prix Achat ($ ou €)', 'Prix Actuel (Native)', 'Valeur Actuelle (€)', 'Plus-value (€)', 'Perf %']
     
     def color_pnl(v):
         if v > 0.01: return 'color: #28a745; font-weight: bold'
         if v < -0.01: return 'color: #dc3545; font-weight: bold'
         return 'color: #6c757d'
 
-    cash_row = pd.DataFrame({'Ticker': ['💰 CASH'], 'Quantité': [1.0], 'Valeur Actuelle (€)': [st.session_state.cash], 'Plus-value (€)': [0.0], 'Perf %': [0.0], 'Yield_%': [0.0]})
+    cash_row = pd.DataFrame({'Ticker': ['💰 CASH'], 'Quantité': [1.0], 'Valeur Actuelle (€)': [st.session_state.cash], 'Plus-value (€)': [0.0], 'Perf %': [0.0], 'Yield (%)': [0.0]})
     display_df = pd.concat([cash_row, df], ignore_index=True)
 
     st.dataframe(
         display_df[cols].style.format({
-            'Quantité': '{:.2f}', 'Yield_%': '{:.2f} %','Prix Achat ($ ou €)': '{:,.2f}', 'Prix Actuel (Native)': '{:,.2f}',
+            'Quantité': '{:.2f}', 'Yield (%)': '{:.2f} %','Prix Achat ($ ou €)': '{:,.2f}', 'Prix Actuel (Native)': '{:,.2f}',
             'Valeur Actuelle (€)': '{:,.2f} €', 'Plus-value (€)': '{:,.2f} €', 'Perf %': '{:.2f} %'
         }, na_rep="-").map(color_pnl, subset=['Plus-value (€)', 'Perf %']),
         use_container_width=True, hide_index=True
@@ -185,8 +185,8 @@ if not st.session_state.portfolio.empty:
         st.plotly_chart(fig_div, use_container_width=True)
     with row2_c2:
         st.subheader("4. Rendement en Dividende (Yield %)")
-        df_yield = df[df['Yield_%'] > 0]
-        fig_yield = px.line(df_yield, x='Ticker', y='Yield_%', markers=True)
+        df_yield = df[df['Yield (%)'] > 0]
+        fig_yield = px.line(df_yield, x='Ticker', y='Yield (%)', markers=True)
         fig_yield.update_traces(line=dict(color="#3498db", width=3))
         st.plotly_chart(fig_yield, use_container_width=True)
 
