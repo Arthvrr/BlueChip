@@ -1,0 +1,5 @@
+- ajout système d'import de csv de brokers
+- ajout watchlist avec prix cible (notif sur le site si prix cible atteint)
+
+graphes :
+- per vs historical per
