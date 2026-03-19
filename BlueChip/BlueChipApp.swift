@@ -13,5 +13,6 @@ struct BlueChipApp: App {
         WindowGroup {
             ContentView()
         }
+        .windowStyle(.hiddenTitleBar)
     }
 }
