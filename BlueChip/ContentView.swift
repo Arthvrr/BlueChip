@@ -11,12 +11,9 @@ struct Position: Identifiable, Codable {
     var currency: String
     var usdToEurRate: Double
     var annualDividendNet: Double
-    
-    // Nouveaux champs
     var country: String
     var dividendMonths: Set<Int>
     
-    // Initialiseur standard
     init(id: UUID = UUID(), ticker: String, quantity: Double, averageCost: Double, currentPrice: Double, currency: String = "EUR", usdToEurRate: Double = 1.0, annualDividendNet: Double = 0.0, country: String = "", dividendMonths: Set<Int> = []) {
         self.id = id
         self.ticker = ticker
@@ -30,7 +27,6 @@ struct Position: Identifiable, Codable {
         self.dividendMonths = dividendMonths
     }
     
-    // Décodeur sécurisé : Permet de charger un vieux JSON qui n'aurait pas les champs "country" ou "dividendMonths"
     enum CodingKeys: String, CodingKey {
         case id, ticker, quantity, averageCost, currentPrice, currency, usdToEurRate, annualDividendNet, country, dividendMonths
     }
@@ -45,13 +41,10 @@ struct Position: Identifiable, Codable {
         currency = try container.decodeIfPresent(String.self, forKey: .currency) ?? "EUR"
         usdToEurRate = try container.decodeIfPresent(Double.self, forKey: .usdToEurRate) ?? 1.0
         annualDividendNet = try container.decodeIfPresent(Double.self, forKey: .annualDividendNet) ?? 0.0
-        
-        // Valeurs par défaut si le JSON est ancien
         country = try container.decodeIfPresent(String.self, forKey: .country) ?? ""
         dividendMonths = try container.decodeIfPresent(Set<Int>.self, forKey: .dividendMonths) ?? []
     }
     
-    // Calculs
     var investedAmountEUR: Double {
         let rate = currency == "USD" ? usdToEurRate : 1.0
         return quantity * averageCost * rate
@@ -106,7 +99,7 @@ class YahooFinanceService {
     }
 }
 
-// MARK: - 3. LE VIEW MODEL (LOGIQUE & SAUVEGARDE)
+// MARK: - 3. LE VIEW MODEL
 @MainActor
 class PortfolioViewModel: ObservableObject {
     @Published var positions: [Position] = [] { didSet { saveData() } }
@@ -122,7 +115,10 @@ class PortfolioViewModel: ObservableObject {
     
     var positionsInvestedSum: Double { positions.reduce(0) { $0 + $1.investedAmountEUR } }
     var totalValue: Double { positions.reduce(0) { $0 + $1.currentValueEUR } }
-    var manuallyInvestedPlusCash: Double { manuallyInvested + availableCash }
+    
+    // LA CORRECTION EST ICI : Valeur actuelle des actions + Cash dispo
+    var currentTotalCapital: Double { totalValue + availableCash }
+    
     var totalROIValue: Double { totalValue - positionsInvestedSum }
     var totalROIPercent: Double { positionsInvestedSum > 0 ? totalROIValue / positionsInvestedSum : 0 }
     var positionCount: Int { positions.count }
@@ -171,7 +167,6 @@ class PortfolioViewModel: ObservableObject {
             positions[index].country = country
             positions[index].dividendMonths = dividendMonths
             positions.sort(using: sortOrder)
-            // saveData() est automatiquement appelé grâce au didSet
         }
     }
     
@@ -179,7 +174,6 @@ class PortfolioViewModel: ObservableObject {
         positions.removeAll { $0.id == id }
     }
     
-    // MARK: - Persistance des données (FICHIER JSON PHYSIQUE)
     private func getDocumentsDirectory() -> URL {
         let paths = FileManager.default.urls(for: .documentDirectory, in: .userDomainMask)
         return paths[0]
@@ -207,12 +201,61 @@ class PortfolioViewModel: ObservableObject {
             self.availableCash = decoded.availableCash
             self.manuallyInvested = decoded.manuallyInvested
         } catch {
-            print("ℹ️ Fichier JSON introuvable ou erreur de lecture (Normal au premier lancement).")
+            print("ℹ️ Fichier JSON introuvable ou erreur de lecture.")
         }
     }
 }
 
-// MARK: - 4. COMPOSANTS UI
+// MARK: - 4. NAVIGATION & ONGLETS
+enum AppTab: String, CaseIterable {
+    case composition = "Composition"
+    case fondamentaux = "Fondamentaux"
+    case croissance = "Croissance"
+    case dividendes = "Dividendes"
+    case valorisation = "Valorisation"
+    case projection = "Projection"
+    case simulation = "Simulation"
+    case watchlist = "Watchlist"
+    case exposition = "Exposition"
+    case transactions = "Transactions"
+    case benchmark = "Benchmark"
+}
+
+struct CustomTabBar: View {
+    @Binding var selectedTab: AppTab
+    
+    var body: some View {
+        ScrollView(.horizontal, showsIndicators: false) {
+            HStack(spacing: 24) {
+                ForEach(AppTab.allCases, id: \.self) { tab in
+                    Text(tab.rawValue)
+                        .font(.system(size: 14, weight: selectedTab == tab ? .bold : .medium))
+                        .foregroundColor(selectedTab == tab ? .primary : .secondary)
+                        .padding(.vertical, 8)
+                        .overlay(
+                            Rectangle()
+                                .frame(height: 3)
+                                .foregroundColor(selectedTab == tab ? .blue : .clear)
+                                .offset(y: 4)
+                            , alignment: .bottom
+                        )
+                        .contentShape(Rectangle())
+                        .onTapGesture {
+                            withAnimation(.easeInOut(duration: 0.2)) {
+                                selectedTab = tab
+                            }
+                        }
+                }
+            }
+            .padding(.horizontal, 20)
+        }
+        .padding(.top, 10)
+        .padding(.bottom, 6)
+        .background(Color(NSColor.windowBackgroundColor))
+    }
+}
+
+// MARK: - 5. COMPOSANTS UI
 struct DashboardCard: View {
     let title: String
     let value: String
@@ -234,33 +277,22 @@ struct DashboardCard: View {
     }
 }
 
+// (Formulaires AddPositionView, EditPositionView, SimpleNumberEditView inchangés pour garder le code propre)
 struct AddPositionView: View {
     @Environment(\.dismiss) var dismiss
     @ObservedObject var viewModel: PortfolioViewModel
-    @State private var ticker: String = ""
-    @State private var quantity: Double = 0
-    @State private var pru: Double = 0
-    @State private var dividend: Double = 0
-    @State private var country: String = ""
-    
+    @State private var ticker = ""; @State private var quantity: Double = 0; @State private var pru: Double = 0
+    @State private var dividend: Double = 0; @State private var country = ""
     var body: some View {
         Form {
             Section(header: Text("Nouvelle Position").font(.headline)) {
-                TextField("Ticker (ex: AAPL, MC.PA)", text: $ticker)
-                TextField("Quantité", value: $quantity, format: .number)
-                TextField("PRU (Devise d'origine)", value: $pru, format: .number)
-                TextField("Dividende net par action", value: $dividend, format: .number)
-                TextField("Pays de cotation (ex: US, FR)", text: $country)
+                TextField("Ticker (ex: AAPL)", text: $ticker); TextField("Quantité", value: $quantity, format: .number)
+                TextField("PRU", value: $pru, format: .number); TextField("Dividende net/action", value: $dividend, format: .number)
+                TextField("Pays (ex: US, FR)", text: $country)
             }.padding()
             HStack {
-                Button("Annuler") { dismiss() }.keyboardShortcut(.cancelAction)
-                Spacer()
-                Button("Ajouter") {
-                    if !ticker.isEmpty && quantity > 0 {
-                        viewModel.addPosition(ticker: ticker, quantity: quantity, pru: pru, dividend: dividend, country: country)
-                        dismiss()
-                    }
-                }.keyboardShortcut(.defaultAction).buttonStyle(.borderedProminent)
+                Button("Annuler") { dismiss() }.keyboardShortcut(.cancelAction); Spacer()
+                Button("Ajouter") { if !ticker.isEmpty && quantity > 0 { viewModel.addPosition(ticker: ticker, quantity: quantity, pru: pru, dividend: dividend, country: country); dismiss() } }.keyboardShortcut(.defaultAction).buttonStyle(.borderedProminent)
             }.padding()
         }.frame(width: 350).padding()
     }
@@ -270,195 +302,156 @@ struct EditPositionView: View {
     @Environment(\.dismiss) var dismiss
     @ObservedObject var viewModel: PortfolioViewModel
     let position: Position
-    
-    @State private var quantity: Double
-    @State private var pru: Double
-    @State private var dividend: Double
-    @State private var country: String
-    @State private var dividendMonths: Set<Int>
-    
+    @State private var quantity: Double; @State private var pru: Double; @State private var dividend: Double
+    @State private var country: String; @State private var dividendMonths: Set<Int>
     let monthsNames = ["Jan", "Fév", "Mar", "Avr", "Mai", "Jun", "Jul", "Aoû", "Sep", "Oct", "Nov", "Déc"]
-    
     init(viewModel: PortfolioViewModel, position: Position) {
-        self.viewModel = viewModel
-        self.position = position
-        _quantity = State(initialValue: position.quantity)
-        _pru = State(initialValue: position.averageCost)
-        _dividend = State(initialValue: position.annualDividendNet)
-        _country = State(initialValue: position.country)
-        _dividendMonths = State(initialValue: position.dividendMonths)
+        self.viewModel = viewModel; self.position = position; _quantity = State(initialValue: position.quantity)
+        _pru = State(initialValue: position.averageCost); _dividend = State(initialValue: position.annualDividendNet)
+        _country = State(initialValue: position.country); _dividendMonths = State(initialValue: position.dividendMonths)
     }
-    
     var body: some View {
         Form {
             Section(header: Text("Modifier \(position.ticker)").font(.headline)) {
-                TextField("Quantité", value: $quantity, format: .number)
-                TextField("PRU (\(position.currency))", value: $pru, format: .number)
-                TextField("Dividende net par action", value: $dividend, format: .number)
-                TextField("Pays (ex: US, FR)", text: $country)
+                TextField("Quantité", value: $quantity, format: .number); TextField("PRU", value: $pru, format: .number)
+                TextField("Dividende net/action", value: $dividend, format: .number); TextField("Pays", text: $country)
             }.padding(.bottom, 8)
-            
-            Section(header: Text("Mois de versement des dividendes").font(.subheadline).foregroundColor(.secondary)) {
+            Section(header: Text("Mois de versement").font(.subheadline).foregroundColor(.secondary)) {
                 LazyVGrid(columns: Array(repeating: GridItem(.flexible()), count: 6), spacing: 8) {
-                    ForEach(0..<12, id: \.self) { index in
-                        let monthNumber = index + 1
-                        Toggle(monthsNames[index], isOn: Binding(
-                            get: { dividendMonths.contains(monthNumber) },
-                            set: { isSet in if isSet { dividendMonths.insert(monthNumber) } else { dividendMonths.remove(monthNumber) } }
-                        ))
-                        .toggleStyle(.button)
-                        .font(.caption)
+                    ForEach(0..<12, id: \.self) { index in let m = index + 1
+                        Toggle(monthsNames[index], isOn: Binding(get: { dividendMonths.contains(m) }, set: { isSet in if isSet { dividendMonths.insert(m) } else { dividendMonths.remove(m) } })).toggleStyle(.button).font(.caption)
                     }
                 }
             }.padding(.bottom, 16)
-            
             HStack {
-                Button(role: .destructive) {
-                    viewModel.deletePosition(id: position.id)
-                    dismiss()
-                } label: {
-                    Text("Supprimer la position")
-                }
-                
+                Button(role: .destructive) { viewModel.deletePosition(id: position.id); dismiss() } label: { Text("Supprimer") }
                 Spacer()
                 Button("Annuler") { dismiss() }.keyboardShortcut(.cancelAction)
-                Button("Sauvegarder") {
-                    viewModel.updatePosition(id: position.id, quantity: quantity, pru: pru, dividend: dividend, country: country, dividendMonths: dividendMonths)
-                    dismiss()
-                }.keyboardShortcut(.defaultAction).buttonStyle(.borderedProminent)
+                Button("Sauvegarder") { viewModel.updatePosition(id: position.id, quantity: quantity, pru: pru, dividend: dividend, country: country, dividendMonths: dividendMonths); dismiss() }.keyboardShortcut(.defaultAction).buttonStyle(.borderedProminent)
             }
         }.frame(width: 450).padding()
     }
 }
 
 struct SimpleNumberEditView: View {
-    @Environment(\.dismiss) var dismiss
-    let title: String
-    @Binding var value: Double
-    @State private var input: Double = 0
-    
+    @Environment(\.dismiss) var dismiss; let title: String; @Binding var value: Double; @State private var input: Double = 0
     var body: some View {
         Form {
             Section(header: Text(title).font(.headline)) { TextField("Montant (€)", value: $input, format: .number) }.padding()
-            HStack {
-                Button("Annuler") { dismiss() }.keyboardShortcut(.cancelAction)
-                Spacer()
-                Button("Enregistrer") { value = input; dismiss() }.keyboardShortcut(.defaultAction).buttonStyle(.borderedProminent)
-            }.padding()
-        }
-        .frame(width: 300).padding()
-        .onAppear { input = value }
+            HStack { Button("Annuler") { dismiss() }.keyboardShortcut(.cancelAction); Spacer(); Button("Enregistrer") { value = input; dismiss() }.keyboardShortcut(.defaultAction).buttonStyle(.borderedProminent) }.padding()
+        }.frame(width: 300).padding().onAppear { input = value }
     }
 }
 
-// MARK: - 5. VUE PRINCIPALE
-struct ContentView: View {
-    @StateObject private var viewModel = PortfolioViewModel()
-    @State private var selection: Set<Position.ID> = []
+// MARK: - 6. VUES DES ONGLETS (PAGES)
+struct CompositionTabView: View {
+    @ObservedObject var viewModel: PortfolioViewModel
     
-    @State private var showAddSheet = false
+    // États locaux à cette page
+    @State private var selection: Set<Position.ID> = []
     @State private var showCashSheet = false
     @State private var showInvestedSheet = false
-    @State private var positionToEdit: Position? = nil // Gère l'affichage de la fenêtre d'édition
-
+    @State private var positionToEdit: Position? = nil
+    
     var body: some View {
         ScrollView(.vertical) {
             VStack(spacing: 24) {
-                
-                // --- LES 8 CASES DU DASHBOARD ---
+                // --- DASHBOARD ---
                 VStack(spacing: 16) {
                     HStack(spacing: 16) {
-                        Button(action: { showCashSheet = true }) {
-                            DashboardCard(title: "Cash", value: viewModel.availableCash.formatted(.currency(code: "EUR")), titleIcon: "pencil")
-                        }.buttonStyle(.plain)
-                        
-                        Button(action: { showInvestedSheet = true }) {
-                            DashboardCard(title: "Investi", value: viewModel.manuallyInvested.formatted(.currency(code: "EUR")), titleIcon: "pencil")
-                        }.buttonStyle(.plain)
-                        
-                        DashboardCard(title: "Total Portefeuille", value: viewModel.manuallyInvestedPlusCash.formatted(.currency(code: "EUR")))
-                        DashboardCard(title: "Actuel (Actions)", value: viewModel.totalValue.formatted(.currency(code: "EUR")))
+                        Button(action: { showCashSheet = true }) { DashboardCard(title: "Cash", value: viewModel.availableCash.formatted(.currency(code: "EUR")), titleIcon: "pencil") }.buttonStyle(.plain)
+                        Button(action: { showInvestedSheet = true }) { DashboardCard(title: "Apport Initial", value: viewModel.manuallyInvested.formatted(.currency(code: "EUR")), titleIcon: "pencil") }.buttonStyle(.plain)
+                        DashboardCard(title: "Total (Actuel + Cash)", value: viewModel.currentTotalCapital.formatted(.currency(code: "EUR")))
+                        DashboardCard(title: "Valeur Actions", value: viewModel.totalValue.formatted(.currency(code: "EUR")))
                     }
-                    
                     HStack(spacing: 16) {
                         VStack(alignment: .leading, spacing: 4) {
-                            Text("P/L Total").font(.subheadline).foregroundColor(.secondary).lineLimit(1)
-                            Text(viewModel.totalROIValue.formatted(.currency(code: "EUR").sign(strategy: .always())))
-                                .font(.title2).fontWeight(.bold).foregroundColor(getColor(for: viewModel.totalROIValue))
-                            Text(viewModel.totalROIPercent.formatted(.percent.precision(.fractionLength(2)).sign(strategy: .always())))
-                                .font(.caption).padding(.horizontal, 6).padding(.vertical, 2)
-                                .background(getColor(for: viewModel.totalROIValue).opacity(0.1))
-                                .foregroundColor(getColor(for: viewModel.totalROIValue)).cornerRadius(4)
-                        }
-                        .padding().frame(maxWidth: .infinity, alignment: .leading).background(Color(NSColor.controlBackgroundColor)).cornerRadius(10)
+                            Text("P/L Latent").font(.subheadline).foregroundColor(.secondary).lineLimit(1)
+                            Text(viewModel.totalROIValue.formatted(.currency(code: "EUR").sign(strategy: .always()))).font(.title2).fontWeight(.bold).foregroundColor(getColor(for: viewModel.totalROIValue))
+                            Text(viewModel.totalROIPercent.formatted(.percent.precision(.fractionLength(2)).sign(strategy: .always()))).font(.caption).padding(.horizontal, 6).padding(.vertical, 2).background(getColor(for: viewModel.totalROIValue).opacity(0.1)).foregroundColor(getColor(for: viewModel.totalROIValue)).cornerRadius(4)
+                        }.padding().frame(maxWidth: .infinity, alignment: .leading).background(Color(NSColor.controlBackgroundColor)).cornerRadius(10)
                         
                         DashboardCard(title: "Positions", value: "\(viewModel.positionCount)")
-                        DashboardCard(title: "Dividendes Totaux", value: viewModel.totalDividends.formatted(.currency(code: "EUR")))
-                        DashboardCard(title: "Rendement", value: viewModel.portfolioYield.formatted(.percent.precision(.fractionLength(2))))
+                        DashboardCard(title: "Dividendes Annuels", value: viewModel.totalDividends.formatted(.currency(code: "EUR")))
+                        DashboardCard(title: "Rendement sur PRU", value: viewModel.portfolioYield.formatted(.percent.precision(.fractionLength(2))))
                     }
                 }
                 
-                // --- LE TABLEAU DES POSITIONS ---
+                // --- TABLEAU ---
                 Table(viewModel.positions, selection: $selection, sortOrder: $viewModel.sortOrder) {
                     TableColumn("Ticker", value: \.ticker) { position in
                         HStack {
-                            Circle().fill(Color.gray.opacity(0.2)).frame(width: 24, height: 24)
-                                .overlay(Text(position.ticker.prefix(1)).font(.caption).fontWeight(.bold).foregroundColor(.primary))
+                            Circle().fill(Color.gray.opacity(0.2)).frame(width: 24, height: 24).overlay(Text(position.ticker.prefix(1)).font(.caption).fontWeight(.bold).foregroundColor(.primary))
                             Text(position.ticker).font(.system(.body, design: .monospaced)).fontWeight(.bold)
                         }
-                        .contentShape(Rectangle()) // Rend toute la cellule cliquable
-                        .onTapGesture(count: 2) { positionToEdit = position }
+                        .contentShape(Rectangle()).onTapGesture(count: 2) { positionToEdit = position }
                         .contextMenu { Button(role: .destructive) { viewModel.deletePosition(id: position.id) } label: { Label("Supprimer", systemImage: "trash") } }
                     }
-                    
-                    TableColumn("Qté", value: \.quantity) { position in
-                        Text("\(position.quantity, specifier: "%.2f")")
-                            .frame(maxWidth: .infinity, alignment: .leading)
-                            .contentShape(Rectangle())
-                            .onTapGesture(count: 2) { positionToEdit = position }
-                    }
-                    
-                    TableColumn("Prix", value: \.currentPrice) { position in
-                        Text(position.currentPrice, format: .currency(code: position.currency))
-                            .frame(maxWidth: .infinity, alignment: .leading)
-                            .contentShape(Rectangle())
-                            .onTapGesture(count: 2) { positionToEdit = position }
-                    }
-                    
-                    TableColumn("PRU", value: \.averageCost) { position in
-                        Text(position.averageCost, format: .currency(code: position.currency)).foregroundColor(.secondary)
-                            .frame(maxWidth: .infinity, alignment: .leading)
-                            .contentShape(Rectangle())
-                            .onTapGesture(count: 2) { positionToEdit = position }
-                    }
-                    
-                    TableColumn("P/L €", value: \.roiValue) { position in
-                        Text(position.roiValue, format: .currency(code: "EUR").sign(strategy: .always()))
-                            .foregroundColor(getColor(for: position.roiValue)).fontWeight(.medium)
-                            .frame(maxWidth: .infinity, alignment: .leading)
-                            .contentShape(Rectangle())
-                            .onTapGesture(count: 2) { positionToEdit = position }
-                    }
-                    
-                    TableColumn("P/L %", value: \.roiPercent) { position in
-                        Text(position.roiPercent, format: .percent.precision(.fractionLength(2)).sign(strategy: .always()))
-                            .padding(.horizontal, 8).padding(.vertical, 2)
-                            .background(getColor(for: position.roiValue).opacity(0.1))
-                            .foregroundColor(getColor(for: position.roiValue)).cornerRadius(4)
-                            .frame(maxWidth: .infinity, alignment: .leading)
-                            .contentShape(Rectangle())
-                            .onTapGesture(count: 2) { positionToEdit = position }
-                    }
+                    TableColumn("Qté", value: \.quantity) { pos in Text("\(pos.quantity, specifier: "%.2f")").frame(maxWidth: .infinity, alignment: .leading).contentShape(Rectangle()).onTapGesture(count: 2) { positionToEdit = pos } }
+                    TableColumn("Prix", value: \.currentPrice) { pos in Text(pos.currentPrice, format: .currency(code: pos.currency)).frame(maxWidth: .infinity, alignment: .leading).contentShape(Rectangle()).onTapGesture(count: 2) { positionToEdit = pos } }
+                    TableColumn("PRU", value: \.averageCost) { pos in Text(pos.averageCost, format: .currency(code: pos.currency)).foregroundColor(.secondary).frame(maxWidth: .infinity, alignment: .leading).contentShape(Rectangle()).onTapGesture(count: 2) { positionToEdit = pos } }
+                    TableColumn("P/L €", value: \.roiValue) { pos in Text(pos.roiValue, format: .currency(code: "EUR").sign(strategy: .always())).foregroundColor(getColor(for: pos.roiValue)).fontWeight(.medium).frame(maxWidth: .infinity, alignment: .leading).contentShape(Rectangle()).onTapGesture(count: 2) { positionToEdit = pos } }
+                    TableColumn("P/L %", value: \.roiPercent) { pos in Text(pos.roiPercent, format: .percent.precision(.fractionLength(2)).sign(strategy: .always())).padding(.horizontal, 8).padding(.vertical, 2).background(getColor(for: pos.roiValue).opacity(0.1)).foregroundColor(getColor(for: pos.roiValue)).cornerRadius(4).frame(maxWidth: .infinity, alignment: .leading).contentShape(Rectangle()).onTapGesture(count: 2) { positionToEdit = pos } }
                 }
                 .tableStyle(.inset)
                 .frame(minHeight: 300)
             }
             .padding()
         }
+        .sheet(isPresented: $showCashSheet) { SimpleNumberEditView(title: "Modifier Cash", value: $viewModel.availableCash) }
+        .sheet(isPresented: $showInvestedSheet) { SimpleNumberEditView(title: "Modifier Apport", value: $viewModel.manuallyInvested) }
+        .sheet(item: $positionToEdit) { position in EditPositionView(viewModel: viewModel, position: position) }
+    }
+    
+    func getColor(for value: Double) -> Color { value >= 0 ? .green : .red }
+}
+
+// MARK: - 7. VUE PRINCIPALE (CONTAINER)
+struct ContentView: View {
+    @StateObject private var viewModel = PortfolioViewModel()
+    @State private var selectedTab: AppTab = .composition
+    @State private var showAddSheet = false
+
+    var body: some View {
+        VStack(spacing: 0) {
+            
+            // Barre d'onglets personnalisée
+            HStack {
+                CustomTabBar(selectedTab: $selectedTab)
+                Spacer()
+            }
+            Divider()
+            
+            // Routage des vues selon l'onglet
+            Group {
+                switch selectedTab {
+                case .composition:
+                    CompositionTabView(viewModel: viewModel)
+                default:
+                    // Vue de placeholder pour les futurs onglets
+                    VStack(spacing: 20) {
+                        Image(systemName: "hammer.fill")
+                            .font(.system(size: 50))
+                            .foregroundColor(.secondary)
+                        Text("La vue \(selectedTab.rawValue) est en construction.")
+                            .font(.title)
+                            .foregroundColor(.secondary)
+                        Text("Les tableaux de données et graphiques arriveront ici.")
+                            .foregroundColor(.secondary)
+                    }
+                    .frame(maxWidth: .infinity, maxHeight: .infinity)
+                    .background(Color(NSColor.windowBackgroundColor))
+                }
+            }
+        }
         .background(Color(NSColor.windowBackgroundColor))
         .toolbar {
-            //ToolbarItem(placement: .navigation) { Text("BlueChip").font(.headline).foregroundColor(.secondary) }
-            ToolbarItem(placement: .primaryAction) { Button(action: { showAddSheet = true }) { Label("Ajouter", systemImage: "plus") } }
+            ToolbarItem(placement: .navigation) {
+                //Text("BlueChip").font(.headline).foregroundColor(.secondary)
+            }
+            ToolbarItem(placement: .primaryAction) {
+                Button(action: { showAddSheet = true }) { Label("Ajouter", systemImage: "plus") }
+            }
             ToolbarItem(placement: .automatic) {
                 Button(action: { Task { await viewModel.refreshPrices() } }) {
                     if viewModel.isLoading { ProgressView().controlSize(.small) } else { Label("Actualiser", systemImage: "arrow.clockwise") }
@@ -466,18 +459,8 @@ struct ContentView: View {
             }
         }
         .sheet(isPresented: $showAddSheet) { AddPositionView(viewModel: viewModel) }
-        .sheet(isPresented: $showCashSheet) { SimpleNumberEditView(title: "Modifier Cash", value: $viewModel.availableCash) }
-        .sheet(isPresented: $showInvestedSheet) { SimpleNumberEditView(title: "Modifier Investi", value: $viewModel.manuallyInvested) }
-        
-        // Nouvelle sheet d'édition déclenchée par le double-clic
-        .sheet(item: $positionToEdit) { position in
-            EditPositionView(viewModel: viewModel, position: position)
-        }
-        
         .onReceive(NotificationCenter.default.publisher(for: NSApplication.willTerminateNotification)) { _ in
             viewModel.saveData()
         }
     }
-    
-    func getColor(for value: Double) -> Color { value >= 0 ? .green : .red }
 }
