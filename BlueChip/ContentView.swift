@@ -3,31 +3,67 @@ import Combine
 
 // MARK: - 1. LE MODÈLE (DATA)
 struct Position: Identifiable, Codable {
-    var id = UUID()
+    var id: UUID
     let ticker: String
     var quantity: Double
     var averageCost: Double // PRU
     var currentPrice: Double
-    var currency: String = "EUR"
-    var usdToEurRate: Double = 1.0
-    var annualDividendNet: Double = 0.0
+    var currency: String
+    var usdToEurRate: Double
+    var annualDividendNet: Double
+    
+    // Nouveaux champs
+    var country: String
+    var dividendMonths: Set<Int>
+    
+    // Initialiseur standard
+    init(id: UUID = UUID(), ticker: String, quantity: Double, averageCost: Double, currentPrice: Double, currency: String = "EUR", usdToEurRate: Double = 1.0, annualDividendNet: Double = 0.0, country: String = "", dividendMonths: Set<Int> = []) {
+        self.id = id
+        self.ticker = ticker
+        self.quantity = quantity
+        self.averageCost = averageCost
+        self.currentPrice = currentPrice
+        self.currency = currency
+        self.usdToEurRate = usdToEurRate
+        self.annualDividendNet = annualDividendNet
+        self.country = country
+        self.dividendMonths = dividendMonths
+    }
+    
+    // Décodeur sécurisé : Permet de charger un vieux JSON qui n'aurait pas les champs "country" ou "dividendMonths"
+    enum CodingKeys: String, CodingKey {
+        case id, ticker, quantity, averageCost, currentPrice, currency, usdToEurRate, annualDividendNet, country, dividendMonths
+    }
+    
+    init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        id = try container.decodeIfPresent(UUID.self, forKey: .id) ?? UUID()
+        ticker = try container.decode(String.self, forKey: .ticker)
+        quantity = try container.decode(Double.self, forKey: .quantity)
+        averageCost = try container.decode(Double.self, forKey: .averageCost)
+        currentPrice = try container.decode(Double.self, forKey: .currentPrice)
+        currency = try container.decodeIfPresent(String.self, forKey: .currency) ?? "EUR"
+        usdToEurRate = try container.decodeIfPresent(Double.self, forKey: .usdToEurRate) ?? 1.0
+        annualDividendNet = try container.decodeIfPresent(Double.self, forKey: .annualDividendNet) ?? 0.0
+        
+        // Valeurs par défaut si le JSON est ancien
+        country = try container.decodeIfPresent(String.self, forKey: .country) ?? ""
+        dividendMonths = try container.decodeIfPresent(Set<Int>.self, forKey: .dividendMonths) ?? []
+    }
     
     // Calculs
     var investedAmountEUR: Double {
         let rate = currency == "USD" ? usdToEurRate : 1.0
         return quantity * averageCost * rate
     }
-    
     var currentValueEUR: Double {
         let rate = currency == "USD" ? usdToEurRate : 1.0
         return quantity * currentPrice * rate
     }
-    
     var totalDividendEUR: Double {
         let rate = currency == "USD" ? usdToEurRate : 1.0
         return quantity * annualDividendNet * rate
     }
-    
     var roiValue: Double { currentValueEUR - investedAmountEUR }
     var roiPercent: Double {
         guard investedAmountEUR > 0 else { return 0 }
@@ -35,7 +71,6 @@ struct Position: Identifiable, Codable {
     }
 }
 
-// Structure pour sauvegarder tout le portefeuille d'un coup
 struct PortfolioSaveData: Codable {
     var positions: [Position]
     var availableCash: Double
@@ -85,7 +120,6 @@ class PortfolioViewModel: ObservableObject {
     
     private let yahooService = YahooFinanceService()
     
-    // Agrégations pour le Dashboard
     var positionsInvestedSum: Double { positions.reduce(0) { $0 + $1.investedAmountEUR } }
     var totalValue: Double { positions.reduce(0) { $0 + $1.currentValueEUR } }
     var manuallyInvestedPlusCash: Double { manuallyInvested + availableCash }
@@ -122,11 +156,23 @@ class PortfolioViewModel: ObservableObject {
         isLoading = false
     }
     
-    func addPosition(ticker: String, quantity: Double, pru: Double, dividend: Double) {
-        let newPos = Position(ticker: ticker.uppercased(), quantity: quantity, averageCost: pru, currentPrice: pru, annualDividendNet: dividend)
+    func addPosition(ticker: String, quantity: Double, pru: Double, dividend: Double, country: String) {
+        let newPos = Position(ticker: ticker.uppercased(), quantity: quantity, averageCost: pru, currentPrice: pru, annualDividendNet: dividend, country: country)
         positions.append(newPos)
         positions.sort(using: sortOrder)
         Task { await refreshPrices() }
+    }
+    
+    func updatePosition(id: UUID, quantity: Double, pru: Double, dividend: Double, country: String, dividendMonths: Set<Int>) {
+        if let index = positions.firstIndex(where: { $0.id == id }) {
+            positions[index].quantity = quantity
+            positions[index].averageCost = pru
+            positions[index].annualDividendNet = dividend
+            positions[index].country = country
+            positions[index].dividendMonths = dividendMonths
+            positions.sort(using: sortOrder)
+            // saveData() est automatiquement appelé grâce au didSet
+        }
     }
     
     func deletePosition(id: UUID) {
@@ -144,16 +190,10 @@ class PortfolioViewModel: ObservableObject {
     }
     
     func saveData() {
-        let dataToSave = PortfolioSaveData(
-            positions: positions,
-            availableCash: availableCash,
-            manuallyInvested: manuallyInvested
-        )
-        
+        let dataToSave = PortfolioSaveData(positions: positions, availableCash: availableCash, manuallyInvested: manuallyInvested)
         do {
             let encoded = try JSONEncoder().encode(dataToSave)
             try encoded.write(to: saveFileURL, options: [.atomic])
-            print("✅ JSON SAUVEGARDÉ ICI : \(saveFileURL.path)")
         } catch {
             print("❌ ERREUR D'ÉCRITURE JSON : \(error.localizedDescription)")
         }
@@ -163,14 +203,11 @@ class PortfolioViewModel: ObservableObject {
         do {
             let data = try Data(contentsOf: saveFileURL)
             let decoded = try JSONDecoder().decode(PortfolioSaveData.self, from: data)
-            
             self.positions = decoded.positions.sorted(using: sortOrder)
             self.availableCash = decoded.availableCash
             self.manuallyInvested = decoded.manuallyInvested
-            
-            print("✅ JSON CHARGÉ DEPUIS : \(saveFileURL.path)")
         } catch {
-            print("ℹ️ Fichier JSON introuvable (C'est normal si c'est le premier lancement).")
+            print("ℹ️ Fichier JSON introuvable ou erreur de lecture (Normal au premier lancement).")
         }
     }
 }
@@ -204,6 +241,7 @@ struct AddPositionView: View {
     @State private var quantity: Double = 0
     @State private var pru: Double = 0
     @State private var dividend: Double = 0
+    @State private var country: String = ""
     
     var body: some View {
         Form {
@@ -212,20 +250,84 @@ struct AddPositionView: View {
                 TextField("Quantité", value: $quantity, format: .number)
                 TextField("PRU (Devise d'origine)", value: $pru, format: .number)
                 TextField("Dividende net par action", value: $dividend, format: .number)
+                TextField("Pays de cotation (ex: US, FR)", text: $country)
             }.padding()
             HStack {
                 Button("Annuler") { dismiss() }.keyboardShortcut(.cancelAction)
                 Spacer()
                 Button("Ajouter") {
                     if !ticker.isEmpty && quantity > 0 {
-                        viewModel.addPosition(ticker: ticker, quantity: quantity, pru: pru, dividend: dividend)
+                        viewModel.addPosition(ticker: ticker, quantity: quantity, pru: pru, dividend: dividend, country: country)
                         dismiss()
                     }
-                }
-                .keyboardShortcut(.defaultAction)
-                .buttonStyle(.borderedProminent)
+                }.keyboardShortcut(.defaultAction).buttonStyle(.borderedProminent)
             }.padding()
         }.frame(width: 350).padding()
+    }
+}
+
+struct EditPositionView: View {
+    @Environment(\.dismiss) var dismiss
+    @ObservedObject var viewModel: PortfolioViewModel
+    let position: Position
+    
+    @State private var quantity: Double
+    @State private var pru: Double
+    @State private var dividend: Double
+    @State private var country: String
+    @State private var dividendMonths: Set<Int>
+    
+    let monthsNames = ["Jan", "Fév", "Mar", "Avr", "Mai", "Jun", "Jul", "Aoû", "Sep", "Oct", "Nov", "Déc"]
+    
+    init(viewModel: PortfolioViewModel, position: Position) {
+        self.viewModel = viewModel
+        self.position = position
+        _quantity = State(initialValue: position.quantity)
+        _pru = State(initialValue: position.averageCost)
+        _dividend = State(initialValue: position.annualDividendNet)
+        _country = State(initialValue: position.country)
+        _dividendMonths = State(initialValue: position.dividendMonths)
+    }
+    
+    var body: some View {
+        Form {
+            Section(header: Text("Modifier \(position.ticker)").font(.headline)) {
+                TextField("Quantité", value: $quantity, format: .number)
+                TextField("PRU (\(position.currency))", value: $pru, format: .number)
+                TextField("Dividende net par action", value: $dividend, format: .number)
+                TextField("Pays (ex: US, FR)", text: $country)
+            }.padding(.bottom, 8)
+            
+            Section(header: Text("Mois de versement des dividendes").font(.subheadline).foregroundColor(.secondary)) {
+                LazyVGrid(columns: Array(repeating: GridItem(.flexible()), count: 6), spacing: 8) {
+                    ForEach(0..<12, id: \.self) { index in
+                        let monthNumber = index + 1
+                        Toggle(monthsNames[index], isOn: Binding(
+                            get: { dividendMonths.contains(monthNumber) },
+                            set: { isSet in if isSet { dividendMonths.insert(monthNumber) } else { dividendMonths.remove(monthNumber) } }
+                        ))
+                        .toggleStyle(.button)
+                        .font(.caption)
+                    }
+                }
+            }.padding(.bottom, 16)
+            
+            HStack {
+                Button(role: .destructive) {
+                    viewModel.deletePosition(id: position.id)
+                    dismiss()
+                } label: {
+                    Text("Supprimer la position")
+                }
+                
+                Spacer()
+                Button("Annuler") { dismiss() }.keyboardShortcut(.cancelAction)
+                Button("Sauvegarder") {
+                    viewModel.updatePosition(id: position.id, quantity: quantity, pru: pru, dividend: dividend, country: country, dividendMonths: dividendMonths)
+                    dismiss()
+                }.keyboardShortcut(.defaultAction).buttonStyle(.borderedProminent)
+            }
+        }.frame(width: 450).padding()
     }
 }
 
@@ -257,6 +359,7 @@ struct ContentView: View {
     @State private var showAddSheet = false
     @State private var showCashSheet = false
     @State private var showInvestedSheet = false
+    @State private var positionToEdit: Position? = nil // Gère l'affichage de la fenêtre d'édition
 
     var body: some View {
         ScrollView(.vertical) {
@@ -273,7 +376,7 @@ struct ContentView: View {
                             DashboardCard(title: "Investi", value: viewModel.manuallyInvested.formatted(.currency(code: "EUR")), titleIcon: "pencil")
                         }.buttonStyle(.plain)
                         
-                        DashboardCard(title: "Total (Investi+Cash)", value: viewModel.manuallyInvestedPlusCash.formatted(.currency(code: "EUR")))
+                        DashboardCard(title: "Total Portefeuille", value: viewModel.manuallyInvestedPlusCash.formatted(.currency(code: "EUR")))
                         DashboardCard(title: "Actuel (Actions)", value: viewModel.totalValue.formatted(.currency(code: "EUR")))
                     }
                     
@@ -303,24 +406,38 @@ struct ContentView: View {
                                 .overlay(Text(position.ticker.prefix(1)).font(.caption).fontWeight(.bold).foregroundColor(.primary))
                             Text(position.ticker).font(.system(.body, design: .monospaced)).fontWeight(.bold)
                         }
+                        .contentShape(Rectangle()) // Rend toute la cellule cliquable
+                        .onTapGesture(count: 2) { positionToEdit = position }
                         .contextMenu { Button(role: .destructive) { viewModel.deletePosition(id: position.id) } label: { Label("Supprimer", systemImage: "trash") } }
                     }
                     
                     TableColumn("Qté", value: \.quantity) { position in
                         Text("\(position.quantity, specifier: "%.2f")")
+                            .frame(maxWidth: .infinity, alignment: .leading)
+                            .contentShape(Rectangle())
+                            .onTapGesture(count: 2) { positionToEdit = position }
                     }
                     
                     TableColumn("Prix", value: \.currentPrice) { position in
                         Text(position.currentPrice, format: .currency(code: position.currency))
+                            .frame(maxWidth: .infinity, alignment: .leading)
+                            .contentShape(Rectangle())
+                            .onTapGesture(count: 2) { positionToEdit = position }
                     }
                     
                     TableColumn("PRU", value: \.averageCost) { position in
                         Text(position.averageCost, format: .currency(code: position.currency)).foregroundColor(.secondary)
+                            .frame(maxWidth: .infinity, alignment: .leading)
+                            .contentShape(Rectangle())
+                            .onTapGesture(count: 2) { positionToEdit = position }
                     }
                     
                     TableColumn("P/L €", value: \.roiValue) { position in
                         Text(position.roiValue, format: .currency(code: "EUR").sign(strategy: .always()))
                             .foregroundColor(getColor(for: position.roiValue)).fontWeight(.medium)
+                            .frame(maxWidth: .infinity, alignment: .leading)
+                            .contentShape(Rectangle())
+                            .onTapGesture(count: 2) { positionToEdit = position }
                     }
                     
                     TableColumn("P/L %", value: \.roiPercent) { position in
@@ -328,6 +445,9 @@ struct ContentView: View {
                             .padding(.horizontal, 8).padding(.vertical, 2)
                             .background(getColor(for: position.roiValue).opacity(0.1))
                             .foregroundColor(getColor(for: position.roiValue)).cornerRadius(4)
+                            .frame(maxWidth: .infinity, alignment: .leading)
+                            .contentShape(Rectangle())
+                            .onTapGesture(count: 2) { positionToEdit = position }
                     }
                 }
                 .tableStyle(.inset)
@@ -349,9 +469,12 @@ struct ContentView: View {
         .sheet(isPresented: $showCashSheet) { SimpleNumberEditView(title: "Modifier Cash", value: $viewModel.availableCash) }
         .sheet(isPresented: $showInvestedSheet) { SimpleNumberEditView(title: "Modifier Investi", value: $viewModel.manuallyInvested) }
         
-        // INTERCEPTEUR DE FERMETURE D'APP (Cmd + Q)
+        // Nouvelle sheet d'édition déclenchée par le double-clic
+        .sheet(item: $positionToEdit) { position in
+            EditPositionView(viewModel: viewModel, position: position)
+        }
+        
         .onReceive(NotificationCenter.default.publisher(for: NSApplication.willTerminateNotification)) { _ in
-            print("🔴 Fermeture de l'app détectée (Cmd+Q) : Sauvegarde forcée en cours...")
             viewModel.saveData()
         }
     }
