@@ -56,10 +56,19 @@ struct Position: Identifiable, Codable {
     var roiPercent: Double { investedAmountEUR > 0 ? roiValue / investedAmountEUR : 0 }
 }
 
+// L'enum pour gérer les différents types d'objectifs
+enum GoalType: String, Codable, CaseIterable {
+    case totalValue = "Valeur Totale (€)"
+    case dividends = "Dividendes Annuels (€)"
+    case invested = "Apport Initial (€)"
+}
+
 struct PortfolioSaveData: Codable {
     var positions: [Position]
     var availableCash: Double
     var manuallyInvested: Double
+    var goalType: GoalType?
+    var goalTarget: Double?
 }
 
 struct ChartDataItem: Identifiable { let id = UUID(); let name: String; let value: Double }
@@ -89,6 +98,11 @@ class PortfolioViewModel: ObservableObject {
     @Published var positions: [Position] = [] { didSet { saveData() } }
     @Published var availableCash: Double = 0.0 { didSet { saveData() } }
     @Published var manuallyInvested: Double = 0.0 { didSet { saveData() } }
+    
+    // Nouveaux champs pour l'objectif
+    @Published var currentGoalType: GoalType = .totalValue { didSet { saveData() } }
+    @Published var currentGoalTarget: Double = 10000.0 { didSet { saveData() } }
+    
     @Published var isLoading = false
     @Published var sortOrder = [KeyPathComparator(\Position.ticker)] { didSet { positions.sort(using: sortOrder) } }
     
@@ -102,8 +116,16 @@ class PortfolioViewModel: ObservableObject {
     var positionCount: Int { positions.count }
     var totalDividends: Double { positions.reduce(0) { $0 + $1.totalDividendEUR } }
     
-    // NOUVEAU CALCUL : Rendement sur le Total (Valeur Actions + Cash)
     var portfolioYield: Double { currentTotalCapital > 0 ? totalDividends / currentTotalCapital : 0 }
+    
+    // Valeur actuelle de l'objectif sélectionné
+    var currentGoalValue: Double {
+        switch currentGoalType {
+        case .totalValue: return currentTotalCapital
+        case .dividends: return totalDividends
+        case .invested: return manuallyInvested
+        }
+    }
     
     var allocationByPosition: [ChartDataItem] {
         var items = positions.map { ChartDataItem(name: $0.ticker, value: $0.currentValueEUR) }
@@ -157,8 +179,29 @@ class PortfolioViewModel: ObservableObject {
     func deletePosition(id: UUID) { positions.removeAll { $0.id == id } }
     
     private var saveFileURL: URL { FileManager.default.urls(for: .documentDirectory, in: .userDomainMask)[0].appendingPathComponent("BlueChip_Data.json") }
-    func saveData() { do { try JSONEncoder().encode(PortfolioSaveData(positions: positions, availableCash: availableCash, manuallyInvested: manuallyInvested)).write(to: saveFileURL, options: [.atomic]) } catch {} }
-    func loadData() { do { let d = try JSONDecoder().decode(PortfolioSaveData.self, from: try Data(contentsOf: saveFileURL)); positions = d.positions.sorted(using: sortOrder); availableCash = d.availableCash; manuallyInvested = d.manuallyInvested } catch {} }
+    
+    func saveData() {
+        let dataToSave = PortfolioSaveData(
+            positions: positions,
+            availableCash: availableCash,
+            manuallyInvested: manuallyInvested,
+            goalType: currentGoalType,
+            goalTarget: currentGoalTarget
+        )
+        do { try JSONEncoder().encode(dataToSave).write(to: saveFileURL, options: [.atomic]) } catch {}
+    }
+    
+    func loadData() {
+        do {
+            let data = try Data(contentsOf: saveFileURL)
+            let decoded = try JSONDecoder().decode(PortfolioSaveData.self, from: data)
+            positions = decoded.positions.sorted(using: sortOrder)
+            availableCash = decoded.availableCash
+            manuallyInvested = decoded.manuallyInvested
+            if let savedGoalType = decoded.goalType { currentGoalType = savedGoalType }
+            if let savedGoalTarget = decoded.goalTarget { currentGoalTarget = savedGoalTarget }
+        } catch { print("ℹ️ Fichier JSON introuvable ou erreur de lecture (Normal au premier lancement).") }
+    }
 }
 
 // MARK: - 4. NAVIGATION & ONGLETS
@@ -334,6 +377,44 @@ struct DashboardCard: View {
     }
 }
 
+// Composant pour la barre de progression moderne
+struct GoalProgressBar: View {
+    let title: String
+    let currentValue: Double
+    let targetValue: Double
+    
+    var progress: Double {
+        guard targetValue > 0 else { return 0 }
+        return min(max(currentValue / targetValue, 0), 1)
+    }
+    
+    var body: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            HStack {
+                Text("Objectif : \(title)").font(.headline)
+                Spacer()
+                Text("\(currentValue.formatted(.currency(code: "EUR"))) / \(targetValue.formatted(.currency(code: "EUR")))")
+                    .font(.subheadline).fontWeight(.bold)
+                    .foregroundColor(progress >= 1 ? .green : .primary)
+            }
+            GeometryReader { geometry in
+                ZStack(alignment: .leading) {
+                    RoundedRectangle(cornerRadius: 8).fill(Color(NSColor.windowBackgroundColor)).frame(height: 14)
+                    RoundedRectangle(cornerRadius: 8)
+                        .fill(LinearGradient(gradient: Gradient(colors: [.blue, .purple]), startPoint: .leading, endPoint: .trailing))
+                        .frame(width: max(0, geometry.size.width * CGFloat(progress)), height: 14)
+                        .animation(.spring(), value: progress)
+                }
+            }.frame(height: 14)
+        }
+        .padding()
+        .background(Color(NSColor.controlBackgroundColor))
+        .cornerRadius(12)
+        .shadow(color: Color.black.opacity(0.05), radius: 2, x: 0, y: 1)
+        .help("Double-cliquez pour modifier votre objectif")
+    }
+}
+
 // MARK: - 6. FORMULAIRES
 struct AddPositionView: View {
     @Environment(\.dismiss) var dismiss; @ObservedObject var viewModel: PortfolioViewModel
@@ -378,11 +459,48 @@ struct SimpleNumberEditView: View {
     }
 }
 
+// Vue d'édition pour l'objectif
+struct EditGoalView: View {
+    @Environment(\.dismiss) var dismiss
+    @ObservedObject var viewModel: PortfolioViewModel
+    @State private var selectedGoal: GoalType
+    @State private var targetInput: Double
+    
+    init(viewModel: PortfolioViewModel) {
+        self.viewModel = viewModel
+        _selectedGoal = State(initialValue: viewModel.currentGoalType)
+        _targetInput = State(initialValue: viewModel.currentGoalTarget)
+    }
+    
+    var body: some View {
+        Form {
+            Section(header: Text("Définir un objectif").font(.headline)) {
+                Picker("Type d'objectif", selection: $selectedGoal) {
+                    ForEach(GoalType.allCases, id: \.self) { type in
+                        Text(type.rawValue).tag(type)
+                    }
+                }
+                TextField("Cible à atteindre (€)", value: $targetInput, format: .number)
+            }.padding()
+            HStack {
+                Button("Annuler") { dismiss() }.keyboardShortcut(.cancelAction)
+                Spacer()
+                Button("Enregistrer") {
+                    viewModel.currentGoalType = selectedGoal
+                    viewModel.currentGoalTarget = targetInput
+                    dismiss()
+                }.keyboardShortcut(.defaultAction).buttonStyle(.borderedProminent)
+            }.padding()
+        }.frame(width: 380).padding()
+    }
+}
+
 // MARK: - 7. VUES DES ONGLETS (PAGES)
 struct CompositionTabView: View {
     @ObservedObject var viewModel: PortfolioViewModel
     @State private var selection: Set<Position.ID> = []
     @State private var showCashSheet = false; @State private var showInvestedSheet = false
+    @State private var showGoalSheet = false // Afficher la fenêtre d'objectif
     @State private var positionToEdit: Position? = nil; @State private var chartToZoom: ChartZoomType? = nil
     
     var body: some View {
@@ -408,6 +526,15 @@ struct CompositionTabView: View {
                     }
                 }
                 
+                // --- LA BARRE DE PROGRESSION ---
+                GoalProgressBar(
+                    title: viewModel.currentGoalType.rawValue,
+                    currentValue: viewModel.currentGoalValue,
+                    targetValue: viewModel.currentGoalTarget
+                )
+                .contentShape(Rectangle())
+                .onTapGesture(count: 2) { showGoalSheet = true } // Double clic pour modifier
+                
                 // --- TABLEAU ---
                 Table(viewModel.positions, selection: $selection, sortOrder: $viewModel.sortOrder) {
                     TableColumn("Ticker", value: \.ticker) { position in
@@ -417,6 +544,10 @@ struct CompositionTabView: View {
                     TableColumn("Qté", value: \.quantity) { pos in Text("\(pos.quantity, specifier: "%.2f")").frame(maxWidth: .infinity, alignment: .leading).contentShape(Rectangle()).onTapGesture(count: 2) { positionToEdit = pos } }
                     TableColumn("Prix", value: \.currentPrice) { pos in Text(pos.currentPrice, format: .currency(code: pos.currency)).frame(maxWidth: .infinity, alignment: .leading).contentShape(Rectangle()).onTapGesture(count: 2) { positionToEdit = pos } }
                     TableColumn("PRU", value: \.averageCost) { pos in Text(pos.averageCost, format: .currency(code: pos.currency)).foregroundColor(.secondary).frame(maxWidth: .infinity, alignment: .leading).contentShape(Rectangle()).onTapGesture(count: 2) { positionToEdit = pos } }
+                    
+                    // COLONNE MONTANT TOTAL AJOUTÉE ICI
+                    TableColumn("Montant Total", value: \.currentValueEUR) { pos in Text(pos.currentValueEUR, format: .currency(code: "EUR")).fontWeight(.medium).frame(maxWidth: .infinity, alignment: .leading).contentShape(Rectangle()).onTapGesture(count: 2) { positionToEdit = pos } }
+                    
                     TableColumn("P/L €", value: \.roiValue) { pos in Text(pos.roiValue, format: .currency(code: "EUR").sign(strategy: .always())).foregroundColor(getColor(for: pos.roiValue)).fontWeight(.medium).frame(maxWidth: .infinity, alignment: .leading).contentShape(Rectangle()).onTapGesture(count: 2) { positionToEdit = pos } }
                     TableColumn("P/L %", value: \.roiPercent) { pos in Text(pos.roiPercent, format: .percent.precision(.fractionLength(2)).sign(strategy: .always())).padding(.horizontal, 8).padding(.vertical, 2).background(getColor(for: pos.roiValue).opacity(0.1)).foregroundColor(getColor(for: pos.roiValue)).cornerRadius(4).frame(maxWidth: .infinity, alignment: .leading).contentShape(Rectangle()).onTapGesture(count: 2) { positionToEdit = pos } }
                 }.tableStyle(.inset).frame(minHeight: 300)
@@ -430,6 +561,7 @@ struct CompositionTabView: View {
         }
         .sheet(isPresented: $showCashSheet) { SimpleNumberEditView(title: "Modifier Cash", value: $viewModel.availableCash) }
         .sheet(isPresented: $showInvestedSheet) { SimpleNumberEditView(title: "Modifier Apport", value: $viewModel.manuallyInvested) }
+        .sheet(isPresented: $showGoalSheet) { EditGoalView(viewModel: viewModel) } // Fenêtre Objectif
         .sheet(item: $positionToEdit) { position in EditPositionView(viewModel: viewModel, position: position) }
         .sheet(item: $chartToZoom) { type in FullScreenChartView(zoomType: type, viewModel: viewModel) }
     }
@@ -445,12 +577,30 @@ struct ContentView: View {
     var body: some View {
         VStack(spacing: 0) {
             
-            // Le Header bien PRO
+            // Le Header bien PRO (Boutons déplacés ici !)
             HStack {
                 Text("BlueChip - Stocks Portfolio Manager")
                     .font(.system(size: 24, weight: .black, design: .rounded))
                     .foregroundColor(.primary)
+                
                 Spacer()
+                
+                // Boutons d'action dans le Header
+                Button(action: { Task { await viewModel.refreshPrices() } }) {
+                    if viewModel.isLoading {
+                        ProgressView().controlSize(.small)
+                    } else {
+                        Label("Actualiser", systemImage: "arrow.clockwise")
+                    }
+                }
+                .disabled(viewModel.isLoading)
+                .buttonStyle(.bordered)
+                .padding(.trailing, 8)
+                
+                Button(action: { showAddSheet = true }) {
+                    Label("Ajouter", systemImage: "plus")
+                }
+                .buttonStyle(.borderedProminent)
             }
             .padding(.horizontal, 20)
             .padding(.top, 20)
@@ -469,11 +619,6 @@ struct ContentView: View {
             }
         }
         .background(Color(NSColor.windowBackgroundColor))
-        .navigationTitle("") // SÉCURITÉ : Cache le petit titre de la Toolbar si présent
-        .toolbar {
-            ToolbarItem(placement: .primaryAction) { Button(action: { showAddSheet = true }) { Label("Ajouter", systemImage: "plus") } }
-            ToolbarItem(placement: .automatic) { Button(action: { Task { await viewModel.refreshPrices() } }) { if viewModel.isLoading { ProgressView().controlSize(.small) } else { Label("Actualiser", systemImage: "arrow.clockwise") } }.disabled(viewModel.isLoading) }
-        }
         .sheet(isPresented: $showAddSheet) { AddPositionView(viewModel: viewModel) }
         .onReceive(NotificationCenter.default.publisher(for: NSApplication.willTerminateNotification)) { _ in viewModel.saveData() }
     }
