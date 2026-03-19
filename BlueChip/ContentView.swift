@@ -56,7 +56,6 @@ struct Position: Identifiable, Codable {
     var roiPercent: Double { investedAmountEUR > 0 ? roiValue / investedAmountEUR : 0 }
 }
 
-// L'enum pour gérer les différents types d'objectifs
 enum GoalType: String, Codable, CaseIterable {
     case totalValue = "Valeur Totale (€)"
     case dividends = "Dividendes Annuels (€)"
@@ -73,6 +72,9 @@ struct PortfolioSaveData: Codable {
 
 struct ChartDataItem: Identifiable { let id = UUID(); let name: String; let value: Double }
 struct PriceCompareItem: Identifiable { let id = UUID(); let ticker: String; let category: String; let value: Double }
+struct ScatterItem: Identifiable { let id = UUID(); let ticker: String; let weight: Double; let roi: Double }
+// Structure ValueSource simplifiée pour 2 valeurs fixes
+struct ValueSourceItem: Identifiable { let id = UUID(); let category: String; let value: Double }
 
 // MARK: - 2. LE SERVICE YAHOO (RÉSEAU)
 class YahooFinanceService {
@@ -99,7 +101,6 @@ class PortfolioViewModel: ObservableObject {
     @Published var availableCash: Double = 0.0 { didSet { saveData() } }
     @Published var manuallyInvested: Double = 0.0 { didSet { saveData() } }
     
-    // Nouveaux champs pour l'objectif
     @Published var currentGoalType: GoalType = .totalValue { didSet { saveData() } }
     @Published var currentGoalTarget: Double = 10000.0 { didSet { saveData() } }
     
@@ -115,10 +116,8 @@ class PortfolioViewModel: ObservableObject {
     var totalROIPercent: Double { positionsInvestedSum > 0 ? totalROIValue / positionsInvestedSum : 0 }
     var positionCount: Int { positions.count }
     var totalDividends: Double { positions.reduce(0) { $0 + $1.totalDividendEUR } }
-    
     var portfolioYield: Double { currentTotalCapital > 0 ? totalDividends / currentTotalCapital : 0 }
     
-    // Valeur actuelle de l'objectif sélectionné
     var currentGoalValue: Double {
         switch currentGoalType {
         case .totalValue: return currentTotalCapital
@@ -145,6 +144,30 @@ class PortfolioViewModel: ObservableObject {
         for pos in positions {
             items.append(PriceCompareItem(ticker: pos.ticker, category: "PRU", value: pos.averageCost))
             items.append(PriceCompareItem(ticker: pos.ticker, category: "Actuel", value: pos.currentPrice))
+        }
+        return items
+    }
+    
+    var scatterData: [ScatterItem] {
+        let total = totalValue
+        guard total > 0 else { return [] }
+        return positions.map { pos in
+            ScatterItem(ticker: pos.ticker, weight: pos.currentValueEUR / total, roi: pos.roiPercent)
+        }
+    }
+    
+    // NOUVEAU : Données simplifiées pour Donut à 2 valeurs fixes
+    var valueSourceDonutData: [ValueSourceItem] {
+        let invested = positionsInvestedSum
+        let pvLatente = totalROIValue // P/L Latent total
+        
+        var items: [ValueSourceItem] = []
+        // Toujours afficher l'investi
+        items.append(ValueSourceItem(category: "Total Investi", value: invested))
+        
+        // Afficher la PV si positive (le Donut gère mal le négatif)
+        if pvLatente > 0 {
+            items.append(ValueSourceItem(category: "Plus-Value Totale Latente", value: pvLatente))
         }
         return items
     }
@@ -200,7 +223,7 @@ class PortfolioViewModel: ObservableObject {
             manuallyInvested = decoded.manuallyInvested
             if let savedGoalType = decoded.goalType { currentGoalType = savedGoalType }
             if let savedGoalTarget = decoded.goalTarget { currentGoalTarget = savedGoalTarget }
-        } catch { print("ℹ️ Fichier JSON introuvable ou erreur de lecture (Normal au premier lancement).") }
+        } catch { print("ℹ️ Fichier JSON introuvable ou erreur de lecture.") }
     }
 }
 
@@ -227,13 +250,10 @@ struct CustomTabBar: View {
 }
 
 // MARK: - 5. COMPOSANTS UI & GRAPHIQUES AVANCÉS
-enum ChartZoomType: Identifiable { case positions, countries, priceCompare, roiCombo; var id: Int { self.hashValue } }
+enum ChartZoomType: Identifiable { case positions, countries, priceCompare, roiCombo, scatter, valueSource; var id: Int { self.hashValue } }
 
 struct InteractiveLegendView: View {
-    let items: [String]
-    let colorMap: (String) -> Color
-    @Binding var hiddenItems: Set<String>
-    
+    let items: [String]; let colorMap: (String) -> Color; @Binding var hiddenItems: Set<String>
     var body: some View {
         ScrollView(.horizontal, showsIndicators: false) {
             HStack(spacing: 16) {
@@ -243,9 +263,7 @@ struct InteractiveLegendView: View {
                             Circle().fill(colorMap(item)).frame(width: 10, height: 10)
                             Text(item).font(.caption).foregroundColor(hiddenItems.contains(item) ? .secondary : .primary)
                         }
-                    }
-                    .buttonStyle(.plain)
-                    .opacity(hiddenItems.contains(item) ? 0.4 : 1.0)
+                    }.buttonStyle(.plain).opacity(hiddenItems.contains(item) ? 0.4 : 1.0)
                 }
             }.padding(.horizontal, 4)
         }
@@ -351,6 +369,110 @@ struct ROIComboChart: View {
     }
 }
 
+struct ModernScatterPlotChart: View {
+    let data: [ScatterItem]; var isExpanded: Bool = false; @Binding var expandedChart: ChartZoomType?
+    @State private var hiddenTickers: Set<String> = []; @State private var hoveredWeight: Double? = nil
+    
+    var uniqueTickers: [String] { data.map { $0.ticker }.sorted() }
+    func color(for name: String) -> Color { if let idx = uniqueTickers.firstIndex(of: name) { return chartColors[idx % chartColors.count] }; return .gray }
+    var filteredData: [ScatterItem] { data.filter { !hiddenTickers.contains($0.ticker) } }
+    var hoveredItem: ScatterItem? { guard let w = hoveredWeight else { return nil }; return filteredData.min(by: { abs($0.weight - w) < abs($1.weight - w) }) }
+    
+    // NOUVEAU : Calcul des domaines pour verrouiller l'échelle et éviter le bug du 200%
+    var xDomain: [Double] { guard let maxW = filteredData.map({$0.weight}).max() else { return [0, 0.1] }; return [0, maxW * 1.1] }
+    var yDomain: [Double] { guard let maxR = filteredData.map({$0.roi}).max() else { return [0, 0.1] }; return [0, maxR * 1.1] }
+    
+    var body: some View {
+        VStack {
+            HStack {
+                Text("Poids Portfolio vs Performance Latente").font(.headline).foregroundColor(.secondary); Spacer()
+                if !isExpanded { Button(action: { expandedChart = .scatter }) { Image(systemName: "plus.magnifyingglass").foregroundColor(.secondary) }.buttonStyle(.plain) }
+            }.padding(.bottom, 4)
+            InteractiveLegendView(items: uniqueTickers, colorMap: color(for:), hiddenItems: $hiddenTickers).padding(.bottom, 8)
+            
+            if filteredData.isEmpty { Spacer(); Text("Aucune donnée").foregroundColor(.secondary); Spacer() } else {
+                Chart(filteredData) { item in
+                    PointMark(x: .value("Poids", item.weight), y: .value("ROI", item.roi))
+                        .foregroundStyle(color(for: item.ticker)).symbolSize(100)
+                        .annotation(position: .top, alignment: .center) {
+                            if hoveredItem?.id == item.id {
+                                VStack {
+                                    Text(item.ticker).font(.system(size: 10, weight: .bold))
+                                    Text("\(item.weight.formatted(.percent.precision(.fractionLength(1)))) | \(item.roi.formatted(.percent.precision(.fractionLength(1))))").font(.system(size: 9))
+                                }.padding(4).background(Color(NSColor.windowBackgroundColor).opacity(0.9)).cornerRadius(4)
+                            }
+                        }
+                }.chartLegend(.hidden)
+                // CORRECTION : Verrouillage explicite des domaines pour éviter le bug d'échelle au survol
+                 .chartXScale(domain: xDomain)
+                 .chartYScale(domain: yDomain)
+                // CORRECTION : Typage explicite du label pour éviter l'ambiguïté .percent
+                 .chartXAxis { AxisMarks { value in AxisGridLine(); AxisTick(); if let v = value.as(Double.self) { AxisValueLabel(v.formatted(.percent.precision(.fractionLength(0)))) } } }
+                 .chartYAxis { AxisMarks { value in AxisGridLine(); AxisTick(); if let v = value.as(Double.self) { AxisValueLabel(v.formatted(.percent.precision(.fractionLength(0)))) } } }
+                 .chartXSelection(value: $hoveredWeight)
+            }
+        }.padding().frame(minHeight: 360, maxHeight: isExpanded ? .infinity : 360).background(Color(NSColor.controlBackgroundColor)).cornerRadius(12).shadow(color: Color.black.opacity(0.05), radius: 2, x: 0, y: 1)
+    }
+}
+
+// CORRECTION : Nouveau ModernValueSourceChart en DONUT
+struct ModernValueSourceChart: View {
+    let data: [ValueSourceItem]; var isExpanded: Bool = false; @Binding var expandedChart: ChartZoomType?
+    @State private var selectedAngleValue: Double? = nil; @State private var hiddenItems: Set<String> = []
+    
+    // Couleurs fixes : Bleu pour Investi, Vert pour PV
+    func color(for name: String) -> Color { name == "Total Investi" ? .blue : .green }
+    var filteredData: [ValueSourceItem] { data.filter { !hiddenItems.contains($0.category) } }
+    
+    var body: some View {
+        VStack {
+            HStack {
+                Text("Source de la Valeur Totale Actions").font(.headline).foregroundColor(.secondary); Spacer()
+                if !isExpanded { Button(action: { expandedChart = .valueSource }) { Image(systemName: "plus.magnifyingglass").foregroundColor(.secondary) }.buttonStyle(.plain) }
+            }.padding(.bottom, 4)
+            // Légende interactive
+            InteractiveLegendView(items: data.map { $0.category }, colorMap: color, hiddenItems: $hiddenItems).padding(.bottom, 8)
+            
+            if filteredData.isEmpty { Spacer(); Text("Aucune donnée").foregroundColor(.secondary); Spacer() } else {
+                Chart(filteredData) { item in
+                    // Transformation en Donut Chart
+                    SectorMark(
+                        angle: .value("Valeur", item.value),
+                        innerRadius: .ratio(0.65),
+                        angularInset: 1.5
+                    )
+                    .foregroundStyle(color(for: item.category))
+                    .cornerRadius(4)
+                }
+                .chartLegend(.hidden)
+                .chartAngleSelection(value: $selectedAngleValue)
+                .chartBackground { proxy in
+                    GeometryReader { geometry in
+                        if let value = selectedAngleValue {
+                            let item = findItem(for: value)
+                            VStack {
+                                Text(item.category).font(.headline).foregroundColor(.secondary).lineLimit(1).minimumScaleFactor(0.5)
+                                Text(item.value.formatted(.currency(code: "EUR").precision(.fractionLength(0)))).font(.title3).fontWeight(.bold)
+                            }
+                            .position(x: geometry.frame(in: .local).midX, y: geometry.frame(in: .local).midY)
+                        } else {
+                            // Affichage par défaut au centre : Valeur Totale Actions
+                            let total = filteredData.reduce(0) { $0 + $1.value }
+                            VStack {
+                                Text("Valeur Actions").font(.subheadline).foregroundColor(.secondary)
+                                Text(total.formatted(.currency(code: "EUR").precision(.fractionLength(0)))).font(.title2).fontWeight(.bold)
+                            }
+                            .position(x: geometry.frame(in: .local).midX, y: geometry.frame(in: .local).midY)
+                        }
+                    }
+                }
+                .animation(.easeInOut(duration: 0.2), value: selectedAngleValue)
+            }
+        }.padding().frame(minHeight: 360, maxHeight: isExpanded ? .infinity : 360).background(Color(NSColor.controlBackgroundColor)).cornerRadius(12).shadow(color: Color.black.opacity(0.05), radius: 2, x: 0, y: 1)
+    }
+    func findItem(for value: Double) -> ValueSourceItem { var cum = 0.0; for item in filteredData { cum += item.value; if value <= cum { return item } }; return filteredData.last! }
+}
+
 struct FullScreenChartView: View {
     @Environment(\.dismiss) var dismiss; let zoomType: ChartZoomType; @ObservedObject var viewModel: PortfolioViewModel
     var body: some View {
@@ -361,10 +483,17 @@ struct FullScreenChartView: View {
             case .countries: ModernDonutChart(data: viewModel.allocationByCountry, title: "", zoomType: zoomType, isExpanded: true, expandedChart: .constant(nil))
             case .priceCompare: PRUPriceChart(data: viewModel.priceComparisonData, isExpanded: true, expandedChart: .constant(nil))
             case .roiCombo: ROIComboChart(positions: viewModel.positions, isExpanded: true, expandedChart: .constant(nil))
+            case .scatter: ModernScatterPlotChart(data: viewModel.scatterData, isExpanded: true, expandedChart: .constant(nil))
+            case .valueSource: ModernValueSourceChart(data: viewModel.valueSourceDonutData, isExpanded: true, expandedChart: .constant(nil))
             }
         }.padding(30).frame(minWidth: 900, minHeight: 700)
     }
-    var titleForZoom: String { switch zoomType { case .positions: return "Allocation par Position"; case .countries: return "Allocation par Pays"; case .priceCompare: return "Comparaison PRU vs Prix Actuel"; case .roiCombo: return "Retour sur Investissement Détaillé" } }
+    var titleForZoom: String {
+        switch zoomType {
+        case .positions: return "Allocation par Position"; case .countries: return "Allocation par Pays"; case .priceCompare: return "Comparaison PRU vs Prix Actuel"
+        case .roiCombo: return "Retour sur Investissement Détaillé"; case .scatter: return "Analyse Risque / Rendement"; case .valueSource: return "Origine de la Valeur Actions"
+        }
+    }
 }
 
 struct DashboardCard: View {
@@ -377,41 +506,19 @@ struct DashboardCard: View {
     }
 }
 
-// Composant pour la barre de progression moderne
 struct GoalProgressBar: View {
-    let title: String
-    let currentValue: Double
-    let targetValue: Double
-    
-    var progress: Double {
-        guard targetValue > 0 else { return 0 }
-        return min(max(currentValue / targetValue, 0), 1)
-    }
-    
+    let title: String; let currentValue: Double; let targetValue: Double
+    var progress: Double { guard targetValue > 0 else { return 0 }; return min(max(currentValue / targetValue, 0), 1) }
     var body: some View {
         VStack(alignment: .leading, spacing: 8) {
-            HStack {
-                Text("Objectif : \(title)").font(.headline)
-                Spacer()
-                Text("\(currentValue.formatted(.currency(code: "EUR"))) / \(targetValue.formatted(.currency(code: "EUR")))")
-                    .font(.subheadline).fontWeight(.bold)
-                    .foregroundColor(progress >= 1 ? .green : .primary)
-            }
+            HStack { Text("Objectif : \(title)").font(.headline); Spacer(); Text("\(currentValue.formatted(.currency(code: "EUR"))) / \(targetValue.formatted(.currency(code: "EUR")))").font(.subheadline).fontWeight(.bold).foregroundColor(progress >= 1 ? .green : .primary) }
             GeometryReader { geometry in
                 ZStack(alignment: .leading) {
                     RoundedRectangle(cornerRadius: 8).fill(Color(NSColor.windowBackgroundColor)).frame(height: 14)
-                    RoundedRectangle(cornerRadius: 8)
-                        .fill(LinearGradient(gradient: Gradient(colors: [.blue, .purple]), startPoint: .leading, endPoint: .trailing))
-                        .frame(width: max(0, geometry.size.width * CGFloat(progress)), height: 14)
-                        .animation(.spring(), value: progress)
+                    RoundedRectangle(cornerRadius: 8).fill(LinearGradient(gradient: Gradient(colors: [.blue, .purple]), startPoint: .leading, endPoint: .trailing)).frame(width: max(0, geometry.size.width * CGFloat(progress)), height: 14).animation(.spring(), value: progress)
                 }
             }.frame(height: 14)
-        }
-        .padding()
-        .background(Color(NSColor.controlBackgroundColor))
-        .cornerRadius(12)
-        .shadow(color: Color.black.opacity(0.05), radius: 2, x: 0, y: 1)
-        .help("Double-cliquez pour modifier votre objectif")
+        }.padding().background(Color(NSColor.controlBackgroundColor)).cornerRadius(12).shadow(color: Color.black.opacity(0.05), radius: 2, x: 0, y: 1).help("Double-cliquez pour modifier votre objectif")
     }
 }
 
@@ -459,38 +566,17 @@ struct SimpleNumberEditView: View {
     }
 }
 
-// Vue d'édition pour l'objectif
 struct EditGoalView: View {
-    @Environment(\.dismiss) var dismiss
-    @ObservedObject var viewModel: PortfolioViewModel
-    @State private var selectedGoal: GoalType
-    @State private var targetInput: Double
-    
-    init(viewModel: PortfolioViewModel) {
-        self.viewModel = viewModel
-        _selectedGoal = State(initialValue: viewModel.currentGoalType)
-        _targetInput = State(initialValue: viewModel.currentGoalTarget)
-    }
-    
+    @Environment(\.dismiss) var dismiss; @ObservedObject var viewModel: PortfolioViewModel
+    @State private var selectedGoal: GoalType; @State private var targetInput: Double
+    init(viewModel: PortfolioViewModel) { self.viewModel = viewModel; _selectedGoal = State(initialValue: viewModel.currentGoalType); _targetInput = State(initialValue: viewModel.currentGoalTarget) }
     var body: some View {
         Form {
             Section(header: Text("Définir un objectif").font(.headline)) {
-                Picker("Type d'objectif", selection: $selectedGoal) {
-                    ForEach(GoalType.allCases, id: \.self) { type in
-                        Text(type.rawValue).tag(type)
-                    }
-                }
+                Picker("Type d'objectif", selection: $selectedGoal) { ForEach(GoalType.allCases, id: \.self) { type in Text(type.rawValue).tag(type) } }
                 TextField("Cible à atteindre (€)", value: $targetInput, format: .number)
             }.padding()
-            HStack {
-                Button("Annuler") { dismiss() }.keyboardShortcut(.cancelAction)
-                Spacer()
-                Button("Enregistrer") {
-                    viewModel.currentGoalType = selectedGoal
-                    viewModel.currentGoalTarget = targetInput
-                    dismiss()
-                }.keyboardShortcut(.defaultAction).buttonStyle(.borderedProminent)
-            }.padding()
+            HStack { Button("Annuler") { dismiss() }.keyboardShortcut(.cancelAction); Spacer(); Button("Enregistrer") { viewModel.currentGoalType = selectedGoal; viewModel.currentGoalTarget = targetInput; dismiss() }.keyboardShortcut(.defaultAction).buttonStyle(.borderedProminent) }.padding()
         }.frame(width: 380).padding()
     }
 }
@@ -500,8 +586,7 @@ struct CompositionTabView: View {
     @ObservedObject var viewModel: PortfolioViewModel
     @State private var selection: Set<Position.ID> = []
     @State private var showCashSheet = false; @State private var showInvestedSheet = false
-    @State private var showGoalSheet = false // Afficher la fenêtre d'objectif
-    @State private var positionToEdit: Position? = nil; @State private var chartToZoom: ChartZoomType? = nil
+    @State private var showGoalSheet = false; @State private var positionToEdit: Position? = nil; @State private var chartToZoom: ChartZoomType? = nil
     
     var body: some View {
         ScrollView(.vertical) {
@@ -526,14 +611,7 @@ struct CompositionTabView: View {
                     }
                 }
                 
-                // --- LA BARRE DE PROGRESSION ---
-                GoalProgressBar(
-                    title: viewModel.currentGoalType.rawValue,
-                    currentValue: viewModel.currentGoalValue,
-                    targetValue: viewModel.currentGoalTarget
-                )
-                .contentShape(Rectangle())
-                .onTapGesture(count: 2) { showGoalSheet = true } // Double clic pour modifier
+                GoalProgressBar(title: viewModel.currentGoalType.rawValue, currentValue: viewModel.currentGoalValue, targetValue: viewModel.currentGoalTarget).contentShape(Rectangle()).onTapGesture(count: 2) { showGoalSheet = true }
                 
                 // --- TABLEAU ---
                 Table(viewModel.positions, selection: $selection, sortOrder: $viewModel.sortOrder) {
@@ -544,10 +622,7 @@ struct CompositionTabView: View {
                     TableColumn("Qté", value: \.quantity) { pos in Text("\(pos.quantity, specifier: "%.2f")").frame(maxWidth: .infinity, alignment: .leading).contentShape(Rectangle()).onTapGesture(count: 2) { positionToEdit = pos } }
                     TableColumn("Prix", value: \.currentPrice) { pos in Text(pos.currentPrice, format: .currency(code: pos.currency)).frame(maxWidth: .infinity, alignment: .leading).contentShape(Rectangle()).onTapGesture(count: 2) { positionToEdit = pos } }
                     TableColumn("PRU", value: \.averageCost) { pos in Text(pos.averageCost, format: .currency(code: pos.currency)).foregroundColor(.secondary).frame(maxWidth: .infinity, alignment: .leading).contentShape(Rectangle()).onTapGesture(count: 2) { positionToEdit = pos } }
-                    
-                    // COLONNE MONTANT TOTAL AJOUTÉE ICI
                     TableColumn("Montant Total", value: \.currentValueEUR) { pos in Text(pos.currentValueEUR, format: .currency(code: "EUR")).fontWeight(.medium).frame(maxWidth: .infinity, alignment: .leading).contentShape(Rectangle()).onTapGesture(count: 2) { positionToEdit = pos } }
-                    
                     TableColumn("P/L €", value: \.roiValue) { pos in Text(pos.roiValue, format: .currency(code: "EUR").sign(strategy: .always())).foregroundColor(getColor(for: pos.roiValue)).fontWeight(.medium).frame(maxWidth: .infinity, alignment: .leading).contentShape(Rectangle()).onTapGesture(count: 2) { positionToEdit = pos } }
                     TableColumn("P/L %", value: \.roiPercent) { pos in Text(pos.roiPercent, format: .percent.precision(.fractionLength(2)).sign(strategy: .always())).padding(.horizontal, 8).padding(.vertical, 2).background(getColor(for: pos.roiValue).opacity(0.1)).foregroundColor(getColor(for: pos.roiValue)).cornerRadius(4).frame(maxWidth: .infinity, alignment: .leading).contentShape(Rectangle()).onTapGesture(count: 2) { positionToEdit = pos } }
                 }.tableStyle(.inset).frame(minHeight: 300)
@@ -556,12 +631,13 @@ struct CompositionTabView: View {
                 VStack(spacing: 24) {
                     HStack(spacing: 24) { ModernDonutChart(data: viewModel.allocationByPosition, title: "Poids par Position", zoomType: .positions, expandedChart: $chartToZoom); ModernDonutChart(data: viewModel.allocationByCountry, title: "Exposition Géographique", zoomType: .countries, expandedChart: $chartToZoom) }
                     HStack(spacing: 24) { PRUPriceChart(data: viewModel.priceComparisonData, expandedChart: $chartToZoom); ROIComboChart(positions: viewModel.positions, expandedChart: $chartToZoom) }
+                    HStack(spacing: 24) { ModernScatterPlotChart(data: viewModel.scatterData, expandedChart: $chartToZoom); ModernValueSourceChart(data: viewModel.valueSourceDonutData, expandedChart: $chartToZoom) }
                 }
             }.padding()
         }
         .sheet(isPresented: $showCashSheet) { SimpleNumberEditView(title: "Modifier Cash", value: $viewModel.availableCash) }
         .sheet(isPresented: $showInvestedSheet) { SimpleNumberEditView(title: "Modifier Apport", value: $viewModel.manuallyInvested) }
-        .sheet(isPresented: $showGoalSheet) { EditGoalView(viewModel: viewModel) } // Fenêtre Objectif
+        .sheet(isPresented: $showGoalSheet) { EditGoalView(viewModel: viewModel) }
         .sheet(item: $positionToEdit) { position in EditPositionView(viewModel: viewModel, position: position) }
         .sheet(item: $chartToZoom) { type in FullScreenChartView(zoomType: type, viewModel: viewModel) }
     }
@@ -576,41 +652,16 @@ struct ContentView: View {
 
     var body: some View {
         VStack(spacing: 0) {
-            
-            // Le Header bien PRO (Boutons déplacés ici !)
             HStack {
-                Text("BlueChip - Stocks Portfolio Manager")
-                    .font(.system(size: 24, weight: .black, design: .rounded))
-                    .foregroundColor(.primary)
-                
+                Text("BlueChip - Stocks Portfolio Manager").font(.system(size: 24, weight: .black, design: .rounded)).foregroundColor(.primary)
                 Spacer()
-                
-                // Boutons d'action dans le Header
-                Button(action: { Task { await viewModel.refreshPrices() } }) {
-                    if viewModel.isLoading {
-                        ProgressView().controlSize(.small)
-                    } else {
-                        Label("Actualiser", systemImage: "arrow.clockwise")
-                    }
-                }
-                .disabled(viewModel.isLoading)
-                .buttonStyle(.bordered)
-                .padding(.trailing, 8)
-                
-                Button(action: { showAddSheet = true }) {
-                    Label("Ajouter", systemImage: "plus")
-                }
-                .buttonStyle(.borderedProminent)
-            }
-            .padding(.horizontal, 20)
-            .padding(.top, 20)
-            .padding(.bottom, 10)
+                Button(action: { Task { await viewModel.refreshPrices() } }) { if viewModel.isLoading { ProgressView().controlSize(.small) } else { Label("Actualiser", systemImage: "arrow.clockwise") } }.disabled(viewModel.isLoading).buttonStyle(.bordered).padding(.trailing, 8)
+                Button(action: { showAddSheet = true }) { Label("Ajouter", systemImage: "plus") }.buttonStyle(.borderedProminent)
+            }.padding(.horizontal, 20).padding(.top, 20).padding(.bottom, 10)
             
-            // Barre d'onglets
             HStack { CustomTabBar(selectedTab: $selectedTab); Spacer() }
             Divider()
             
-            // Routage
             Group {
                 switch selectedTab {
                 case .composition: CompositionTabView(viewModel: viewModel)
@@ -619,6 +670,7 @@ struct ContentView: View {
             }
         }
         .background(Color(NSColor.windowBackgroundColor))
+        .navigationTitle("")
         .sheet(isPresented: $showAddSheet) { AddPositionView(viewModel: viewModel) }
         .onReceive(NotificationCenter.default.publisher(for: NSApplication.willTerminateNotification)) { _ in viewModel.saveData() }
     }
