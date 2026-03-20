@@ -5,14 +5,20 @@
 
 Page composition :
 
-- graphe répartition par action ok
-- graphe répartition par pays ok
-
-- graphe pru vs prix actuel ok
-- retour sur investissement par action ok
-
-- poids vs retour sur investissement
-- classement des performances des positions
-
-- source de la valeur actuelle du portefeuille
+- classement des performances des positions en décroissant
 - retours sur investissement par années de détention
+
+- heatmap
+- poids vs yield on cost
+
+- donut par secteur
+- donut par capitalisation
+
+
+faire en sorte que le tableau des positions prennet toute la largeur dispo, sans plus, et que les colonnes s'écartent le plus possible entre elles
+
+ajouter changements de page par ALT+TAB
+reconnaitre si on ajoute une action qui a le mm ticker pour l'ajouter dans la position déjà prête
+
+plus tard :
+- finir une icone d'app

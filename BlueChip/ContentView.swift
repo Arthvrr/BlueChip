@@ -2,21 +2,23 @@ import SwiftUI
 import Combine
 import Charts
 
-// MARK: - 1. LE MODÈLE (DATA)
+// MARK: - 1. MODEL (DATA)
 struct Position: Identifiable, Codable {
     var id: UUID
     let ticker: String
     var quantity: Double
-    var averageCost: Double // PRU
+    var averageCost: Double // Avg Cost
     var currentPrice: Double
     var currency: String
     var usdToEurRate: Double
     var annualDividendNet: Double
     var country: String
+    var sector: String      // NEW FIELD
+    var marketCap: String   // NEW FIELD
     var dividendMonths: Set<Int>
     var purchaseDate: Date
     
-    init(id: UUID = UUID(), ticker: String, quantity: Double, averageCost: Double, currentPrice: Double, currency: String = "EUR", usdToEurRate: Double = 1.0, annualDividendNet: Double = 0.0, country: String = "", dividendMonths: Set<Int> = [], purchaseDate: Date = Date()) {
+    init(id: UUID = UUID(), ticker: String, quantity: Double, averageCost: Double, currentPrice: Double, currency: String = "EUR", usdToEurRate: Double = 1.0, annualDividendNet: Double = 0.0, country: String = "", sector: String = "", marketCap: String = "", dividendMonths: Set<Int> = [], purchaseDate: Date = Date()) {
         self.id = id
         self.ticker = ticker
         self.quantity = quantity
@@ -26,12 +28,14 @@ struct Position: Identifiable, Codable {
         self.usdToEurRate = usdToEurRate
         self.annualDividendNet = annualDividendNet
         self.country = country
+        self.sector = sector
+        self.marketCap = marketCap
         self.dividendMonths = dividendMonths
         self.purchaseDate = purchaseDate
     }
     
     enum CodingKeys: String, CodingKey {
-        case id, ticker, quantity, averageCost, currentPrice, currency, usdToEurRate, annualDividendNet, country, dividendMonths, purchaseDate
+        case id, ticker, quantity, averageCost, currentPrice, currency, usdToEurRate, annualDividendNet, country, sector, marketCap, dividendMonths, purchaseDate
     }
     
     init(from decoder: Decoder) throws {
@@ -45,6 +49,11 @@ struct Position: Identifiable, Codable {
         usdToEurRate = try container.decodeIfPresent(Double.self, forKey: .usdToEurRate) ?? 1.0
         annualDividendNet = try container.decodeIfPresent(Double.self, forKey: .annualDividendNet) ?? 0.0
         country = try container.decodeIfPresent(String.self, forKey: .country) ?? ""
+        
+        // Safety for older saves
+        sector = try container.decodeIfPresent(String.self, forKey: .sector) ?? ""
+        marketCap = try container.decodeIfPresent(String.self, forKey: .marketCap) ?? ""
+        
         dividendMonths = try container.decodeIfPresent(Set<Int>.self, forKey: .dividendMonths) ?? []
         purchaseDate = try container.decodeIfPresent(Date.self, forKey: .purchaseDate) ?? Date()
     }
@@ -57,9 +66,9 @@ struct Position: Identifiable, Codable {
 }
 
 enum GoalType: String, Codable, CaseIterable {
-    case totalValue = "Valeur Totale (€)"
-    case dividends = "Dividendes Annuels (€)"
-    case invested = "Apport Initial (€)"
+    case totalValue = "Total Value (€)"
+    case dividends = "Annual Dividends (€)"
+    case invested = "Initial Investment (€)"
 }
 
 struct PortfolioSaveData: Codable {
@@ -73,10 +82,9 @@ struct PortfolioSaveData: Codable {
 struct ChartDataItem: Identifiable { let id = UUID(); let name: String; let value: Double }
 struct PriceCompareItem: Identifiable { let id = UUID(); let ticker: String; let category: String; let value: Double }
 struct ScatterItem: Identifiable { let id = UUID(); let ticker: String; let weight: Double; let roi: Double }
-// Structure ValueSource simplifiée pour 2 valeurs fixes
 struct ValueSourceItem: Identifiable { let id = UUID(); let category: String; let value: Double }
 
-// MARK: - 2. LE SERVICE YAHOO (RÉSEAU)
+// MARK: - 2. YAHOO SERVICE (NETWORK)
 class YahooFinanceService {
     func fetchStockData(for ticker: String) async -> (price: Double, currency: String)? {
         let cleanTicker = ticker.trimmingCharacters(in: .whitespacesAndNewlines)
@@ -88,13 +96,13 @@ class YahooFinanceService {
                let meta = result.first?["meta"] as? [String: Any], let price = meta["regularMarketPrice"] as? Double {
                 return (price, meta["currency"] as? String ?? "EUR")
             }
-        } catch { print("Erreur Yahoo: \(error.localizedDescription)") }
+        } catch { print("Yahoo Error: \(error.localizedDescription)") }
         return nil
     }
     func fetchUSDEURRate() async -> Double { return await fetchStockData(for: "EUR=X")?.price ?? 1.0 }
 }
 
-// MARK: - 3. LE VIEW MODEL
+// MARK: - 3. VIEW MODEL
 @MainActor
 class PortfolioViewModel: ObservableObject {
     @Published var positions: [Position] = [] { didSet { saveData() } }
@@ -134,7 +142,21 @@ class PortfolioViewModel: ObservableObject {
     
     var allocationByCountry: [ChartDataItem] {
         var dict: [String: Double] = [:]
-        for pos in positions { dict[pos.country.isEmpty ? "Inconnu" : pos.country.uppercased(), default: 0] += pos.currentValueEUR }
+        for pos in positions { dict[pos.country.isEmpty ? "Unknown" : pos.country.uppercased(), default: 0] += pos.currentValueEUR }
+        if availableCash > 0 { dict["Cash", default: 0] += availableCash }
+        return dict.map { ChartDataItem(name: $0.key, value: $0.value) }.sorted { $0.value > $1.value }
+    }
+    
+    var allocationBySector: [ChartDataItem] {
+        var dict: [String: Double] = [:]
+        for pos in positions { dict[pos.sector.isEmpty ? "Unknown" : pos.sector.capitalized, default: 0] += pos.currentValueEUR }
+        if availableCash > 0 { dict["Cash", default: 0] += availableCash }
+        return dict.map { ChartDataItem(name: $0.key, value: $0.value) }.sorted { $0.value > $1.value }
+    }
+    
+    var allocationByMarketCap: [ChartDataItem] {
+        var dict: [String: Double] = [:]
+        for pos in positions { dict[pos.marketCap.isEmpty ? "Unknown" : pos.marketCap.capitalized, default: 0] += pos.currentValueEUR }
         if availableCash > 0 { dict["Cash", default: 0] += availableCash }
         return dict.map { ChartDataItem(name: $0.key, value: $0.value) }.sorted { $0.value > $1.value }
     }
@@ -142,8 +164,8 @@ class PortfolioViewModel: ObservableObject {
     var priceComparisonData: [PriceCompareItem] {
         var items: [PriceCompareItem] = []
         for pos in positions {
-            items.append(PriceCompareItem(ticker: pos.ticker, category: "PRU", value: pos.averageCost))
-            items.append(PriceCompareItem(ticker: pos.ticker, category: "Actuel", value: pos.currentPrice))
+            items.append(PriceCompareItem(ticker: pos.ticker, category: "Avg Cost", value: pos.averageCost))
+            items.append(PriceCompareItem(ticker: pos.ticker, category: "Current", value: pos.currentPrice))
         }
         return items
     }
@@ -156,18 +178,14 @@ class PortfolioViewModel: ObservableObject {
         }
     }
     
-    // NOUVEAU : Données simplifiées pour Donut à 2 valeurs fixes
     var valueSourceDonutData: [ValueSourceItem] {
         let invested = positionsInvestedSum
-        let pvLatente = totalROIValue // P/L Latent total
+        let pvLatente = totalROIValue
         
         var items: [ValueSourceItem] = []
-        // Toujours afficher l'investi
-        items.append(ValueSourceItem(category: "Total Investi", value: invested))
-        
-        // Afficher la PV si positive (le Donut gère mal le négatif)
+        items.append(ValueSourceItem(category: "Total Invested", value: invested))
         if pvLatente > 0 {
-            items.append(ValueSourceItem(category: "Plus-Value Totale Latente", value: pvLatente))
+            items.append(ValueSourceItem(category: "Unrealized P/L", value: pvLatente))
         }
         return items
     }
@@ -186,15 +204,16 @@ class PortfolioViewModel: ObservableObject {
         positions.sort(using: sortOrder); saveData(); isLoading = false
     }
     
-    func addPosition(ticker: String, quantity: Double, pru: Double, dividend: Double, country: String, purchaseDate: Date) {
-        positions.append(Position(ticker: ticker.uppercased(), quantity: quantity, averageCost: pru, currentPrice: pru, annualDividendNet: dividend, country: country, purchaseDate: purchaseDate))
+    func addPosition(ticker: String, quantity: Double, pru: Double, dividend: Double, country: String, sector: String, marketCap: String, purchaseDate: Date) {
+        positions.append(Position(ticker: ticker.uppercased(), quantity: quantity, averageCost: pru, currentPrice: pru, annualDividendNet: dividend, country: country, sector: sector, marketCap: marketCap, purchaseDate: purchaseDate))
         positions.sort(using: sortOrder); Task { await refreshPrices() }
     }
     
-    func updatePosition(id: UUID, quantity: Double, pru: Double, dividend: Double, country: String, dividendMonths: Set<Int>, purchaseDate: Date) {
+    func updatePosition(id: UUID, quantity: Double, pru: Double, dividend: Double, country: String, sector: String, marketCap: String, dividendMonths: Set<Int>, purchaseDate: Date) {
         if let idx = positions.firstIndex(where: { $0.id == id }) {
             positions[idx].quantity = quantity; positions[idx].averageCost = pru; positions[idx].annualDividendNet = dividend
-            positions[idx].country = country; positions[idx].dividendMonths = dividendMonths; positions[idx].purchaseDate = purchaseDate
+            positions[idx].country = country; positions[idx].sector = sector; positions[idx].marketCap = marketCap
+            positions[idx].dividendMonths = dividendMonths; positions[idx].purchaseDate = purchaseDate
             positions.sort(using: sortOrder)
         }
     }
@@ -223,15 +242,15 @@ class PortfolioViewModel: ObservableObject {
             manuallyInvested = decoded.manuallyInvested
             if let savedGoalType = decoded.goalType { currentGoalType = savedGoalType }
             if let savedGoalTarget = decoded.goalTarget { currentGoalTarget = savedGoalTarget }
-        } catch { print("ℹ️ Fichier JSON introuvable ou erreur de lecture.") }
+        } catch { print("ℹ️ JSON File not found or read error.") }
     }
 }
 
-// MARK: - 4. NAVIGATION & ONGLETS
+// MARK: - 4. NAVIGATION & TABS
 enum AppTab: String, CaseIterable {
-    case composition = "Composition", fondamentaux = "Fondamentaux", croissance = "Croissance", dividendes = "Dividendes"
-    case valorisation = "Valorisation", projection = "Projection", simulation = "Simulation", watchlist = "Watchlist"
-    case exposition = "Exposition", transactions = "Transactions", benchmark = "Benchmark"
+    case composition = "Composition", fundamentals = "Fundamentals", growth = "Growth", dividends = "Dividends"
+    case valuation = "Valuation", projection = "Projection", simulation = "Simulation", watchlist = "Watchlist"
+    case exposure = "Exposure", transactions = "Transactions", benchmark = "Benchmark"
 }
 
 struct CustomTabBar: View {
@@ -249,8 +268,8 @@ struct CustomTabBar: View {
     }
 }
 
-// MARK: - 5. COMPOSANTS UI & GRAPHIQUES AVANCÉS
-enum ChartZoomType: Identifiable { case positions, countries, priceCompare, roiCombo, scatter, valueSource; var id: Int { self.hashValue } }
+// MARK: - 5. UI COMPONENTS & ADVANCED CHARTS
+enum ChartZoomType: Identifiable { case positions, countries, sectors, marketCaps, priceCompare, roiCombo, scatter, valueSource; var id: Int { self.hashValue } }
 
 struct InteractiveLegendView: View {
     let items: [String]; let colorMap: (String) -> Color; @Binding var hiddenItems: Set<String>
@@ -287,9 +306,9 @@ struct ModernDonutChart: View {
                 if !isExpanded { Button(action: { expandedChart = zoomType }) { Image(systemName: "plus.magnifyingglass").foregroundColor(.secondary) }.buttonStyle(.plain) }
             }.padding(.bottom, 4)
             InteractiveLegendView(items: data.map { $0.name }, colorMap: color, hiddenItems: $hiddenItems).padding(.bottom, 8)
-            if filteredData.isEmpty { Spacer(); Text("Aucune donnée").foregroundColor(.secondary); Spacer() } else {
+            if filteredData.isEmpty { Spacer(); Text("No data").foregroundColor(.secondary); Spacer() } else {
                 Chart(filteredData) { item in
-                    SectorMark(angle: .value("Valeur", item.value), innerRadius: .ratio(0.65), angularInset: 1.5).foregroundStyle(color(for: item.name)).cornerRadius(4)
+                    SectorMark(angle: .value("Value", item.value), innerRadius: .ratio(0.65), angularInset: 1.5).foregroundStyle(color(for: item.name)).cornerRadius(4)
                 }.chartLegend(.hidden).chartAngleSelection(value: $selectedAngleValue).chartBackground { proxy in
                     GeometryReader { geometry in
                         if let value = selectedAngleValue {
@@ -308,23 +327,23 @@ struct PRUPriceChart: View {
     let data: [PriceCompareItem]; var isExpanded: Bool = false; @Binding var expandedChart: ChartZoomType?
     @State private var hiddenCategories: Set<String> = []; @State private var hiddenTickers: Set<String> = []; @State private var hoveredTicker: String? = nil
     
-    let categories = ["PRU", "Actuel"]
+    let categories = ["Avg Cost", "Current"]
     var uniqueTickers: [String] { Array(Set(data.map { $0.ticker })).sorted() }
     var filteredData: [PriceCompareItem] { data.filter { !hiddenCategories.contains($0.category) && !hiddenTickers.contains($0.ticker) } }
     
     var body: some View {
         VStack {
             HStack {
-                Text("PRU vs Prix Actuel").font(.headline).foregroundColor(.secondary); Spacer()
+                Text("Avg Cost vs Current Price").font(.headline).foregroundColor(.secondary); Spacer()
                 if !isExpanded { Button(action: { expandedChart = .priceCompare }) { Image(systemName: "plus.magnifyingglass").foregroundColor(.secondary) }.buttonStyle(.plain) }
             }.padding(.bottom, 4)
             VStack(spacing: 4) {
-                InteractiveLegendView(items: categories, colorMap: { $0 == "PRU" ? .gray.opacity(0.6) : .blue }, hiddenItems: $hiddenCategories)
+                InteractiveLegendView(items: categories, colorMap: { $0 == "Avg Cost" ? .gray.opacity(0.6) : .blue }, hiddenItems: $hiddenCategories)
                 InteractiveLegendView(items: uniqueTickers, colorMap: { _ in .primary.opacity(0.3) }, hiddenItems: $hiddenTickers)
             }.padding(.bottom, 8)
-            if filteredData.isEmpty { Spacer(); Text("Aucune donnée").foregroundColor(.secondary); Spacer() } else {
+            if filteredData.isEmpty { Spacer(); Text("No data").foregroundColor(.secondary); Spacer() } else {
                 Chart(filteredData) { item in
-                    BarMark(x: .value("Ticker", item.ticker), y: .value("Prix", item.value)).foregroundStyle(item.category == "PRU" ? Color.gray.opacity(0.6) : Color.blue).position(by: .value("Catégorie", item.category)).cornerRadius(4)
+                    BarMark(x: .value("Ticker", item.ticker), y: .value("Price", item.value)).foregroundStyle(item.category == "Avg Cost" ? Color.gray.opacity(0.6) : Color.blue).position(by: .value("Category", item.category)).cornerRadius(4)
                         .annotation(position: .top) { if hoveredTicker == item.ticker { Text(item.value.formatted(.currency(code: "EUR"))).font(.system(size: 9, weight: .bold)).foregroundColor(.secondary) } }
                 }.chartLegend(.hidden).chartXSelection(value: $hoveredTicker)
             }
@@ -343,14 +362,14 @@ struct ROIComboChart: View {
     var body: some View {
         VStack {
             HStack {
-                Text("Retour sur Investissement (P/L)").font(.headline).foregroundColor(.secondary); Spacer()
+                Text("Return on Investment (P/L)").font(.headline).foregroundColor(.secondary); Spacer()
                 if !isExpanded { Button(action: { expandedChart = .roiCombo }) { Image(systemName: "plus.magnifyingglass").foregroundColor(.secondary) }.buttonStyle(.plain) }
             }.padding(.bottom, 4)
             VStack(spacing: 4) {
                 InteractiveLegendView(items: metrics, colorMap: { $0 == "P/L (€)" ? .green : .purple }, hiddenItems: $hiddenMetrics)
                 InteractiveLegendView(items: uniqueTickers, colorMap: { _ in .primary.opacity(0.3) }, hiddenItems: $hiddenTickers)
             }.padding(.bottom, 8)
-            if filteredPositions.isEmpty { Spacer(); Text("Aucune donnée").foregroundColor(.secondary); Spacer() } else {
+            if filteredPositions.isEmpty { Spacer(); Text("No data").foregroundColor(.secondary); Spacer() } else {
                 Chart {
                     ForEach(filteredPositions) { pos in
                         if !hiddenMetrics.contains("P/L (€)") {
@@ -378,21 +397,20 @@ struct ModernScatterPlotChart: View {
     var filteredData: [ScatterItem] { data.filter { !hiddenTickers.contains($0.ticker) } }
     var hoveredItem: ScatterItem? { guard let w = hoveredWeight else { return nil }; return filteredData.min(by: { abs($0.weight - w) < abs($1.weight - w) }) }
     
-    // NOUVEAU : Calcul des domaines pour verrouiller l'échelle et éviter le bug du 200%
     var xDomain: [Double] { guard let maxW = filteredData.map({$0.weight}).max() else { return [0, 0.1] }; return [0, maxW * 1.1] }
     var yDomain: [Double] { guard let maxR = filteredData.map({$0.roi}).max() else { return [0, 0.1] }; return [0, maxR * 1.1] }
     
     var body: some View {
         VStack {
             HStack {
-                Text("Poids Portfolio vs Performance Latente").font(.headline).foregroundColor(.secondary); Spacer()
+                Text("Portfolio Weight vs Unrealized Performance").font(.headline).foregroundColor(.secondary); Spacer()
                 if !isExpanded { Button(action: { expandedChart = .scatter }) { Image(systemName: "plus.magnifyingglass").foregroundColor(.secondary) }.buttonStyle(.plain) }
             }.padding(.bottom, 4)
             InteractiveLegendView(items: uniqueTickers, colorMap: color(for:), hiddenItems: $hiddenTickers).padding(.bottom, 8)
             
-            if filteredData.isEmpty { Spacer(); Text("Aucune donnée").foregroundColor(.secondary); Spacer() } else {
+            if filteredData.isEmpty { Spacer(); Text("No data").foregroundColor(.secondary); Spacer() } else {
                 Chart(filteredData) { item in
-                    PointMark(x: .value("Poids", item.weight), y: .value("ROI", item.roi))
+                    PointMark(x: .value("Weight", item.weight), y: .value("ROI", item.roi))
                         .foregroundStyle(color(for: item.ticker)).symbolSize(100)
                         .annotation(position: .top, alignment: .center) {
                             if hoveredItem?.id == item.id {
@@ -403,10 +421,8 @@ struct ModernScatterPlotChart: View {
                             }
                         }
                 }.chartLegend(.hidden)
-                // CORRECTION : Verrouillage explicite des domaines pour éviter le bug d'échelle au survol
                  .chartXScale(domain: xDomain)
                  .chartYScale(domain: yDomain)
-                // CORRECTION : Typage explicite du label pour éviter l'ambiguïté .percent
                  .chartXAxis { AxisMarks { value in AxisGridLine(); AxisTick(); if let v = value.as(Double.self) { AxisValueLabel(v.formatted(.percent.precision(.fractionLength(0)))) } } }
                  .chartYAxis { AxisMarks { value in AxisGridLine(); AxisTick(); if let v = value.as(Double.self) { AxisValueLabel(v.formatted(.percent.precision(.fractionLength(0)))) } } }
                  .chartXSelection(value: $hoveredWeight)
@@ -415,34 +431,24 @@ struct ModernScatterPlotChart: View {
     }
 }
 
-// CORRECTION : Nouveau ModernValueSourceChart en DONUT
 struct ModernValueSourceChart: View {
     let data: [ValueSourceItem]; var isExpanded: Bool = false; @Binding var expandedChart: ChartZoomType?
     @State private var selectedAngleValue: Double? = nil; @State private var hiddenItems: Set<String> = []
     
-    // Couleurs fixes : Bleu pour Investi, Vert pour PV
-    func color(for name: String) -> Color { name == "Total Investi" ? .blue : .green }
+    func color(for name: String) -> Color { name == "Total Invested" ? .blue : .green }
     var filteredData: [ValueSourceItem] { data.filter { !hiddenItems.contains($0.category) } }
     
     var body: some View {
         VStack {
             HStack {
-                Text("Source de la Valeur Totale Actions").font(.headline).foregroundColor(.secondary); Spacer()
+                Text("Source of Total Stock Value").font(.headline).foregroundColor(.secondary); Spacer()
                 if !isExpanded { Button(action: { expandedChart = .valueSource }) { Image(systemName: "plus.magnifyingglass").foregroundColor(.secondary) }.buttonStyle(.plain) }
             }.padding(.bottom, 4)
-            // Légende interactive
             InteractiveLegendView(items: data.map { $0.category }, colorMap: color, hiddenItems: $hiddenItems).padding(.bottom, 8)
             
-            if filteredData.isEmpty { Spacer(); Text("Aucune donnée").foregroundColor(.secondary); Spacer() } else {
+            if filteredData.isEmpty { Spacer(); Text("No data").foregroundColor(.secondary); Spacer() } else {
                 Chart(filteredData) { item in
-                    // Transformation en Donut Chart
-                    SectorMark(
-                        angle: .value("Valeur", item.value),
-                        innerRadius: .ratio(0.65),
-                        angularInset: 1.5
-                    )
-                    .foregroundStyle(color(for: item.category))
-                    .cornerRadius(4)
+                    SectorMark(angle: .value("Value", item.value), innerRadius: .ratio(0.65), angularInset: 1.5).foregroundStyle(color(for: item.category)).cornerRadius(4)
                 }
                 .chartLegend(.hidden)
                 .chartAngleSelection(value: $selectedAngleValue)
@@ -453,20 +459,16 @@ struct ModernValueSourceChart: View {
                             VStack {
                                 Text(item.category).font(.headline).foregroundColor(.secondary).lineLimit(1).minimumScaleFactor(0.5)
                                 Text(item.value.formatted(.currency(code: "EUR").precision(.fractionLength(0)))).font(.title3).fontWeight(.bold)
-                            }
-                            .position(x: geometry.frame(in: .local).midX, y: geometry.frame(in: .local).midY)
+                            }.position(x: geometry.frame(in: .local).midX, y: geometry.frame(in: .local).midY)
                         } else {
-                            // Affichage par défaut au centre : Valeur Totale Actions
                             let total = filteredData.reduce(0) { $0 + $1.value }
                             VStack {
-                                Text("Valeur Actions").font(.subheadline).foregroundColor(.secondary)
+                                Text("Stock Value").font(.subheadline).foregroundColor(.secondary)
                                 Text(total.formatted(.currency(code: "EUR").precision(.fractionLength(0)))).font(.title2).fontWeight(.bold)
-                            }
-                            .position(x: geometry.frame(in: .local).midX, y: geometry.frame(in: .local).midY)
+                            }.position(x: geometry.frame(in: .local).midX, y: geometry.frame(in: .local).midY)
                         }
                     }
-                }
-                .animation(.easeInOut(duration: 0.2), value: selectedAngleValue)
+                }.animation(.easeInOut(duration: 0.2), value: selectedAngleValue)
             }
         }.padding().frame(minHeight: 360, maxHeight: isExpanded ? .infinity : 360).background(Color(NSColor.controlBackgroundColor)).cornerRadius(12).shadow(color: Color.black.opacity(0.05), radius: 2, x: 0, y: 1)
     }
@@ -481,6 +483,8 @@ struct FullScreenChartView: View {
             switch zoomType {
             case .positions: ModernDonutChart(data: viewModel.allocationByPosition, title: "", zoomType: zoomType, isExpanded: true, expandedChart: .constant(nil))
             case .countries: ModernDonutChart(data: viewModel.allocationByCountry, title: "", zoomType: zoomType, isExpanded: true, expandedChart: .constant(nil))
+            case .sectors: ModernDonutChart(data: viewModel.allocationBySector, title: "", zoomType: zoomType, isExpanded: true, expandedChart: .constant(nil))
+            case .marketCaps: ModernDonutChart(data: viewModel.allocationByMarketCap, title: "", zoomType: zoomType, isExpanded: true, expandedChart: .constant(nil))
             case .priceCompare: PRUPriceChart(data: viewModel.priceComparisonData, isExpanded: true, expandedChart: .constant(nil))
             case .roiCombo: ROIComboChart(positions: viewModel.positions, isExpanded: true, expandedChart: .constant(nil))
             case .scatter: ModernScatterPlotChart(data: viewModel.scatterData, isExpanded: true, expandedChart: .constant(nil))
@@ -490,8 +494,14 @@ struct FullScreenChartView: View {
     }
     var titleForZoom: String {
         switch zoomType {
-        case .positions: return "Allocation par Position"; case .countries: return "Allocation par Pays"; case .priceCompare: return "Comparaison PRU vs Prix Actuel"
-        case .roiCombo: return "Retour sur Investissement Détaillé"; case .scatter: return "Analyse Risque / Rendement"; case .valueSource: return "Origine de la Valeur Actions"
+        case .positions: return "Weight by Position"
+        case .countries: return "Geographic Exposure"
+        case .sectors: return "Sector Allocation"
+        case .marketCaps: return "Market Cap Allocation"
+        case .priceCompare: return "Avg Cost vs Current Price"
+        case .roiCombo: return "Return on Investment (P/L)"
+        case .scatter: return "Portfolio Weight vs Unrealized Performance"
+        case .valueSource: return "Source of Total Stock Value"
         }
     }
 }
@@ -511,50 +521,60 @@ struct GoalProgressBar: View {
     var progress: Double { guard targetValue > 0 else { return 0 }; return min(max(currentValue / targetValue, 0), 1) }
     var body: some View {
         VStack(alignment: .leading, spacing: 8) {
-            HStack { Text("Objectif : \(title)").font(.headline); Spacer(); Text("\(currentValue.formatted(.currency(code: "EUR"))) / \(targetValue.formatted(.currency(code: "EUR")))").font(.subheadline).fontWeight(.bold).foregroundColor(progress >= 1 ? .green : .primary) }
+            HStack { Text("Goal : \(title)").font(.headline); Spacer(); Text("\(currentValue.formatted(.currency(code: "EUR"))) / \(targetValue.formatted(.currency(code: "EUR")))").font(.subheadline).fontWeight(.bold).foregroundColor(progress >= 1 ? .green : .primary) }
             GeometryReader { geometry in
                 ZStack(alignment: .leading) {
                     RoundedRectangle(cornerRadius: 8).fill(Color(NSColor.windowBackgroundColor)).frame(height: 14)
                     RoundedRectangle(cornerRadius: 8).fill(LinearGradient(gradient: Gradient(colors: [.blue, .purple]), startPoint: .leading, endPoint: .trailing)).frame(width: max(0, geometry.size.width * CGFloat(progress)), height: 14).animation(.spring(), value: progress)
                 }
             }.frame(height: 14)
-        }.padding().background(Color(NSColor.controlBackgroundColor)).cornerRadius(12).shadow(color: Color.black.opacity(0.05), radius: 2, x: 0, y: 1).help("Double-cliquez pour modifier votre objectif")
+        }.padding().background(Color(NSColor.controlBackgroundColor)).cornerRadius(12).shadow(color: Color.black.opacity(0.05), radius: 2, x: 0, y: 1).help("Double-click to edit your goal")
     }
 }
 
-// MARK: - 6. FORMULAIRES
+// MARK: - 6. FORMS
 struct AddPositionView: View {
     @Environment(\.dismiss) var dismiss; @ObservedObject var viewModel: PortfolioViewModel
     @State private var ticker = ""; @State private var quantity: Double = 0; @State private var pru: Double = 0
     @State private var dividend: Double = 0; @State private var country = ""; @State private var purchaseDate = Date()
+    @State private var sector = ""; @State private var marketCap = ""
+    
     var body: some View {
         Form {
-            Section(header: Text("Nouvelle Position").font(.headline)) {
-                TextField("Ticker (ex: AAPL)", text: $ticker); TextField("Quantité", value: $quantity, format: .number)
-                TextField("PRU", value: $pru, format: .number); TextField("Dividende net/action", value: $dividend, format: .number)
-                TextField("Pays (ex: US, FR)", text: $country); DatePicker("Date d'achat", selection: $purchaseDate, displayedComponents: .date)
+            Section(header: Text("New Position").font(.headline)) {
+                TextField("Ticker (e.g., AAPL)", text: $ticker); TextField("Quantity", value: $quantity, format: .number)
+                TextField("Avg Cost (Original Currency)", value: $pru, format: .number); TextField("Net Dividend/Share", value: $dividend, format: .number)
+                TextField("Country (e.g., US, FR)", text: $country)
+                TextField("Sector (e.g., Technology)", text: $sector)
+                TextField("Market Cap (e.g., Large, Mega)", text: $marketCap)
+                DatePicker("Purchase Date", selection: $purchaseDate, displayedComponents: .date)
             }.padding()
-            HStack { Button("Annuler") { dismiss() }.keyboardShortcut(.cancelAction); Spacer(); Button("Ajouter") { if !ticker.isEmpty && quantity > 0 { viewModel.addPosition(ticker: ticker, quantity: quantity, pru: pru, dividend: dividend, country: country, purchaseDate: purchaseDate); dismiss() } }.keyboardShortcut(.defaultAction).buttonStyle(.borderedProminent) }.padding()
-        }.frame(width: 380).padding()
+            HStack { Button("Cancel") { dismiss() }.keyboardShortcut(.cancelAction); Spacer(); Button("Add") { if !ticker.isEmpty && quantity > 0 { viewModel.addPosition(ticker: ticker, quantity: quantity, pru: pru, dividend: dividend, country: country, sector: sector, marketCap: marketCap, purchaseDate: purchaseDate); dismiss() } }.keyboardShortcut(.defaultAction).buttonStyle(.borderedProminent) }.padding()
+        }.frame(width: 400).padding()
     }
 }
 
 struct EditPositionView: View {
     @Environment(\.dismiss) var dismiss; @ObservedObject var viewModel: PortfolioViewModel; let position: Position
     @State private var quantity: Double; @State private var pru: Double; @State private var dividend: Double
-    @State private var country: String; @State private var purchaseDate: Date; @State private var dividendMonths: Set<Int>
-    let monthsNames = ["Jan", "Fév", "Mar", "Avr", "Mai", "Jun", "Jul", "Aoû", "Sep", "Oct", "Nov", "Déc"]
-    init(viewModel: PortfolioViewModel, position: Position) { self.viewModel = viewModel; self.position = position; _quantity = State(initialValue: position.quantity); _pru = State(initialValue: position.averageCost); _dividend = State(initialValue: position.annualDividendNet); _country = State(initialValue: position.country); _purchaseDate = State(initialValue: position.purchaseDate); _dividendMonths = State(initialValue: position.dividendMonths) }
+    @State private var country: String; @State private var sector: String; @State private var marketCap: String
+    @State private var purchaseDate: Date; @State private var dividendMonths: Set<Int>
+    let monthsNames = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"]
+    
+    init(viewModel: PortfolioViewModel, position: Position) { self.viewModel = viewModel; self.position = position; _quantity = State(initialValue: position.quantity); _pru = State(initialValue: position.averageCost); _dividend = State(initialValue: position.annualDividendNet); _country = State(initialValue: position.country); _sector = State(initialValue: position.sector); _marketCap = State(initialValue: position.marketCap); _purchaseDate = State(initialValue: position.purchaseDate); _dividendMonths = State(initialValue: position.dividendMonths) }
+    
     var body: some View {
         Form {
-            Section(header: Text("Modifier \(position.ticker)").font(.headline)) {
-                TextField("Quantité", value: $quantity, format: .number); TextField("PRU", value: $pru, format: .number)
-                TextField("Dividende net/action", value: $dividend, format: .number); TextField("Pays", text: $country); DatePicker("Date d'achat", selection: $purchaseDate, displayedComponents: .date)
+            Section(header: Text("Edit \(position.ticker)").font(.headline)) {
+                TextField("Quantity", value: $quantity, format: .number); TextField("Avg Cost", value: $pru, format: .number)
+                TextField("Net Dividend/Share", value: $dividend, format: .number); TextField("Country", text: $country)
+                TextField("Sector", text: $sector); TextField("Market Cap", text: $marketCap)
+                DatePicker("Purchase Date", selection: $purchaseDate, displayedComponents: .date)
             }.padding(.bottom, 8)
-            Section(header: Text("Mois de versement").font(.subheadline).foregroundColor(.secondary)) {
+            Section(header: Text("Dividend Months").font(.subheadline).foregroundColor(.secondary)) {
                 LazyVGrid(columns: Array(repeating: GridItem(.flexible()), count: 6), spacing: 8) { ForEach(0..<12, id: \.self) { index in let m = index + 1; Toggle(monthsNames[index], isOn: Binding(get: { dividendMonths.contains(m) }, set: { isSet in if isSet { dividendMonths.insert(m) } else { dividendMonths.remove(m) } })).toggleStyle(.button).font(.caption) } }
             }.padding(.bottom, 16)
-            HStack { Button(role: .destructive) { viewModel.deletePosition(id: position.id); dismiss() } label: { Text("Supprimer") }; Spacer(); Button("Annuler") { dismiss() }.keyboardShortcut(.cancelAction); Button("Sauvegarder") { viewModel.updatePosition(id: position.id, quantity: quantity, pru: pru, dividend: dividend, country: country, dividendMonths: dividendMonths, purchaseDate: purchaseDate); dismiss() }.keyboardShortcut(.defaultAction).buttonStyle(.borderedProminent) }
+            HStack { Button(role: .destructive) { viewModel.deletePosition(id: position.id); dismiss() } label: { Text("Delete") }; Spacer(); Button("Cancel") { dismiss() }.keyboardShortcut(.cancelAction); Button("Save") { viewModel.updatePosition(id: position.id, quantity: quantity, pru: pru, dividend: dividend, country: country, sector: sector, marketCap: marketCap, dividendMonths: dividendMonths, purchaseDate: purchaseDate); dismiss() }.keyboardShortcut(.defaultAction).buttonStyle(.borderedProminent) }
         }.frame(width: 450).padding()
     }
 }
@@ -562,7 +582,7 @@ struct EditPositionView: View {
 struct SimpleNumberEditView: View {
     @Environment(\.dismiss) var dismiss; let title: String; @Binding var value: Double; @State private var input: Double = 0
     var body: some View {
-        Form { Section(header: Text(title).font(.headline)) { TextField("Montant (€)", value: $input, format: .number) }.padding(); HStack { Button("Annuler") { dismiss() }.keyboardShortcut(.cancelAction); Spacer(); Button("Enregistrer") { value = input; dismiss() }.keyboardShortcut(.defaultAction).buttonStyle(.borderedProminent) }.padding() }.frame(width: 300).padding().onAppear { input = value }
+        Form { Section(header: Text(title).font(.headline)) { TextField("Amount (€)", value: $input, format: .number) }.padding(); HStack { Button("Cancel") { dismiss() }.keyboardShortcut(.cancelAction); Spacer(); Button("Save") { value = input; dismiss() }.keyboardShortcut(.defaultAction).buttonStyle(.borderedProminent) }.padding() }.frame(width: 300).padding().onAppear { input = value }
     }
 }
 
@@ -572,16 +592,16 @@ struct EditGoalView: View {
     init(viewModel: PortfolioViewModel) { self.viewModel = viewModel; _selectedGoal = State(initialValue: viewModel.currentGoalType); _targetInput = State(initialValue: viewModel.currentGoalTarget) }
     var body: some View {
         Form {
-            Section(header: Text("Définir un objectif").font(.headline)) {
-                Picker("Type d'objectif", selection: $selectedGoal) { ForEach(GoalType.allCases, id: \.self) { type in Text(type.rawValue).tag(type) } }
-                TextField("Cible à atteindre (€)", value: $targetInput, format: .number)
+            Section(header: Text("Set a Goal").font(.headline)) {
+                Picker("Goal Type", selection: $selectedGoal) { ForEach(GoalType.allCases, id: \.self) { type in Text(type.rawValue).tag(type) } }
+                TextField("Target Amount (€)", value: $targetInput, format: .number)
             }.padding()
-            HStack { Button("Annuler") { dismiss() }.keyboardShortcut(.cancelAction); Spacer(); Button("Enregistrer") { viewModel.currentGoalType = selectedGoal; viewModel.currentGoalTarget = targetInput; dismiss() }.keyboardShortcut(.defaultAction).buttonStyle(.borderedProminent) }.padding()
+            HStack { Button("Cancel") { dismiss() }.keyboardShortcut(.cancelAction); Spacer(); Button("Save") { viewModel.currentGoalType = selectedGoal; viewModel.currentGoalTarget = targetInput; dismiss() }.keyboardShortcut(.defaultAction).buttonStyle(.borderedProminent) }.padding()
         }.frame(width: 380).padding()
     }
 }
 
-// MARK: - 7. VUES DES ONGLETS (PAGES)
+// MARK: - 7. TAB VIEWS (PAGES)
 struct CompositionTabView: View {
     @ObservedObject var viewModel: PortfolioViewModel
     @State private var selection: Set<Position.ID> = []
@@ -595,48 +615,61 @@ struct CompositionTabView: View {
                 VStack(spacing: 16) {
                     HStack(spacing: 16) {
                         Button(action: { showCashSheet = true }) { DashboardCard(title: "Cash", value: viewModel.availableCash.formatted(.currency(code: "EUR")), titleIcon: "pencil") }.buttonStyle(.plain)
-                        Button(action: { showInvestedSheet = true }) { DashboardCard(title: "Apport Initial", value: viewModel.manuallyInvested.formatted(.currency(code: "EUR")), titleIcon: "pencil") }.buttonStyle(.plain)
-                        DashboardCard(title: "Total (Actuel + Cash)", value: viewModel.currentTotalCapital.formatted(.currency(code: "EUR")))
-                        DashboardCard(title: "Valeur Actions", value: viewModel.totalValue.formatted(.currency(code: "EUR")))
+                        Button(action: { showInvestedSheet = true }) { DashboardCard(title: "Initial Investment", value: viewModel.manuallyInvested.formatted(.currency(code: "EUR")), titleIcon: "pencil") }.buttonStyle(.plain)
+                        DashboardCard(title: "Total (Current + Cash)", value: viewModel.currentTotalCapital.formatted(.currency(code: "EUR")))
+                        DashboardCard(title: "Stock Value", value: viewModel.totalValue.formatted(.currency(code: "EUR")))
                     }
                     HStack(spacing: 16) {
                         VStack(alignment: .leading, spacing: 4) {
-                            Text("P/L Latent").font(.subheadline).foregroundColor(.secondary).lineLimit(1)
+                            Text("Unrealized P/L").font(.subheadline).foregroundColor(.secondary).lineLimit(1)
                             Text(viewModel.totalROIValue.formatted(.currency(code: "EUR").sign(strategy: .always()))).font(.title2).fontWeight(.bold).foregroundColor(getColor(for: viewModel.totalROIValue))
                             Text(viewModel.totalROIPercent.formatted(.percent.precision(.fractionLength(2)).sign(strategy: .always()))).font(.caption).padding(.horizontal, 6).padding(.vertical, 2).background(getColor(for: viewModel.totalROIValue).opacity(0.1)).foregroundColor(getColor(for: viewModel.totalROIValue)).cornerRadius(4)
                         }.padding().frame(maxWidth: .infinity, alignment: .leading).background(Color(NSColor.controlBackgroundColor)).cornerRadius(10)
                         DashboardCard(title: "Positions", value: "\(viewModel.positionCount)")
-                        DashboardCard(title: "Dividendes Annuels", value: viewModel.totalDividends.formatted(.currency(code: "EUR")))
-                        DashboardCard(title: "Rendement Total", value: viewModel.portfolioYield.formatted(.percent.precision(.fractionLength(2))))
+                        DashboardCard(title: "Annual Dividends", value: viewModel.totalDividends.formatted(.currency(code: "EUR")))
+                        DashboardCard(title: "Total Yield", value: viewModel.portfolioYield.formatted(.percent.precision(.fractionLength(2))))
                     }
                 }
                 
                 GoalProgressBar(title: viewModel.currentGoalType.rawValue, currentValue: viewModel.currentGoalValue, targetValue: viewModel.currentGoalTarget).contentShape(Rectangle()).onTapGesture(count: 2) { showGoalSheet = true }
                 
-                // --- TABLEAU ---
+                // --- TABLE ---
                 Table(viewModel.positions, selection: $selection, sortOrder: $viewModel.sortOrder) {
                     TableColumn("Ticker", value: \.ticker) { position in
                         HStack { Circle().fill(Color.gray.opacity(0.2)).frame(width: 24, height: 24).overlay(Text(position.ticker.prefix(1)).font(.caption).fontWeight(.bold).foregroundColor(.primary)); Text(position.ticker).font(.system(.body, design: .monospaced)).fontWeight(.bold) }
-                        .contentShape(Rectangle()).onTapGesture(count: 2) { positionToEdit = position }.contextMenu { Button(role: .destructive) { viewModel.deletePosition(id: position.id) } label: { Label("Supprimer", systemImage: "trash") } }
+                        .contentShape(Rectangle()).onTapGesture(count: 2) { positionToEdit = position }.contextMenu { Button(role: .destructive) { viewModel.deletePosition(id: position.id) } label: { Label("Delete", systemImage: "trash") } }
                     }
-                    TableColumn("Qté", value: \.quantity) { pos in Text("\(pos.quantity, specifier: "%.2f")").frame(maxWidth: .infinity, alignment: .leading).contentShape(Rectangle()).onTapGesture(count: 2) { positionToEdit = pos } }
-                    TableColumn("Prix", value: \.currentPrice) { pos in Text(pos.currentPrice, format: .currency(code: pos.currency)).frame(maxWidth: .infinity, alignment: .leading).contentShape(Rectangle()).onTapGesture(count: 2) { positionToEdit = pos } }
-                    TableColumn("PRU", value: \.averageCost) { pos in Text(pos.averageCost, format: .currency(code: pos.currency)).foregroundColor(.secondary).frame(maxWidth: .infinity, alignment: .leading).contentShape(Rectangle()).onTapGesture(count: 2) { positionToEdit = pos } }
-                    TableColumn("Montant Total", value: \.currentValueEUR) { pos in Text(pos.currentValueEUR, format: .currency(code: "EUR")).fontWeight(.medium).frame(maxWidth: .infinity, alignment: .leading).contentShape(Rectangle()).onTapGesture(count: 2) { positionToEdit = pos } }
+                    TableColumn("Qty", value: \.quantity) { pos in Text("\(pos.quantity, specifier: "%.2f")").frame(maxWidth: .infinity, alignment: .leading).contentShape(Rectangle()).onTapGesture(count: 2) { positionToEdit = pos } }
+                    TableColumn("Price", value: \.currentPrice) { pos in Text(pos.currentPrice, format: .currency(code: pos.currency)).frame(maxWidth: .infinity, alignment: .leading).contentShape(Rectangle()).onTapGesture(count: 2) { positionToEdit = pos } }
+                    TableColumn("Avg Cost", value: \.averageCost) { pos in Text(pos.averageCost, format: .currency(code: pos.currency)).foregroundColor(.secondary).frame(maxWidth: .infinity, alignment: .leading).contentShape(Rectangle()).onTapGesture(count: 2) { positionToEdit = pos } }
+                    TableColumn("Total Value", value: \.currentValueEUR) { pos in Text(pos.currentValueEUR, format: .currency(code: "EUR")).fontWeight(.medium).frame(maxWidth: .infinity, alignment: .leading).contentShape(Rectangle()).onTapGesture(count: 2) { positionToEdit = pos } }
                     TableColumn("P/L €", value: \.roiValue) { pos in Text(pos.roiValue, format: .currency(code: "EUR").sign(strategy: .always())).foregroundColor(getColor(for: pos.roiValue)).fontWeight(.medium).frame(maxWidth: .infinity, alignment: .leading).contentShape(Rectangle()).onTapGesture(count: 2) { positionToEdit = pos } }
                     TableColumn("P/L %", value: \.roiPercent) { pos in Text(pos.roiPercent, format: .percent.precision(.fractionLength(2)).sign(strategy: .always())).padding(.horizontal, 8).padding(.vertical, 2).background(getColor(for: pos.roiValue).opacity(0.1)).foregroundColor(getColor(for: pos.roiValue)).cornerRadius(4).frame(maxWidth: .infinity, alignment: .leading).contentShape(Rectangle()).onTapGesture(count: 2) { positionToEdit = pos } }
                 }.tableStyle(.inset).frame(minHeight: 300)
                 
-                // --- GRAPHIQUES ---
+                // --- CHARTS ---
                 VStack(spacing: 24) {
-                    HStack(spacing: 24) { ModernDonutChart(data: viewModel.allocationByPosition, title: "Poids par Position", zoomType: .positions, expandedChart: $chartToZoom); ModernDonutChart(data: viewModel.allocationByCountry, title: "Exposition Géographique", zoomType: .countries, expandedChart: $chartToZoom) }
-                    HStack(spacing: 24) { PRUPriceChart(data: viewModel.priceComparisonData, expandedChart: $chartToZoom); ROIComboChart(positions: viewModel.positions, expandedChart: $chartToZoom) }
-                    HStack(spacing: 24) { ModernScatterPlotChart(data: viewModel.scatterData, expandedChart: $chartToZoom); ModernValueSourceChart(data: viewModel.valueSourceDonutData, expandedChart: $chartToZoom) }
+                    HStack(spacing: 24) {
+                        ModernDonutChart(data: viewModel.allocationByPosition, title: "Weight by Position", zoomType: .positions, expandedChart: $chartToZoom)
+                        ModernDonutChart(data: viewModel.allocationByCountry, title: "Geographic Exposure", zoomType: .countries, expandedChart: $chartToZoom)
+                    }
+                    HStack(spacing: 24) {
+                        ModernDonutChart(data: viewModel.allocationBySector, title: "Sector Allocation", zoomType: .sectors, expandedChart: $chartToZoom)
+                        ModernDonutChart(data: viewModel.allocationByMarketCap, title: "Market Cap Allocation", zoomType: .marketCaps, expandedChart: $chartToZoom)
+                    }
+                    HStack(spacing: 24) {
+                        PRUPriceChart(data: viewModel.priceComparisonData, expandedChart: $chartToZoom)
+                        ROIComboChart(positions: viewModel.positions, expandedChart: $chartToZoom)
+                    }
+                    HStack(spacing: 24) {
+                        ModernScatterPlotChart(data: viewModel.scatterData, expandedChart: $chartToZoom)
+                        ModernValueSourceChart(data: viewModel.valueSourceDonutData, expandedChart: $chartToZoom)
+                    }
                 }
             }.padding()
         }
-        .sheet(isPresented: $showCashSheet) { SimpleNumberEditView(title: "Modifier Cash", value: $viewModel.availableCash) }
-        .sheet(isPresented: $showInvestedSheet) { SimpleNumberEditView(title: "Modifier Apport", value: $viewModel.manuallyInvested) }
+        .sheet(isPresented: $showCashSheet) { SimpleNumberEditView(title: "Edit Cash", value: $viewModel.availableCash) }
+        .sheet(isPresented: $showInvestedSheet) { SimpleNumberEditView(title: "Edit Initial Investment", value: $viewModel.manuallyInvested) }
         .sheet(isPresented: $showGoalSheet) { EditGoalView(viewModel: viewModel) }
         .sheet(item: $positionToEdit) { position in EditPositionView(viewModel: viewModel, position: position) }
         .sheet(item: $chartToZoom) { type in FullScreenChartView(zoomType: type, viewModel: viewModel) }
@@ -644,7 +677,7 @@ struct CompositionTabView: View {
     func getColor(for value: Double) -> Color { value >= 0 ? .green : .red }
 }
 
-// MARK: - 8. VUE PRINCIPALE (CONTAINER)
+// MARK: - 8. MAIN VIEW (CONTAINER)
 struct ContentView: View {
     @StateObject private var viewModel = PortfolioViewModel()
     @State private var selectedTab: AppTab = .composition
@@ -655,8 +688,8 @@ struct ContentView: View {
             HStack {
                 Text("BlueChip - Stocks Portfolio Manager").font(.system(size: 24, weight: .black, design: .rounded)).foregroundColor(.primary)
                 Spacer()
-                Button(action: { Task { await viewModel.refreshPrices() } }) { if viewModel.isLoading { ProgressView().controlSize(.small) } else { Label("Actualiser", systemImage: "arrow.clockwise") } }.disabled(viewModel.isLoading).buttonStyle(.bordered).padding(.trailing, 8)
-                Button(action: { showAddSheet = true }) { Label("Ajouter", systemImage: "plus") }.buttonStyle(.borderedProminent)
+                Button(action: { Task { await viewModel.refreshPrices() } }) { if viewModel.isLoading { ProgressView().controlSize(.small) } else { Label("Refresh", systemImage: "arrow.clockwise") } }.disabled(viewModel.isLoading).buttonStyle(.bordered).padding(.trailing, 8)
+                Button(action: { showAddSheet = true }) { Label("Add", systemImage: "plus") }.buttonStyle(.borderedProminent)
             }.padding(.horizontal, 20).padding(.top, 20).padding(.bottom, 10)
             
             HStack { CustomTabBar(selectedTab: $selectedTab); Spacer() }
@@ -665,7 +698,7 @@ struct ContentView: View {
             Group {
                 switch selectedTab {
                 case .composition: CompositionTabView(viewModel: viewModel)
-                default: VStack(spacing: 20) { Image(systemName: "hammer.fill").font(.system(size: 50)).foregroundColor(.secondary); Text("La vue \(selectedTab.rawValue) est en construction.").font(.title).foregroundColor(.secondary) }.frame(maxWidth: .infinity, maxHeight: .infinity)
+                default: VStack(spacing: 20) { Image(systemName: "hammer.fill").font(.system(size: 50)).foregroundColor(.secondary); Text("\(selectedTab.rawValue) view is under construction.").font(.title).foregroundColor(.secondary) }.frame(maxWidth: .infinity, maxHeight: .infinity)
                 }
             }
         }
