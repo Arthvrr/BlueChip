@@ -7,14 +7,14 @@ struct Position: Identifiable, Codable {
     var id: UUID
     let ticker: String
     var quantity: Double
-    var averageCost: Double // Avg Cost
+    var averageCost: Double // PRU
     var currentPrice: Double
     var currency: String
     var usdToEurRate: Double
     var annualDividendNet: Double
     var country: String
-    var sector: String      // NEW FIELD
-    var marketCap: String   // NEW FIELD
+    var sector: String
+    var marketCap: String
     var dividendMonths: Set<Int>
     var purchaseDate: Date
     
@@ -49,11 +49,8 @@ struct Position: Identifiable, Codable {
         usdToEurRate = try container.decodeIfPresent(Double.self, forKey: .usdToEurRate) ?? 1.0
         annualDividendNet = try container.decodeIfPresent(Double.self, forKey: .annualDividendNet) ?? 0.0
         country = try container.decodeIfPresent(String.self, forKey: .country) ?? ""
-        
-        // Safety for older saves
         sector = try container.decodeIfPresent(String.self, forKey: .sector) ?? ""
         marketCap = try container.decodeIfPresent(String.self, forKey: .marketCap) ?? ""
-        
         dividendMonths = try container.decodeIfPresent(Set<Int>.self, forKey: .dividendMonths) ?? []
         purchaseDate = try container.decodeIfPresent(Date.self, forKey: .purchaseDate) ?? Date()
     }
@@ -63,6 +60,9 @@ struct Position: Identifiable, Codable {
     var totalDividendEUR: Double { quantity * annualDividendNet * (currency == "USD" ? usdToEurRate : 1.0) }
     var roiValue: Double { currentValueEUR - investedAmountEUR }
     var roiPercent: Double { investedAmountEUR > 0 ? roiValue / investedAmountEUR : 0 }
+    
+    var daysHeld: Int { max(1, Calendar.current.dateComponents([.day], from: purchaseDate, to: Date()).day ?? 1) }
+    var dailyROIValue: Double { roiValue / Double(daysHeld) }
 }
 
 enum GoalType: String, Codable, CaseIterable {
@@ -83,6 +83,7 @@ struct ChartDataItem: Identifiable { let id = UUID(); let name: String; let valu
 struct PriceCompareItem: Identifiable { let id = UUID(); let ticker: String; let category: String; let value: Double }
 struct ScatterItem: Identifiable { let id = UUID(); let ticker: String; let weight: Double; let roi: Double }
 struct ValueSourceItem: Identifiable { let id = UUID(); let category: String; let value: Double }
+struct TreemapNode: Identifiable { let id = UUID(); let position: Position; let rect: CGRect }
 
 // MARK: - 2. YAHOO SERVICE (NETWORK)
 class YahooFinanceService {
@@ -108,10 +109,8 @@ class PortfolioViewModel: ObservableObject {
     @Published var positions: [Position] = [] { didSet { saveData() } }
     @Published var availableCash: Double = 0.0 { didSet { saveData() } }
     @Published var manuallyInvested: Double = 0.0 { didSet { saveData() } }
-    
     @Published var currentGoalType: GoalType = .totalValue { didSet { saveData() } }
     @Published var currentGoalTarget: Double = 10000.0 { didSet { saveData() } }
-    
     @Published var isLoading = false
     @Published var sortOrder = [KeyPathComparator(\Position.ticker)] { didSet { positions.sort(using: sortOrder) } }
     
@@ -181,12 +180,9 @@ class PortfolioViewModel: ObservableObject {
     var valueSourceDonutData: [ValueSourceItem] {
         let invested = positionsInvestedSum
         let pvLatente = totalROIValue
-        
         var items: [ValueSourceItem] = []
         items.append(ValueSourceItem(category: "Total Invested", value: invested))
-        if pvLatente > 0 {
-            items.append(ValueSourceItem(category: "Unrealized P/L", value: pvLatente))
-        }
+        if pvLatente > 0 { items.append(ValueSourceItem(category: "Unrealized P/L", value: pvLatente)) }
         return items
     }
     
@@ -221,25 +217,16 @@ class PortfolioViewModel: ObservableObject {
     func deletePosition(id: UUID) { positions.removeAll { $0.id == id } }
     
     private var saveFileURL: URL { FileManager.default.urls(for: .documentDirectory, in: .userDomainMask)[0].appendingPathComponent("BlueChip_Data.json") }
-    
     func saveData() {
-        let dataToSave = PortfolioSaveData(
-            positions: positions,
-            availableCash: availableCash,
-            manuallyInvested: manuallyInvested,
-            goalType: currentGoalType,
-            goalTarget: currentGoalTarget
-        )
+        let dataToSave = PortfolioSaveData(positions: positions, availableCash: availableCash, manuallyInvested: manuallyInvested, goalType: currentGoalType, goalTarget: currentGoalTarget)
         do { try JSONEncoder().encode(dataToSave).write(to: saveFileURL, options: [.atomic]) } catch {}
     }
-    
     func loadData() {
         do {
             let data = try Data(contentsOf: saveFileURL)
             let decoded = try JSONDecoder().decode(PortfolioSaveData.self, from: data)
             positions = decoded.positions.sorted(using: sortOrder)
-            availableCash = decoded.availableCash
-            manuallyInvested = decoded.manuallyInvested
+            availableCash = decoded.availableCash; manuallyInvested = decoded.manuallyInvested
             if let savedGoalType = decoded.goalType { currentGoalType = savedGoalType }
             if let savedGoalTarget = decoded.goalTarget { currentGoalTarget = savedGoalTarget }
         } catch { print("ℹ️ JSON File not found or read error.") }
@@ -268,8 +255,20 @@ struct CustomTabBar: View {
     }
 }
 
-// MARK: - 5. UI COMPONENTS & ADVANCED CHARTS
-enum ChartZoomType: Identifiable { case positions, countries, sectors, marketCaps, priceCompare, roiCombo, scatter, valueSource; var id: Int { self.hashValue } }
+// MARK: - 5. UI COMPONENTS & CHARTS
+enum ChartZoomType: Identifiable { case positions, countries, sectors, marketCaps, priceCompare, roiCombo, scatter, valueSource, heatmap, dailyRoi; var id: Int { self.hashValue } }
+
+struct BlueChipWatermark: View {
+    var body: some View {
+        HStack {
+            Spacer()
+            Text("Powered by BlueChip")
+                .font(.system(size: 10, weight: .bold, design: .rounded))
+                .foregroundColor(.secondary.opacity(0.3))
+        }
+        .padding(.top, 2)
+    }
+}
 
 struct InteractiveLegendView: View {
     let items: [String]; let colorMap: (String) -> Color; @Binding var hiddenItems: Set<String>
@@ -278,10 +277,7 @@ struct InteractiveLegendView: View {
             HStack(spacing: 16) {
                 ForEach(items, id: \.self) { item in
                     Button(action: { withAnimation { if hiddenItems.contains(item) { hiddenItems.remove(item) } else { hiddenItems.insert(item) } } }) {
-                        HStack(spacing: 6) {
-                            Circle().fill(colorMap(item)).frame(width: 10, height: 10)
-                            Text(item).font(.caption).foregroundColor(hiddenItems.contains(item) ? .secondary : .primary)
-                        }
+                        HStack(spacing: 6) { Circle().fill(colorMap(item)).frame(width: 10, height: 10); Text(item).font(.caption).foregroundColor(hiddenItems.contains(item) ? .secondary : .primary) }
                     }.buttonStyle(.plain).opacity(hiddenItems.contains(item) ? 0.4 : 1.0)
                 }
             }.padding(.horizontal, 4)
@@ -301,10 +297,7 @@ struct ModernDonutChart: View {
     
     var body: some View {
         VStack {
-            HStack {
-                Text(title).font(.headline).foregroundColor(.secondary); Spacer()
-                if !isExpanded { Button(action: { expandedChart = zoomType }) { Image(systemName: "plus.magnifyingglass").foregroundColor(.secondary) }.buttonStyle(.plain) }
-            }.padding(.bottom, 4)
+            HStack { Text(title).font(.headline).foregroundColor(.secondary); Spacer(); if !isExpanded { Button(action: { expandedChart = zoomType }) { Image(systemName: "plus.magnifyingglass").foregroundColor(.secondary) }.buttonStyle(.plain) } }.padding(.bottom, 4)
             InteractiveLegendView(items: data.map { $0.name }, colorMap: color, hiddenItems: $hiddenItems).padding(.bottom, 8)
             if filteredData.isEmpty { Spacer(); Text("No data").foregroundColor(.secondary); Spacer() } else {
                 Chart(filteredData) { item in
@@ -318,6 +311,7 @@ struct ModernDonutChart: View {
                     }
                 }.animation(.easeInOut(duration: 0.2), value: selectedAngleValue)
             }
+            BlueChipWatermark()
         }.padding().frame(minHeight: 360, maxHeight: isExpanded ? .infinity : 360).background(Color(NSColor.controlBackgroundColor)).cornerRadius(12).shadow(color: Color.black.opacity(0.05), radius: 2, x: 0, y: 1)
     }
     func findItem(for value: Double) -> ChartDataItem { var cum = 0.0; for item in filteredData { cum += item.value; if value <= cum { return item } }; return filteredData.last! }
@@ -333,10 +327,7 @@ struct PRUPriceChart: View {
     
     var body: some View {
         VStack {
-            HStack {
-                Text("Avg Cost vs Current Price").font(.headline).foregroundColor(.secondary); Spacer()
-                if !isExpanded { Button(action: { expandedChart = .priceCompare }) { Image(systemName: "plus.magnifyingglass").foregroundColor(.secondary) }.buttonStyle(.plain) }
-            }.padding(.bottom, 4)
+            HStack { Text("Avg Cost vs Current Price").font(.headline).foregroundColor(.secondary); Spacer(); if !isExpanded { Button(action: { expandedChart = .priceCompare }) { Image(systemName: "plus.magnifyingglass").foregroundColor(.secondary) }.buttonStyle(.plain) } }.padding(.bottom, 4)
             VStack(spacing: 4) {
                 InteractiveLegendView(items: categories, colorMap: { $0 == "Avg Cost" ? .gray.opacity(0.6) : .blue }, hiddenItems: $hiddenCategories)
                 InteractiveLegendView(items: uniqueTickers, colorMap: { _ in .primary.opacity(0.3) }, hiddenItems: $hiddenTickers)
@@ -347,6 +338,7 @@ struct PRUPriceChart: View {
                         .annotation(position: .top) { if hoveredTicker == item.ticker { Text(item.value.formatted(.currency(code: "EUR"))).font(.system(size: 9, weight: .bold)).foregroundColor(.secondary) } }
                 }.chartLegend(.hidden).chartXSelection(value: $hoveredTicker)
             }
+            BlueChipWatermark()
         }.padding().frame(minHeight: 360, maxHeight: isExpanded ? .infinity : 360).background(Color(NSColor.controlBackgroundColor)).cornerRadius(12).shadow(color: Color.black.opacity(0.05), radius: 2, x: 0, y: 1)
     }
 }
@@ -361,10 +353,7 @@ struct ROIComboChart: View {
     
     var body: some View {
         VStack {
-            HStack {
-                Text("Return on Investment (P/L)").font(.headline).foregroundColor(.secondary); Spacer()
-                if !isExpanded { Button(action: { expandedChart = .roiCombo }) { Image(systemName: "plus.magnifyingglass").foregroundColor(.secondary) }.buttonStyle(.plain) }
-            }.padding(.bottom, 4)
+            HStack { Text("Return on Investment (P/L)").font(.headline).foregroundColor(.secondary); Spacer(); if !isExpanded { Button(action: { expandedChart = .roiCombo }) { Image(systemName: "plus.magnifyingglass").foregroundColor(.secondary) }.buttonStyle(.plain) } }.padding(.bottom, 4)
             VStack(spacing: 4) {
                 InteractiveLegendView(items: metrics, colorMap: { $0 == "P/L (€)" ? .green : .purple }, hiddenItems: $hiddenMetrics)
                 InteractiveLegendView(items: uniqueTickers, colorMap: { _ in .primary.opacity(0.3) }, hiddenItems: $hiddenTickers)
@@ -384,6 +373,7 @@ struct ROIComboChart: View {
                     }
                 }.chartLegend(.hidden).chartXSelection(value: $hoveredTicker)
             }
+            BlueChipWatermark()
         }.padding().frame(minHeight: 360, maxHeight: isExpanded ? .infinity : 360).background(Color(NSColor.controlBackgroundColor)).cornerRadius(12).shadow(color: Color.black.opacity(0.05), radius: 2, x: 0, y: 1)
     }
 }
@@ -402,16 +392,12 @@ struct ModernScatterPlotChart: View {
     
     var body: some View {
         VStack {
-            HStack {
-                Text("Portfolio Weight vs Unrealized Performance").font(.headline).foregroundColor(.secondary); Spacer()
-                if !isExpanded { Button(action: { expandedChart = .scatter }) { Image(systemName: "plus.magnifyingglass").foregroundColor(.secondary) }.buttonStyle(.plain) }
-            }.padding(.bottom, 4)
+            HStack { Text("Portfolio Weight vs Unrealized Performance").font(.headline).foregroundColor(.secondary); Spacer(); if !isExpanded { Button(action: { expandedChart = .scatter }) { Image(systemName: "plus.magnifyingglass").foregroundColor(.secondary) }.buttonStyle(.plain) } }.padding(.bottom, 4)
             InteractiveLegendView(items: uniqueTickers, colorMap: color(for:), hiddenItems: $hiddenTickers).padding(.bottom, 8)
             
             if filteredData.isEmpty { Spacer(); Text("No data").foregroundColor(.secondary); Spacer() } else {
                 Chart(filteredData) { item in
-                    PointMark(x: .value("Weight", item.weight), y: .value("ROI", item.roi))
-                        .foregroundStyle(color(for: item.ticker)).symbolSize(100)
+                    PointMark(x: .value("Weight", item.weight), y: .value("ROI", item.roi)).foregroundStyle(color(for: item.ticker)).symbolSize(100)
                         .annotation(position: .top, alignment: .center) {
                             if hoveredItem?.id == item.id {
                                 VStack {
@@ -420,13 +406,12 @@ struct ModernScatterPlotChart: View {
                                 }.padding(4).background(Color(NSColor.windowBackgroundColor).opacity(0.9)).cornerRadius(4)
                             }
                         }
-                }.chartLegend(.hidden)
-                 .chartXScale(domain: xDomain)
-                 .chartYScale(domain: yDomain)
+                }.chartLegend(.hidden).chartXScale(domain: xDomain).chartYScale(domain: yDomain)
                  .chartXAxis { AxisMarks { value in AxisGridLine(); AxisTick(); if let v = value.as(Double.self) { AxisValueLabel(v.formatted(.percent.precision(.fractionLength(0)))) } } }
                  .chartYAxis { AxisMarks { value in AxisGridLine(); AxisTick(); if let v = value.as(Double.self) { AxisValueLabel(v.formatted(.percent.precision(.fractionLength(0)))) } } }
                  .chartXSelection(value: $hoveredWeight)
             }
+            BlueChipWatermark()
         }.padding().frame(minHeight: 360, maxHeight: isExpanded ? .infinity : 360).background(Color(NSColor.controlBackgroundColor)).cornerRadius(12).shadow(color: Color.black.opacity(0.05), radius: 2, x: 0, y: 1)
     }
 }
@@ -440,39 +425,159 @@ struct ModernValueSourceChart: View {
     
     var body: some View {
         VStack {
-            HStack {
-                Text("Source of Total Stock Value").font(.headline).foregroundColor(.secondary); Spacer()
-                if !isExpanded { Button(action: { expandedChart = .valueSource }) { Image(systemName: "plus.magnifyingglass").foregroundColor(.secondary) }.buttonStyle(.plain) }
-            }.padding(.bottom, 4)
+            HStack { Text("Source of Total Stock Value").font(.headline).foregroundColor(.secondary); Spacer(); if !isExpanded { Button(action: { expandedChart = .valueSource }) { Image(systemName: "plus.magnifyingglass").foregroundColor(.secondary) }.buttonStyle(.plain) } }.padding(.bottom, 4)
             InteractiveLegendView(items: data.map { $0.category }, colorMap: color, hiddenItems: $hiddenItems).padding(.bottom, 8)
             
             if filteredData.isEmpty { Spacer(); Text("No data").foregroundColor(.secondary); Spacer() } else {
                 Chart(filteredData) { item in
                     SectorMark(angle: .value("Value", item.value), innerRadius: .ratio(0.65), angularInset: 1.5).foregroundStyle(color(for: item.category)).cornerRadius(4)
-                }
-                .chartLegend(.hidden)
-                .chartAngleSelection(value: $selectedAngleValue)
-                .chartBackground { proxy in
+                }.chartLegend(.hidden).chartAngleSelection(value: $selectedAngleValue).chartBackground { proxy in
                     GeometryReader { geometry in
                         if let value = selectedAngleValue {
                             let item = findItem(for: value)
-                            VStack {
-                                Text(item.category).font(.headline).foregroundColor(.secondary).lineLimit(1).minimumScaleFactor(0.5)
-                                Text(item.value.formatted(.currency(code: "EUR").precision(.fractionLength(0)))).font(.title3).fontWeight(.bold)
-                            }.position(x: geometry.frame(in: .local).midX, y: geometry.frame(in: .local).midY)
+                            VStack { Text(item.category).font(.headline).foregroundColor(.secondary).lineLimit(1).minimumScaleFactor(0.5); Text(item.value.formatted(.currency(code: "EUR").precision(.fractionLength(0)))).font(.title3).fontWeight(.bold) }.position(x: geometry.frame(in: .local).midX, y: geometry.frame(in: .local).midY)
                         } else {
                             let total = filteredData.reduce(0) { $0 + $1.value }
-                            VStack {
-                                Text("Stock Value").font(.subheadline).foregroundColor(.secondary)
-                                Text(total.formatted(.currency(code: "EUR").precision(.fractionLength(0)))).font(.title2).fontWeight(.bold)
-                            }.position(x: geometry.frame(in: .local).midX, y: geometry.frame(in: .local).midY)
+                            VStack { Text("Stock Value").font(.subheadline).foregroundColor(.secondary); Text(total.formatted(.currency(code: "EUR").precision(.fractionLength(0)))).font(.title2).fontWeight(.bold) }.position(x: geometry.frame(in: .local).midX, y: geometry.frame(in: .local).midY)
                         }
                     }
                 }.animation(.easeInOut(duration: 0.2), value: selectedAngleValue)
             }
+            BlueChipWatermark()
         }.padding().frame(minHeight: 360, maxHeight: isExpanded ? .infinity : 360).background(Color(NSColor.controlBackgroundColor)).cornerRadius(12).shadow(color: Color.black.opacity(0.05), radius: 2, x: 0, y: 1)
     }
     func findItem(for value: Double) -> ValueSourceItem { var cum = 0.0; for item in filteredData { cum += item.value; if value <= cum { return item } }; return filteredData.last! }
+}
+
+// LA VUE EXTRAITE POUR SAUVER LA COMPILATION DE LA HEATMAP
+struct HeatmapNodeView: View {
+    let node: TreemapNode
+    @Binding var hoveredTicker: String?
+    
+    func color(for roi: Double) -> Color {
+        if roi == 0 { return Color.gray.opacity(0.4) }
+        let intensity = min(max(abs(roi) / 0.5, 0.3), 1.0)
+        return roi > 0 ? Color.green.opacity(intensity) : Color.red.opacity(intensity)
+    }
+    
+    var isHovered: Bool { hoveredTicker == node.position.ticker }
+    
+    var body: some View {
+        ZStack {
+            Rectangle()
+                .fill(color(for: node.position.roiPercent))
+                .border(Color(NSColor.windowBackgroundColor), width: 1.5)
+            
+            VStack(spacing: 4) {
+                Text(node.position.ticker)
+                    .font(.system(size: node.rect.width > 45 && node.rect.height > 35 ? 14 : 8, weight: .bold))
+                    .foregroundColor(.white).lineLimit(1)
+                
+                if node.rect.width > 60 && node.rect.height > 50 {
+                    Text(node.position.roiPercent.formatted(.percent.precision(.fractionLength(1))))
+                        .font(.caption).foregroundColor(.white.opacity(0.9)).lineLimit(1)
+                }
+            }
+            
+            if isHovered {
+                VStack {
+                    Text(node.position.ticker).font(.caption.bold())
+                    Text(node.position.currentValueEUR.formatted(.currency(code: "EUR"))).font(.caption2)
+                }
+                .padding(6).background(Color(NSColor.windowBackgroundColor).opacity(0.95)).cornerRadius(6).shadow(radius: 4)
+                .zIndex(10)
+            }
+        }
+        .frame(width: node.rect.width, height: node.rect.height)
+        // CORRECTION DU HIT-TESTING : Offset précis depuis le TopLeading
+        .offset(x: node.rect.minX, y: node.rect.minY)
+        .scaleEffect(isHovered ? 1.02 : 1.0)
+        .zIndex(isHovered ? 1 : 0)
+        .onContinuousHover { phase in
+            switch phase { case .active(_): hoveredTicker = node.position.ticker; case .ended: hoveredTicker = nil }
+        }
+    }
+}
+
+struct PerformanceHeatmap: View {
+    let positions: [Position]; var isExpanded: Bool = false; @Binding var expandedChart: ChartZoomType?
+    @State private var hoveredTicker: String? = nil
+    
+    var totalValue: Double { positions.reduce(0) { $0 + $1.currentValueEUR } }
+    var sortedPositions: [Position] { positions.sorted { $0.currentValueEUR > $1.currentValueEUR } }
+    
+    func layoutNodes(in rect: CGRect) -> [TreemapNode] {
+        var nodes: [TreemapNode] = []; var currentRect = rect; var remainingWeight = totalValue
+        for item in sortedPositions {
+            guard remainingWeight > 0 else { continue }
+            let fraction = item.currentValueEUR / remainingWeight
+            if currentRect.width > currentRect.height {
+                let w = currentRect.width * CGFloat(fraction)
+                nodes.append(TreemapNode(position: item, rect: CGRect(x: currentRect.minX, y: currentRect.minY, width: w, height: currentRect.height)))
+                currentRect = CGRect(x: currentRect.minX + w, y: currentRect.minY, width: currentRect.width - w, height: currentRect.height)
+            } else {
+                let h = currentRect.height * CGFloat(fraction)
+                nodes.append(TreemapNode(position: item, rect: CGRect(x: currentRect.minX, y: currentRect.minY, width: currentRect.width, height: h)))
+                currentRect = CGRect(x: currentRect.minX, y: currentRect.minY + h, width: currentRect.width, height: currentRect.height - h)
+            }
+            remainingWeight -= item.currentValueEUR
+        }
+        return nodes
+    }
+    
+    var body: some View {
+        VStack {
+            HStack { Text("Performance Heatmap").font(.headline).foregroundColor(.secondary); Spacer(); if !isExpanded { Button(action: { expandedChart = .heatmap }) { Image(systemName: "plus.magnifyingglass").foregroundColor(.secondary) }.buttonStyle(.plain) } }.padding(.bottom, 8)
+            
+            if positions.isEmpty { Spacer(); Text("No data").foregroundColor(.secondary); Spacer() } else {
+                GeometryReader { geo in
+                    ZStack(alignment: .topLeading) {
+                        ForEach(layoutNodes(in: CGRect(origin: .zero, size: geo.size))) { node in
+                            HeatmapNodeView(node: node, hoveredTicker: $hoveredTicker)
+                        }
+                    }
+                }
+            }
+            BlueChipWatermark()
+        }.padding().frame(minHeight: 360, maxHeight: isExpanded ? .infinity : 360).background(Color(NSColor.controlBackgroundColor)).cornerRadius(12).shadow(color: Color.black.opacity(0.05), radius: 2, x: 0, y: 1)
+    }
+}
+
+struct DailyROIChart: View {
+    let positions: [Position]; var isExpanded: Bool = false; @Binding var expandedChart: ChartZoomType?
+    @State private var hiddenTickers: Set<String> = []; @State private var hoveredTicker: String? = nil
+    
+    var uniqueTickers: [String] { positions.map { $0.ticker }.sorted() }
+    func color(for name: String) -> Color { if let idx = uniqueTickers.firstIndex(of: name) { return chartColors[idx % chartColors.count] }; return .gray }
+    var filteredPositions: [Position] { positions.filter { !hiddenTickers.contains($0.ticker) } }
+    
+    var body: some View {
+        VStack {
+            HStack { Text("Daily P/L by Holding Period").font(.headline).foregroundColor(.secondary); Spacer(); if !isExpanded { Button(action: { expandedChart = .dailyRoi }) { Image(systemName: "plus.magnifyingglass").foregroundColor(.secondary) }.buttonStyle(.plain) } }.padding(.bottom, 4)
+            InteractiveLegendView(items: uniqueTickers, colorMap: color(for:), hiddenItems: $hiddenTickers).padding(.bottom, 8)
+            
+            if filteredPositions.isEmpty { Spacer(); Text("No data").foregroundColor(.secondary); Spacer() } else {
+                Chart(filteredPositions) { pos in
+                    BarMark(
+                        x: .value("Ticker", pos.ticker),
+                        y: .value("Daily P/L", pos.dailyROIValue)
+                    )
+                    .foregroundStyle(pos.dailyROIValue >= 0 ? Color.green.opacity(0.7) : Color.red.opacity(0.7))
+                    .cornerRadius(4)
+                    .annotation(position: pos.dailyROIValue >= 0 ? .top : .bottom) {
+                        if hoveredTicker == pos.ticker {
+                            Text(pos.dailyROIValue.formatted(.currency(code: "EUR").sign(strategy: .always())))
+                                .font(.system(size: 9, weight: .bold))
+                                .padding(2).background(Color(NSColor.windowBackgroundColor).opacity(0.8)).cornerRadius(2)
+                        }
+                    }
+                }
+                .chartLegend(.hidden)
+                .chartXSelection(value: $hoveredTicker)
+            }
+            BlueChipWatermark()
+        }.padding().frame(minHeight: 360, maxHeight: isExpanded ? .infinity : 360).background(Color(NSColor.controlBackgroundColor)).cornerRadius(12).shadow(color: Color.black.opacity(0.05), radius: 2, x: 0, y: 1)
+    }
 }
 
 struct FullScreenChartView: View {
@@ -489,19 +594,16 @@ struct FullScreenChartView: View {
             case .roiCombo: ROIComboChart(positions: viewModel.positions, isExpanded: true, expandedChart: .constant(nil))
             case .scatter: ModernScatterPlotChart(data: viewModel.scatterData, isExpanded: true, expandedChart: .constant(nil))
             case .valueSource: ModernValueSourceChart(data: viewModel.valueSourceDonutData, isExpanded: true, expandedChart: .constant(nil))
+            case .heatmap: PerformanceHeatmap(positions: viewModel.positions, isExpanded: true, expandedChart: .constant(nil))
+            case .dailyRoi: DailyROIChart(positions: viewModel.positions, isExpanded: true, expandedChart: .constant(nil))
             }
         }.padding(30).frame(minWidth: 900, minHeight: 700)
     }
     var titleForZoom: String {
         switch zoomType {
-        case .positions: return "Weight by Position"
-        case .countries: return "Geographic Exposure"
-        case .sectors: return "Sector Allocation"
-        case .marketCaps: return "Market Cap Allocation"
-        case .priceCompare: return "Avg Cost vs Current Price"
-        case .roiCombo: return "Return on Investment (P/L)"
-        case .scatter: return "Portfolio Weight vs Unrealized Performance"
-        case .valueSource: return "Source of Total Stock Value"
+        case .positions: return "Weight by Position"; case .countries: return "Geographic Exposure"; case .sectors: return "Sector Allocation"; case .marketCaps: return "Market Cap Allocation"
+        case .priceCompare: return "Avg Cost vs Current Price"; case .roiCombo: return "Return on Investment (P/L)"; case .scatter: return "Portfolio Weight vs Unrealized Performance"
+        case .valueSource: return "Source of Total Stock Value"; case .heatmap: return "Performance Heatmap"; case .dailyRoi: return "Daily P/L by Holding Period"
         }
     }
 }
@@ -538,15 +640,12 @@ struct AddPositionView: View {
     @State private var ticker = ""; @State private var quantity: Double = 0; @State private var pru: Double = 0
     @State private var dividend: Double = 0; @State private var country = ""; @State private var purchaseDate = Date()
     @State private var sector = ""; @State private var marketCap = ""
-    
     var body: some View {
         Form {
             Section(header: Text("New Position").font(.headline)) {
                 TextField("Ticker (e.g., AAPL)", text: $ticker); TextField("Quantity", value: $quantity, format: .number)
                 TextField("Avg Cost (Original Currency)", value: $pru, format: .number); TextField("Net Dividend/Share", value: $dividend, format: .number)
-                TextField("Country (e.g., US, FR)", text: $country)
-                TextField("Sector (e.g., Technology)", text: $sector)
-                TextField("Market Cap (e.g., Large, Mega)", text: $marketCap)
+                TextField("Country (e.g., US, FR)", text: $country); TextField("Sector", text: $sector); TextField("Market Cap", text: $marketCap)
                 DatePicker("Purchase Date", selection: $purchaseDate, displayedComponents: .date)
             }.padding()
             HStack { Button("Cancel") { dismiss() }.keyboardShortcut(.cancelAction); Spacer(); Button("Add") { if !ticker.isEmpty && quantity > 0 { viewModel.addPosition(ticker: ticker, quantity: quantity, pru: pru, dividend: dividend, country: country, sector: sector, marketCap: marketCap, purchaseDate: purchaseDate); dismiss() } }.keyboardShortcut(.defaultAction).buttonStyle(.borderedProminent) }.padding()
@@ -560,9 +659,7 @@ struct EditPositionView: View {
     @State private var country: String; @State private var sector: String; @State private var marketCap: String
     @State private var purchaseDate: Date; @State private var dividendMonths: Set<Int>
     let monthsNames = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"]
-    
     init(viewModel: PortfolioViewModel, position: Position) { self.viewModel = viewModel; self.position = position; _quantity = State(initialValue: position.quantity); _pru = State(initialValue: position.averageCost); _dividend = State(initialValue: position.annualDividendNet); _country = State(initialValue: position.country); _sector = State(initialValue: position.sector); _marketCap = State(initialValue: position.marketCap); _purchaseDate = State(initialValue: position.purchaseDate); _dividendMonths = State(initialValue: position.dividendMonths) }
-    
     var body: some View {
         Form {
             Section(header: Text("Edit \(position.ticker)").font(.headline)) {
@@ -592,10 +689,7 @@ struct EditGoalView: View {
     init(viewModel: PortfolioViewModel) { self.viewModel = viewModel; _selectedGoal = State(initialValue: viewModel.currentGoalType); _targetInput = State(initialValue: viewModel.currentGoalTarget) }
     var body: some View {
         Form {
-            Section(header: Text("Set a Goal").font(.headline)) {
-                Picker("Goal Type", selection: $selectedGoal) { ForEach(GoalType.allCases, id: \.self) { type in Text(type.rawValue).tag(type) } }
-                TextField("Target Amount (€)", value: $targetInput, format: .number)
-            }.padding()
+            Section(header: Text("Set a Goal").font(.headline)) { Picker("Goal Type", selection: $selectedGoal) { ForEach(GoalType.allCases, id: \.self) { type in Text(type.rawValue).tag(type) } }; TextField("Target Amount (€)", value: $targetInput, format: .number) }.padding()
             HStack { Button("Cancel") { dismiss() }.keyboardShortcut(.cancelAction); Spacer(); Button("Save") { viewModel.currentGoalType = selectedGoal; viewModel.currentGoalTarget = targetInput; dismiss() }.keyboardShortcut(.defaultAction).buttonStyle(.borderedProminent) }.padding()
         }.frame(width: 380).padding()
     }
@@ -607,6 +701,14 @@ struct CompositionTabView: View {
     @State private var selection: Set<Position.ID> = []
     @State private var showCashSheet = false; @State private var showInvestedSheet = false
     @State private var showGoalSheet = false; @State private var positionToEdit: Position? = nil; @State private var chartToZoom: ChartZoomType? = nil
+    
+    // CORRECTION DU TABLEAU : Taille fixe pour 5 à 10 éléments, avec scroll automatique au-delà
+    var dynamicTableHeight: CGFloat {
+        let rowHeight: CGFloat = 30 // Hauteur d'une ligne sur macOS
+        let headerHeight: CGFloat = 34 // En-tête
+        let visibleRows = min(max(viewModel.positions.count, 5), 10)
+        return headerHeight + CGFloat(visibleRows) * rowHeight
+    }
     
     var body: some View {
         ScrollView(.vertical) {
@@ -645,7 +747,9 @@ struct CompositionTabView: View {
                     TableColumn("Total Value", value: \.currentValueEUR) { pos in Text(pos.currentValueEUR, format: .currency(code: "EUR")).fontWeight(.medium).frame(maxWidth: .infinity, alignment: .leading).contentShape(Rectangle()).onTapGesture(count: 2) { positionToEdit = pos } }
                     TableColumn("P/L €", value: \.roiValue) { pos in Text(pos.roiValue, format: .currency(code: "EUR").sign(strategy: .always())).foregroundColor(getColor(for: pos.roiValue)).fontWeight(.medium).frame(maxWidth: .infinity, alignment: .leading).contentShape(Rectangle()).onTapGesture(count: 2) { positionToEdit = pos } }
                     TableColumn("P/L %", value: \.roiPercent) { pos in Text(pos.roiPercent, format: .percent.precision(.fractionLength(2)).sign(strategy: .always())).padding(.horizontal, 8).padding(.vertical, 2).background(getColor(for: pos.roiValue).opacity(0.1)).foregroundColor(getColor(for: pos.roiValue)).cornerRadius(4).frame(maxWidth: .infinity, alignment: .leading).contentShape(Rectangle()).onTapGesture(count: 2) { positionToEdit = pos } }
-                }.tableStyle(.inset).frame(minHeight: 300)
+                }
+                .tableStyle(.inset)
+                .frame(height: dynamicTableHeight)
                 
                 // --- CHARTS ---
                 VStack(spacing: 24) {
@@ -664,6 +768,10 @@ struct CompositionTabView: View {
                     HStack(spacing: 24) {
                         ModernScatterPlotChart(data: viewModel.scatterData, expandedChart: $chartToZoom)
                         ModernValueSourceChart(data: viewModel.valueSourceDonutData, expandedChart: $chartToZoom)
+                    }
+                    HStack(spacing: 24) {
+                        PerformanceHeatmap(positions: viewModel.positions, expandedChart: $chartToZoom)
+                        DailyROIChart(positions: viewModel.positions, expandedChart: $chartToZoom)
                     }
                 }
             }.padding()

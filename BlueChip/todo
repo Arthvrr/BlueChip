@@ -1,23 +1,7 @@
-- ajouter total euros investi, montant total investi
-- ajouter graphes en donuts,...
-- faire icone
 - ajouter logo stocks par l'user lui-même
 
-Page composition :
-
-- classement des performances des positions en décroissant
-- retours sur investissement par années de détention
-
-- heatmap
-- poids vs yield on cost
-
-- donut par secteur
-- donut par capitalisation
-
-
-faire en sorte que le tableau des positions prennet toute la largeur dispo, sans plus, et que les colonnes s'écartent le plus possible entre elles
-
 ajouter changements de page par ALT+TAB
+
 reconnaitre si on ajoute une action qui a le mm ticker pour l'ajouter dans la position déjà prête
 
 plus tard :
