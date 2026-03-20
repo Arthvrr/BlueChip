@@ -471,7 +471,6 @@ struct HeatmapNodeView: View {
                 VStack {
                     Text(node.position.ticker).font(.caption.bold())
                     Text(node.position.currentValueEUR.formatted(.currency(code: "EUR"))).font(.caption2)
-                    Text("Daily: \(node.position.dailyROIValue.formatted(.currency(code: "EUR").sign(strategy: .always())))").font(.caption2)
                 }.padding(6).background(Color(NSColor.windowBackgroundColor).opacity(0.95)).cornerRadius(6).shadow(radius: 4).zIndex(10)
             }
         }.frame(width: node.rect.width, height: node.rect.height).offset(x: node.rect.minX, y: node.rect.minY).scaleEffect(isHovered ? 1.02 : 1.0).zIndex(isHovered ? 1 : 0).onContinuousHover { phase in
