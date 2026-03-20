@@ -449,7 +449,6 @@ struct ModernValueSourceChart: View {
     func findItem(for value: Double) -> ValueSourceItem { var cum = 0.0; for item in filteredData { cum += item.value; if value <= cum { return item } }; return filteredData.last! }
 }
 
-// LA VUE EXTRAITE POUR SAUVER LA COMPILATION DE LA HEATMAP
 struct HeatmapNodeView: View {
     let node: TreemapNode
     @Binding var hoveredTicker: String?
@@ -459,41 +458,23 @@ struct HeatmapNodeView: View {
         let intensity = min(max(abs(roi) / 0.5, 0.3), 1.0)
         return roi > 0 ? Color.green.opacity(intensity) : Color.red.opacity(intensity)
     }
-    
     var isHovered: Bool { hoveredTicker == node.position.ticker }
     
     var body: some View {
         ZStack {
-            Rectangle()
-                .fill(color(for: node.position.roiPercent))
-                .border(Color(NSColor.windowBackgroundColor), width: 1.5)
-            
+            Rectangle().fill(color(for: node.position.roiPercent)).border(Color(NSColor.windowBackgroundColor), width: 1.5)
             VStack(spacing: 4) {
-                Text(node.position.ticker)
-                    .font(.system(size: node.rect.width > 45 && node.rect.height > 35 ? 14 : 8, weight: .bold))
-                    .foregroundColor(.white).lineLimit(1)
-                
-                if node.rect.width > 60 && node.rect.height > 50 {
-                    Text(node.position.roiPercent.formatted(.percent.precision(.fractionLength(1))))
-                        .font(.caption).foregroundColor(.white.opacity(0.9)).lineLimit(1)
-                }
+                Text(node.position.ticker).font(.system(size: node.rect.width > 45 && node.rect.height > 35 ? 14 : 8, weight: .bold)).foregroundColor(.white).lineLimit(1)
+                if node.rect.width > 60 && node.rect.height > 50 { Text(node.position.roiPercent.formatted(.percent.precision(.fractionLength(1)))).font(.caption).foregroundColor(.white.opacity(0.9)).lineLimit(1) }
             }
-            
             if isHovered {
                 VStack {
                     Text(node.position.ticker).font(.caption.bold())
                     Text(node.position.currentValueEUR.formatted(.currency(code: "EUR"))).font(.caption2)
-                }
-                .padding(6).background(Color(NSColor.windowBackgroundColor).opacity(0.95)).cornerRadius(6).shadow(radius: 4)
-                .zIndex(10)
+                    Text("Daily: \(node.position.dailyROIValue.formatted(.currency(code: "EUR").sign(strategy: .always())))").font(.caption2)
+                }.padding(6).background(Color(NSColor.windowBackgroundColor).opacity(0.95)).cornerRadius(6).shadow(radius: 4).zIndex(10)
             }
-        }
-        .frame(width: node.rect.width, height: node.rect.height)
-        // CORRECTION DU HIT-TESTING : Offset précis depuis le TopLeading
-        .offset(x: node.rect.minX, y: node.rect.minY)
-        .scaleEffect(isHovered ? 1.02 : 1.0)
-        .zIndex(isHovered ? 1 : 0)
-        .onContinuousHover { phase in
+        }.frame(width: node.rect.width, height: node.rect.height).offset(x: node.rect.minX, y: node.rect.minY).scaleEffect(isHovered ? 1.02 : 1.0).zIndex(isHovered ? 1 : 0).onContinuousHover { phase in
             switch phase { case .active(_): hoveredTicker = node.position.ticker; case .ended: hoveredTicker = nil }
         }
     }
@@ -528,15 +509,8 @@ struct PerformanceHeatmap: View {
     var body: some View {
         VStack {
             HStack { Text("Performance Heatmap").font(.headline).foregroundColor(.secondary); Spacer(); if !isExpanded { Button(action: { expandedChart = .heatmap }) { Image(systemName: "plus.magnifyingglass").foregroundColor(.secondary) }.buttonStyle(.plain) } }.padding(.bottom, 8)
-            
             if positions.isEmpty { Spacer(); Text("No data").foregroundColor(.secondary); Spacer() } else {
-                GeometryReader { geo in
-                    ZStack(alignment: .topLeading) {
-                        ForEach(layoutNodes(in: CGRect(origin: .zero, size: geo.size))) { node in
-                            HeatmapNodeView(node: node, hoveredTicker: $hoveredTicker)
-                        }
-                    }
-                }
+                GeometryReader { geo in ZStack(alignment: .topLeading) { ForEach(layoutNodes(in: CGRect(origin: .zero, size: geo.size))) { node in HeatmapNodeView(node: node, hoveredTicker: $hoveredTicker) } } }
             }
             BlueChipWatermark()
         }.padding().frame(minHeight: 360, maxHeight: isExpanded ? .infinity : 360).background(Color(NSColor.controlBackgroundColor)).cornerRadius(12).shadow(color: Color.black.opacity(0.05), radius: 2, x: 0, y: 1)
@@ -558,22 +532,11 @@ struct DailyROIChart: View {
             
             if filteredPositions.isEmpty { Spacer(); Text("No data").foregroundColor(.secondary); Spacer() } else {
                 Chart(filteredPositions) { pos in
-                    BarMark(
-                        x: .value("Ticker", pos.ticker),
-                        y: .value("Daily P/L", pos.dailyROIValue)
-                    )
-                    .foregroundStyle(pos.dailyROIValue >= 0 ? Color.green.opacity(0.7) : Color.red.opacity(0.7))
-                    .cornerRadius(4)
-                    .annotation(position: pos.dailyROIValue >= 0 ? .top : .bottom) {
-                        if hoveredTicker == pos.ticker {
-                            Text(pos.dailyROIValue.formatted(.currency(code: "EUR").sign(strategy: .always())))
-                                .font(.system(size: 9, weight: .bold))
-                                .padding(2).background(Color(NSColor.windowBackgroundColor).opacity(0.8)).cornerRadius(2)
+                    BarMark(x: .value("Ticker", pos.ticker), y: .value("Daily P/L", pos.dailyROIValue)).foregroundStyle(pos.dailyROIValue >= 0 ? Color.green.opacity(0.7) : Color.red.opacity(0.7)).cornerRadius(4)
+                        .annotation(position: pos.dailyROIValue >= 0 ? .top : .bottom) {
+                            if hoveredTicker == pos.ticker { Text(pos.dailyROIValue.formatted(.currency(code: "EUR").sign(strategy: .always()))).font(.system(size: 9, weight: .bold)).padding(2).background(Color(NSColor.windowBackgroundColor).opacity(0.8)).cornerRadius(2) }
                         }
-                    }
-                }
-                .chartLegend(.hidden)
-                .chartXSelection(value: $hoveredTicker)
+                }.chartLegend(.hidden).chartXSelection(value: $hoveredTicker)
             }
             BlueChipWatermark()
         }.padding().frame(minHeight: 360, maxHeight: isExpanded ? .infinity : 360).background(Color(NSColor.controlBackgroundColor)).cornerRadius(12).shadow(color: Color.black.opacity(0.05), radius: 2, x: 0, y: 1)
@@ -702,13 +665,8 @@ struct CompositionTabView: View {
     @State private var showCashSheet = false; @State private var showInvestedSheet = false
     @State private var showGoalSheet = false; @State private var positionToEdit: Position? = nil; @State private var chartToZoom: ChartZoomType? = nil
     
-    // CORRECTION DU TABLEAU : Taille fixe pour 5 à 10 éléments, avec scroll automatique au-delà
-    var dynamicTableHeight: CGFloat {
-        let rowHeight: CGFloat = 30 // Hauteur d'une ligne sur macOS
-        let headerHeight: CGFloat = 34 // En-tête
-        let visibleRows = min(max(viewModel.positions.count, 5), 10)
-        return headerHeight + CGFloat(visibleRows) * rowHeight
-    }
+    // FIX 1 : Hauteur fixe pour exactement 10 lignes + en-tête. Satisfaction : <= 10 -> pas de scroll. > 10 -> scroll interne activé.
+    let tableFrameHeight: CGFloat = 340
     
     var body: some View {
         ScrollView(.vertical) {
@@ -722,11 +680,12 @@ struct CompositionTabView: View {
                         DashboardCard(title: "Stock Value", value: viewModel.totalValue.formatted(.currency(code: "EUR")))
                     }
                     HStack(spacing: 16) {
+                        // FIX 2 : AJOUT DU SHADOW MANQUANT !
                         VStack(alignment: .leading, spacing: 4) {
                             Text("Unrealized P/L").font(.subheadline).foregroundColor(.secondary).lineLimit(1)
                             Text(viewModel.totalROIValue.formatted(.currency(code: "EUR").sign(strategy: .always()))).font(.title2).fontWeight(.bold).foregroundColor(getColor(for: viewModel.totalROIValue))
                             Text(viewModel.totalROIPercent.formatted(.percent.precision(.fractionLength(2)).sign(strategy: .always()))).font(.caption).padding(.horizontal, 6).padding(.vertical, 2).background(getColor(for: viewModel.totalROIValue).opacity(0.1)).foregroundColor(getColor(for: viewModel.totalROIValue)).cornerRadius(4)
-                        }.padding().frame(maxWidth: .infinity, alignment: .leading).background(Color(NSColor.controlBackgroundColor)).cornerRadius(10)
+                        }.padding().frame(maxWidth: .infinity, alignment: .leading).background(Color(NSColor.controlBackgroundColor)).cornerRadius(10).shadow(color: Color.black.opacity(0.05), radius: 2, x: 0, y: 1)
                         DashboardCard(title: "Positions", value: "\(viewModel.positionCount)")
                         DashboardCard(title: "Annual Dividends", value: viewModel.totalDividends.formatted(.currency(code: "EUR")))
                         DashboardCard(title: "Total Yield", value: viewModel.portfolioYield.formatted(.percent.precision(.fractionLength(2))))
@@ -735,21 +694,26 @@ struct CompositionTabView: View {
                 
                 GoalProgressBar(title: viewModel.currentGoalType.rawValue, currentValue: viewModel.currentGoalValue, targetValue: viewModel.currentGoalTarget).contentShape(Rectangle()).onTapGesture(count: 2) { showGoalSheet = true }
                 
-                // --- TABLE ---
-                Table(viewModel.positions, selection: $selection, sortOrder: $viewModel.sortOrder) {
-                    TableColumn("Ticker", value: \.ticker) { position in
-                        HStack { Circle().fill(Color.gray.opacity(0.2)).frame(width: 24, height: 24).overlay(Text(position.ticker.prefix(1)).font(.caption).fontWeight(.bold).foregroundColor(.primary)); Text(position.ticker).font(.system(.body, design: .monospaced)).fontWeight(.bold) }
-                        .contentShape(Rectangle()).onTapGesture(count: 2) { positionToEdit = position }.contextMenu { Button(role: .destructive) { viewModel.deletePosition(id: position.id) } label: { Label("Delete", systemImage: "trash") } }
+                // FIX 1 : Table dans un conteneur stylisé à hauteur fixe
+                VStack(spacing: 0) {
+                    Table(viewModel.positions, selection: $selection, sortOrder: $viewModel.sortOrder) {
+                        TableColumn("Ticker", value: \.ticker) { position in
+                            HStack { Circle().fill(Color.gray.opacity(0.2)).frame(width: 24, height: 24).overlay(Text(position.ticker.prefix(1)).font(.caption).fontWeight(.bold).foregroundColor(.primary)); Text(position.ticker).font(.system(.body, design: .monospaced)).fontWeight(.bold) }
+                            .contentShape(Rectangle()).onTapGesture(count: 2) { positionToEdit = position }.contextMenu { Button(role: .destructive) { viewModel.deletePosition(id: position.id) } label: { Label("Delete", systemImage: "trash") } }
+                        }
+                        TableColumn("Qty", value: \.quantity) { pos in Text("\(pos.quantity, specifier: "%.2f")").frame(maxWidth: .infinity, alignment: .leading).contentShape(Rectangle()).onTapGesture(count: 2) { positionToEdit = pos } }
+                        TableColumn("Price", value: \.currentPrice) { pos in Text(pos.currentPrice, format: .currency(code: pos.currency)).frame(maxWidth: .infinity, alignment: .leading).contentShape(Rectangle()).onTapGesture(count: 2) { positionToEdit = pos } }
+                        TableColumn("Avg Cost", value: \.averageCost) { pos in Text(pos.averageCost, format: .currency(code: pos.currency)).foregroundColor(.secondary).frame(maxWidth: .infinity, alignment: .leading).contentShape(Rectangle()).onTapGesture(count: 2) { positionToEdit = pos } }
+                        TableColumn("Total Value", value: \.currentValueEUR) { pos in Text(pos.currentValueEUR, format: .currency(code: "EUR")).fontWeight(.medium).frame(maxWidth: .infinity, alignment: .leading).contentShape(Rectangle()).onTapGesture(count: 2) { positionToEdit = pos } }
+                        TableColumn("P/L €", value: \.roiValue) { pos in Text(pos.roiValue, format: .currency(code: "EUR").sign(strategy: .always())).foregroundColor(getColor(for: pos.roiValue)).fontWeight(.medium).frame(maxWidth: .infinity, alignment: .leading).contentShape(Rectangle()).onTapGesture(count: 2) { positionToEdit = pos } }
+                        TableColumn("P/L %", value: \.roiPercent) { pos in Text(pos.roiPercent, format: .percent.precision(.fractionLength(2)).sign(strategy: .always())).padding(.horizontal, 8).padding(.vertical, 2).background(getColor(for: pos.roiValue).opacity(0.1)).foregroundColor(getColor(for: pos.roiValue)).cornerRadius(4).frame(maxWidth: .infinity, alignment: .leading).contentShape(Rectangle()).onTapGesture(count: 2) { positionToEdit = pos } }
                     }
-                    TableColumn("Qty", value: \.quantity) { pos in Text("\(pos.quantity, specifier: "%.2f")").frame(maxWidth: .infinity, alignment: .leading).contentShape(Rectangle()).onTapGesture(count: 2) { positionToEdit = pos } }
-                    TableColumn("Price", value: \.currentPrice) { pos in Text(pos.currentPrice, format: .currency(code: pos.currency)).frame(maxWidth: .infinity, alignment: .leading).contentShape(Rectangle()).onTapGesture(count: 2) { positionToEdit = pos } }
-                    TableColumn("Avg Cost", value: \.averageCost) { pos in Text(pos.averageCost, format: .currency(code: pos.currency)).foregroundColor(.secondary).frame(maxWidth: .infinity, alignment: .leading).contentShape(Rectangle()).onTapGesture(count: 2) { positionToEdit = pos } }
-                    TableColumn("Total Value", value: \.currentValueEUR) { pos in Text(pos.currentValueEUR, format: .currency(code: "EUR")).fontWeight(.medium).frame(maxWidth: .infinity, alignment: .leading).contentShape(Rectangle()).onTapGesture(count: 2) { positionToEdit = pos } }
-                    TableColumn("P/L €", value: \.roiValue) { pos in Text(pos.roiValue, format: .currency(code: "EUR").sign(strategy: .always())).foregroundColor(getColor(for: pos.roiValue)).fontWeight(.medium).frame(maxWidth: .infinity, alignment: .leading).contentShape(Rectangle()).onTapGesture(count: 2) { positionToEdit = pos } }
-                    TableColumn("P/L %", value: \.roiPercent) { pos in Text(pos.roiPercent, format: .percent.precision(.fractionLength(2)).sign(strategy: .always())).padding(.horizontal, 8).padding(.vertical, 2).background(getColor(for: pos.roiValue).opacity(0.1)).foregroundColor(getColor(for: pos.roiValue)).cornerRadius(4).frame(maxWidth: .infinity, alignment: .leading).contentShape(Rectangle()).onTapGesture(count: 2) { positionToEdit = pos } }
+                    .tableStyle(.inset)
                 }
-                .tableStyle(.inset)
-                .frame(height: dynamicTableHeight)
+                .frame(height: tableFrameHeight)
+                .background(Color(NSColor.controlBackgroundColor))
+                .cornerRadius(12)
+                .shadow(color: Color.black.opacity(0.05), radius: 2, x: 0, y: 1)
                 
                 // --- CHARTS ---
                 VStack(spacing: 24) {
@@ -764,10 +728,6 @@ struct CompositionTabView: View {
                     HStack(spacing: 24) {
                         PRUPriceChart(data: viewModel.priceComparisonData, expandedChart: $chartToZoom)
                         ROIComboChart(positions: viewModel.positions, expandedChart: $chartToZoom)
-                    }
-                    HStack(spacing: 24) {
-                        ModernScatterPlotChart(data: viewModel.scatterData, expandedChart: $chartToZoom)
-                        ModernValueSourceChart(data: viewModel.valueSourceDonutData, expandedChart: $chartToZoom)
                     }
                     HStack(spacing: 24) {
                         PerformanceHeatmap(positions: viewModel.positions, expandedChart: $chartToZoom)

@@ -1,5 +1,8 @@
 - ajouter logo stocks par l'user lui-même
 
+- attribuer une couleur par positions
+- changer couleurs des graphes (≠ redondant)
+
 ajouter changements de page par ALT+TAB
 
 reconnaitre si on ajoute une action qui a le mm ticker pour l'ajouter dans la position déjà prête
