@@ -13,6 +13,6 @@ struct BlueChipApp: App {
         WindowGroup {
             ContentView()
         }
-        .windowStyle(.hiddenTitleBar)
+        .windowStyle(.hiddenTitleBar) // Enlève la barre de titre moche de macOS
     }
 }
