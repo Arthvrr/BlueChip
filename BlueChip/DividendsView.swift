@@ -3,7 +3,7 @@ import Charts
 
 // MARK: - SPECIFIC ZOOM ENUM FOR DIVIDENDS
 enum DividendChartZoomType: String, Identifiable {
-    case monthly, yearly, expectedMonthly, stockYield
+    case monthly, yearly, expectedMonthly, stockYield, totalDividends, yoc
     var id: String { self.rawValue }
 }
 
@@ -29,6 +29,8 @@ struct DividendsView: View {
                 DividendsTableSection(viewModel: viewModel)
                 
                 DividendsManualChartsSection(viewModel: viewModel, chartToZoom: $chartToZoom)
+                
+                DividendsSecurityMetricsSection(viewModel: viewModel, chartToZoom: $chartToZoom)
             }
             .padding()
         }
@@ -175,6 +177,19 @@ struct DividendsManualChartsSection: View {
     }
 }
 
+struct DividendsSecurityMetricsSection: View {
+    @ObservedObject var viewModel: PortfolioViewModel; @Binding var chartToZoom: DividendChartZoomType?
+    var body: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            Text("Positions Dividends & Yield On Cost").font(.title2).fontWeight(.bold).foregroundColor(.secondary)
+            HStack(spacing: 24) {
+                TotalDividendsDonutChart(viewModel: viewModel, expandedChart: $chartToZoom)
+                YieldOnCostChart(viewModel: viewModel, expandedChart: $chartToZoom)
+            }
+        }
+    }
+}
+
 // =========================================================================
 // MARK: - DIVIDEND CUSTOM UI COMPONENTS & CHARTS
 // =========================================================================
@@ -183,8 +198,8 @@ struct DividendGoalProgressBar: View {
     @ObservedObject var viewModel: PortfolioViewModel; @Binding var privacyMode: Bool
     var isYieldGoal: Bool { viewModel.dividendGoalType == .portfolioYield }
     var targetTitle: String { isYieldGoal ? "Portfolio Yield" : "Annual Expected Dividends" }
-    var currentValueString: String { isYieldGoal ? viewModel.portfolioYield.formatted(.percent.precision(.fractionLength(2))) : viewModel.totalDividends.formatted(.currency(code: "EUR").precision(.fractionLength(0))) }
-    var targetValueString: String { isYieldGoal ? (viewModel.dividendGoalTarget / 100.0).formatted(.percent.precision(.fractionLength(2))) : viewModel.dividendGoalTarget.formatted(.currency(code: "EUR").precision(.fractionLength(0))) }
+    var currentValueString: String { isYieldGoal ? viewModel.portfolioYield.formatted(.percent.precision(.fractionLength(2))) : viewModel.totalDividends.formatted(.currency(code: "EUR").precision(.fractionLength(2))) }
+    var targetValueString: String { isYieldGoal ? (viewModel.dividendGoalTarget / 100.0).formatted(.percent.precision(.fractionLength(2))) : viewModel.dividendGoalTarget.formatted(.currency(code: "EUR").precision(.fractionLength(2))) }
     var progress: Double {
         guard viewModel.dividendGoalTarget > 0 else { return 0 }
         if isYieldGoal { return min(max(viewModel.portfolioYield / (viewModel.dividendGoalTarget / 100.0), 0), 1) }
@@ -198,7 +213,7 @@ struct DividendGoalProgressBar: View {
     }
 }
 
-// MARK: - GRAPH 1: EXPECTED MONTHLY (100% RESPONSIVE)
+// MARK: - CHART 1: EXPECTED MONTHLY (Bar Chart grouped)
 struct ExpectedMonthlyDividendChart: View {
     @ObservedObject var viewModel: PortfolioViewModel
     var isExpanded: Bool = false
@@ -219,13 +234,10 @@ struct ExpectedMonthlyDividendChart: View {
                         .foregroundStyle(item.type == "Net" ? viewModel.color(for: item.ticker) : viewModel.color(for: item.ticker).opacity(0.4))
                         .position(by: .value("Type", item.type)).cornerRadius(4)
                         
-                        // L'ANNOTATION S'AFFICHE À L'INTÉRIEUR DES BLOCS AU SURVOL
-                        .annotation(position: .overlay) {
-                            if hoveredMonth == item.monthName && item.amount > 0 {
-                                Text(item.amount.formatted(.currency(code: "EUR").precision(.fractionLength(0))))
-                                    .font(.system(size: 8, weight: .bold))
-                                    .foregroundColor(.white)
-                                    .shadow(color: .black, radius: 1)
+                        // ANNOTATION COMME DANS COMPOSITION (Pas de RuleMark)
+                        .annotation(position: .top) {
+                            if hoveredMonth == item.monthName {
+                                Text(item.amount.formatted(.currency(code: "EUR"))).font(.system(size: 9, weight: .bold)).foregroundColor(.secondary)
                             }
                         }
                 }
@@ -238,7 +250,7 @@ struct ExpectedMonthlyDividendChart: View {
     }
 }
 
-// MARK: - GRAPH 2: STOCK YIELD
+// MARK: - CHART 2: STOCK YIELD
 struct StockYieldChart: View {
     @ObservedObject var viewModel: PortfolioViewModel
     var isExpanded: Bool = false
@@ -258,17 +270,15 @@ struct StockYieldChart: View {
                     LineMark(x: .value("Ticker", item.ticker), y: .value("Yield", item.yield)).foregroundStyle(Color.gray.opacity(0.4)).interpolationMethod(.monotone)
                     PointMark(x: .value("Ticker", item.ticker), y: .value("Yield", item.yield)).foregroundStyle(viewModel.color(for: item.ticker)).symbolSize(hoveredTicker == item.ticker ? 100 : 40)
                         
-                        // ANNOTATION AU-DESSUS DU POINT (COMME SUR COMPOSITION)
+                        // ANNOTATION COMME DANS COMPOSITION
                         .annotation(position: .top) {
                             if hoveredTicker == item.ticker {
-                                Text("\(item.yield.formatted(.number.precision(.fractionLength(2)))) %")
-                                    .font(.system(size: 9, weight: .bold))
-                                    .padding(2).background(Color(NSColor.windowBackgroundColor).opacity(0.8)).cornerRadius(2)
+                                Text("\(item.yield.formatted(.number.precision(.fractionLength(2))))%").font(.system(size: 9, weight: .bold)).foregroundColor(.secondary)
                             }
                         }
                 }
                 .chartLegend(.hidden)
-                .chartYAxis { AxisMarks(position: .leading) { value in AxisGridLine(); AxisTick(); if let v = value.as(Double.self) { AxisValueLabel("\(v.formatted(.number.precision(.fractionLength(0)))) %") } } }
+                .chartYAxis { AxisMarks(position: .leading) { value in AxisGridLine(); AxisTick(); if let v = value.as(Double.self) { AxisValueLabel("\(v.formatted(.number.precision(.fractionLength(0))))%") } } }
                 .chartXSelection(value: $hoveredTicker)
             }
             BlueChipWatermark()
@@ -276,7 +286,7 @@ struct StockYieldChart: View {
     }
 }
 
-// MARK: - GRAPH 3: MANUAL MONTHLY
+// MARK: - CHART 3: MANUAL MONTHLY
 struct MonthlyDividendChart: View {
     @ObservedObject var viewModel: PortfolioViewModel
     var thisYearData: DividendYear?
@@ -301,14 +311,10 @@ struct MonthlyDividendChart: View {
                 Chart(monthlyData, id: \.0) { item in
                     BarMark(x: .value("Month", item.0), y: .value("Amount", item.1)).foregroundStyle(Color.orange.opacity(0.8)).cornerRadius(4)
                         
-                        // ANNOTATION AU-DESSUS DE LA BARRE (COMME SUR COMPOSITION)
+                        // ANNOTATION COMME DANS COMPOSITION
                         .annotation(position: .top) {
                             if hoveredMonth == item.0 {
-                                Text(item.1.formatted(.currency(code: "EUR")))
-                                    .font(.system(size: 9, weight: .bold))
-                                    .padding(2).background(Color(NSColor.windowBackgroundColor).opacity(0.8)).cornerRadius(2)
-                            } else if item.1 > 0 { // Montant par défaut (discret)
-                                Text(item.1.formatted(.currency(code: "EUR"))).font(.system(size: 9)).foregroundColor(.secondary)
+                                Text(item.1.formatted(.currency(code: "EUR"))).font(.system(size: 9, weight: .bold)).foregroundColor(.secondary)
                             }
                         }
                 }
@@ -320,7 +326,7 @@ struct MonthlyDividendChart: View {
     }
 }
 
-// MARK: - GRAPH 4: MANUAL YEARLY
+// MARK: - CHART 4: MANUAL YEARLY
 struct YearlyDividendChart: View {
     @ObservedObject var viewModel: PortfolioViewModel
     var currentYear: Int
@@ -343,14 +349,10 @@ struct YearlyDividendChart: View {
                     let yearStr = String(yearData.year)
                     BarMark(x: .value("Year", yearStr), y: .value("Total", yearData.total)).foregroundStyle(Color.green.opacity(0.8)).cornerRadius(4)
                         
-                        // ANNOTATION AU-DESSUS DE LA BARRE (COMME SUR COMPOSITION)
+                        // ANNOTATION COMME DANS COMPOSITION
                         .annotation(position: .top) {
                             if hoveredYear == yearStr {
-                                Text(yearData.total.formatted(.currency(code: "EUR")))
-                                    .font(.system(size: 9, weight: .bold))
-                                    .padding(2).background(Color(NSColor.windowBackgroundColor).opacity(0.8)).cornerRadius(2)
-                            } else if yearData.total > 0 { // Montant par défaut (discret)
-                                Text(yearData.total.formatted(.currency(code: "EUR"))).font(.system(size: 9)).foregroundColor(.secondary)
+                                Text(yearData.total.formatted(.currency(code: "EUR"))).font(.system(size: 9, weight: .bold)).foregroundColor(.secondary)
                             }
                         }
                 }
@@ -362,8 +364,104 @@ struct YearlyDividendChart: View {
     }
 }
 
-// MARK: - FULL SCREEN ZOOM
+// MARK: - CHART 5: TOTAL DIVIDENDS BY POSITION (DONUT)
+struct TotalDividendsDonutChart: View {
+    @ObservedObject var viewModel: PortfolioViewModel
+    var isExpanded: Bool = false
+    @Binding var expandedChart: DividendChartZoomType?
+    @State private var selectedAngleValue: Double? = nil
+    @State private var hiddenItems: Set<String> = []
 
+    var data: [ChartDataItem] {
+        viewModel.positions.filter { $0.totalDividendEUR > 0 }
+            .map { ChartDataItem(name: $0.ticker, value: $0.totalDividendEUR) }
+            .sorted { $0.value > $1.value }
+    }
+    var filteredData: [ChartDataItem] { data.filter { !hiddenItems.contains($0.name) } }
+
+    var body: some View {
+        VStack {
+            HStack {
+                if !isExpanded { Text("Total Dividends by Position").font(.headline).foregroundColor(.secondary) }
+                Spacer()
+                if !isExpanded { Button(action: { expandedChart = .totalDividends }) { Image(systemName: "plus.magnifyingglass").foregroundColor(.secondary) }.buttonStyle(.plain) }
+            }.padding(.bottom, 4)
+            InteractiveLegendView(items: data.map { $0.name }, colorMap: { viewModel.color(for: $0) }, hiddenItems: $hiddenItems).padding(.bottom, 8)
+
+            if filteredData.isEmpty { Spacer(); Text("No data").foregroundColor(.secondary); Spacer() } else {
+                Chart(filteredData) { item in
+                    SectorMark(angle: .value("Value", item.value), innerRadius: .ratio(0.65), angularInset: 1.5)
+                        .foregroundStyle(viewModel.color(for: item.name)).cornerRadius(4)
+                }
+                .chartLegend(.hidden)
+                .chartAngleSelection(value: $selectedAngleValue)
+                .chartBackground { proxy in
+                    GeometryReader { geometry in
+                        if let value = selectedAngleValue {
+                            let item = findItem(for: value)
+                            VStack {
+                                Text(item.name).font(.headline)
+                                Text(item.value.formatted(.currency(code: "EUR"))).font(.subheadline).foregroundColor(.secondary)
+                            }.position(x: geometry.frame(in: .local).midX, y: geometry.frame(in: .local).midY)
+                        }
+                    }
+                }.animation(.easeInOut(duration: 0.2), value: selectedAngleValue)
+            }
+            BlueChipWatermark()
+        }.padding().frame(minHeight: 360, maxHeight: isExpanded ? .infinity : 360).background(Color(NSColor.controlBackgroundColor)).cornerRadius(12).shadow(color: Color.black.opacity(0.05), radius: 2, x: 0, y: 1)
+    }
+
+    func findItem(for value: Double) -> ChartDataItem {
+        var cum = 0.0
+        for item in filteredData { cum += item.value; if value <= cum { return item } }
+        return filteredData.last!
+    }
+}
+
+// MARK: - CHART 6: YIELD ON COST (BAR CHART)
+struct YieldOnCostChart: View {
+    @ObservedObject var viewModel: PortfolioViewModel
+    var isExpanded: Bool = false
+    @Binding var expandedChart: DividendChartZoomType?
+    @State private var hoveredTicker: String? = nil
+
+    var data: [ChartDataItem] {
+        viewModel.positions.filter { $0.investedAmountEUR > 0 && $0.totalDividendEUR > 0 }
+            .map { ChartDataItem(name: $0.ticker, value: ($0.totalDividendEUR / $0.investedAmountEUR) * 100.0) }
+            .sorted { $0.value > $1.value }
+    }
+
+    var body: some View {
+        VStack {
+            HStack {
+                if !isExpanded { Text("Yield On Cost (YOC)").font(.headline).foregroundColor(.secondary) }
+                Spacer()
+                if !isExpanded { Button(action: { expandedChart = .yoc }) { Image(systemName: "plus.magnifyingglass").foregroundColor(.secondary) }.buttonStyle(.plain) }
+            }.padding(.bottom, 8)
+
+            if data.isEmpty { Spacer(); Text("No data").foregroundColor(.secondary); Spacer() } else {
+                Chart(data) { item in
+                    BarMark(x: .value("Ticker", item.name), y: .value("YOC", item.value))
+                        .foregroundStyle(viewModel.color(for: item.name))
+                        .cornerRadius(4)
+                        
+                        // ANNOTATION COMME DANS COMPOSITION
+                        .annotation(position: .top) {
+                            if hoveredTicker == item.name {
+                                Text("\(item.value.formatted(.number.precision(.fractionLength(2))))%").font(.system(size: 9, weight: .bold)).foregroundColor(.secondary)
+                            }
+                        }
+                }
+                .chartLegend(.hidden)
+                .chartYAxis { AxisMarks(position: .leading) { value in AxisGridLine(); AxisTick(); if let v = value.as(Double.self) { AxisValueLabel("\(v.formatted(.number.precision(.fractionLength(0))))%") } } }
+                .chartXSelection(value: $hoveredTicker)
+            }
+            BlueChipWatermark()
+        }.padding().frame(minHeight: 360, maxHeight: isExpanded ? .infinity : 360).background(Color(NSColor.controlBackgroundColor)).cornerRadius(12).shadow(color: Color.black.opacity(0.05), radius: 2, x: 0, y: 1)
+    }
+}
+
+// MARK: - FULL SCREEN ZOOM
 struct DividendFullScreenChartView: View {
     @Environment(\.dismiss) var dismiss
     let zoomType: DividendChartZoomType
@@ -381,6 +479,8 @@ struct DividendFullScreenChartView: View {
             case .stockYield: StockYieldChart(viewModel: viewModel, isExpanded: true, expandedChart: .constant(nil))
             case .monthly: MonthlyDividendChart(viewModel: viewModel, thisYearData: thisYearData, isExpanded: true, expandedChart: .constant(nil))
             case .yearly: YearlyDividendChart(viewModel: viewModel, currentYear: currentYear, isExpanded: true, expandedChart: .constant(nil))
+            case .totalDividends: TotalDividendsDonutChart(viewModel: viewModel, isExpanded: true, expandedChart: .constant(nil))
+            case .yoc: YieldOnCostChart(viewModel: viewModel, isExpanded: true, expandedChart: .constant(nil))
             }
         }.padding(30).frame(minWidth: 900, minHeight: 700)
     }
@@ -391,6 +491,8 @@ struct DividendFullScreenChartView: View {
         case .stockYield: return "Current Stock Yield by Ticker"
         case .monthly: return "Spreadsheet: Received This Year"
         case .yearly: return "Spreadsheet: Annual Received History"
+        case .totalDividends: return "Total Dividends by Position"
+        case .yoc: return "Yield On Cost (YOC)"
         }
     }
 }
