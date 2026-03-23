@@ -34,8 +34,6 @@ struct Position: Identifiable, Codable {
     var roiPercent: Double { investedAmountEUR > 0 ? roiValue / investedAmountEUR : 0 }
     var daysHeld: Int { max(1, Calendar.current.dateComponents([.day], from: purchaseDate, to: Date()).day ?? 1) }
     var dailyROIValue: Double { roiValue / Double(daysHeld) }
-    
-    // NOUVEAU CALCUL POUR LE GRAPHIQUE DE YIELD
     var stockYieldEUR: Double { (quantity > 0 && currentPrice > 0) ? (totalDividendEUR / currentValueEUR) : 0 }
 }
 
@@ -47,24 +45,30 @@ struct DividendYear: Identifiable, Codable {
     var total: Double { jan + feb + mar + apr + may + jun + jul + aug + sep + oct + nov + dec }
 }
 
-// MISE À JOUR DES OBJECTIFS
+// TYPE POUR LE GOAL GÉNÉRAL (Composition)
 enum GoalType: String, Codable, CaseIterable {
     case totalValue = "Total Value (€)"
-    case dividendsAnnual = "Annual Expected Dividends (€)"
     case invested = "Initial Investment (€)"
+}
+
+// TYPE POUR LE GOAL DIVIDENDES
+enum DividendGoalType: String, Codable, CaseIterable {
+    case dividendsAnnual = "Annual Expected Dividends (€)"
     case portfolioYield = "Portfolio Yield Goal (%)"
 }
 
 struct PortfolioSaveData: Codable {
-    var positions: [Position]; var availableCash: Double; var manuallyInvested: Double; var goalType: GoalType?; var goalTarget: Double?; var dividendYears: [DividendYear]?; var dividendStartYear: Int?
+    var positions: [Position]; var availableCash: Double; var manuallyInvested: Double;
+    var goalType: GoalType?; var goalTarget: Double?;
+    var dividendGoalType: DividendGoalType?; var dividendGoalTarget: Double?; // NOUVEAU
+    var dividendYears: [DividendYear]?; var dividendStartYear: Int?
 }
 
-// NOUVEAUX TYPES POUR CHARTS DIVIDENDES
 struct ExpectedMonthlyDividendSeries: Identifiable {
     let id = UUID()
     let month: Int
     let monthName: String
-    let type: String // "Gross" ou "Net"
+    let type: String
     let ticker: String
     let amount: Double
 }

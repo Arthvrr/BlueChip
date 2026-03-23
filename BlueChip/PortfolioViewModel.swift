@@ -23,14 +23,20 @@ class PortfolioViewModel: ObservableObject {
     @Published var positions: [Position] = [] { didSet { updateDividendsViewData(); saveData() } }
     @Published var availableCash: Double = 0.0 { didSet { updateDividendsViewData(); saveData() } }
     @Published var manuallyInvested: Double = 0.0 { didSet { saveData() } }
-    @Published var currentGoalType: GoalType = .dividendsAnnual { didSet { saveData() } }
-    @Published var currentGoalTarget: Double = 1000.0 { didSet { saveData() } }
+    
+    // GOAL COMPOSITION
+    @Published var currentGoalType: GoalType = .totalValue { didSet { saveData() } }
+    @Published var currentGoalTarget: Double = 10000.0 { didSet { saveData() } }
+    
+    // GOAL DIVIDENDES (SÉPARÉ !)
+    @Published var dividendGoalType: DividendGoalType = .dividendsAnnual { didSet { saveData() } }
+    @Published var dividendGoalTarget: Double = 1000.0 { didSet { saveData() } }
+    
     @Published var dividendYears: [DividendYear] = [] { didSet { saveData() } }
     @Published var dividendStartYear: Int = 2022 { didSet { setupDividendYears(); saveData() } }
     @Published var isLoading = false
     @Published var sortOrder = [KeyPathComparator(\Position.ticker)] { didSet { positions.sort(using: sortOrder) } }
     
-    // LES VOICI ! Les variables manquantes dont Xcode se plaint :
     @Published var expectedMonthlyDividendSeries: [ExpectedMonthlyDividendSeries] = []
     @Published var stockYieldsData: [StockYieldDataItem] = []
     
@@ -51,13 +57,10 @@ class PortfolioViewModel: ObservableObject {
         return .gray
     }
     
-    // MISE À JOUR POUR GÉRER LES NOUVEAUX OBJECTIFS
     var currentGoalValue: Double {
         switch currentGoalType {
         case .totalValue: return currentTotalCapital
-        case .dividendsAnnual: return totalDividends
         case .invested: return manuallyInvested
-        case .portfolioYield: return portfolioYield * 100.0
         }
     }
     
@@ -115,7 +118,6 @@ class PortfolioViewModel: ObservableObject {
         positions.sort(using: sortOrder); updateDividendsViewData(); saveData(); isLoading = false
     }
     
-    // C'EST ICI QU'ON CALCULE TOUTES LES DONNÉES DE TES GRAPHIQUES DE DIVIDENDES
     func updateDividendsViewData() {
         let monthsShort = Calendar.current.shortMonthSymbols
         var newExpectedSeries: [ExpectedMonthlyDividendSeries] = []
@@ -123,7 +125,7 @@ class PortfolioViewModel: ObservableObject {
         for pos in positions {
             guard pos.totalDividendEUR > 0, !pos.dividendMonths.isEmpty else { continue }
             let netPerMonthEUR = pos.totalDividendEUR / Double(pos.dividendMonths.count)
-            let brutPerMonthEUR = netPerMonthEUR / 0.85 // Calcul du brut à 85%
+            let brutPerMonthEUR = netPerMonthEUR / 0.85
             
             for m in pos.dividendMonths {
                 guard m >= 1 && m <= 12 else { continue }
@@ -153,7 +155,7 @@ class PortfolioViewModel: ObservableObject {
     private var saveFileURL: URL { FileManager.default.urls(for: .documentDirectory, in: .userDomainMask)[0].appendingPathComponent("BlueChip_Data.json") }
     
     func saveData() {
-        let dataToSave = PortfolioSaveData(positions: positions, availableCash: availableCash, manuallyInvested: manuallyInvested, goalType: currentGoalType, goalTarget: currentGoalTarget, dividendYears: dividendYears, dividendStartYear: dividendStartYear)
+        let dataToSave = PortfolioSaveData(positions: positions, availableCash: availableCash, manuallyInvested: manuallyInvested, goalType: currentGoalType, goalTarget: currentGoalTarget, dividendGoalType: dividendGoalType, dividendGoalTarget: dividendGoalTarget, dividendYears: dividendYears, dividendStartYear: dividendStartYear)
         do { try JSONEncoder().encode(dataToSave).write(to: saveFileURL, options: [.atomic]) } catch {}
     }
     func loadData() {
@@ -163,6 +165,8 @@ class PortfolioViewModel: ObservableObject {
             positions = decoded.positions.sorted(using: sortOrder); availableCash = decoded.availableCash; manuallyInvested = decoded.manuallyInvested
             if let savedGoalType = decoded.goalType { currentGoalType = savedGoalType }
             if let savedGoalTarget = decoded.goalTarget { currentGoalTarget = savedGoalTarget }
+            if let savedDivGoalType = decoded.dividendGoalType { dividendGoalType = savedDivGoalType }
+            if let savedDivGoalTarget = decoded.dividendGoalTarget { dividendGoalTarget = savedDivGoalTarget }
             if let savedDivYears = decoded.dividendYears { dividendYears = savedDivYears }
             if let savedStartYear = decoded.dividendStartYear { dividendStartYear = savedStartYear }
         } catch { print("ℹ️ JSON File not found or read error.") }
