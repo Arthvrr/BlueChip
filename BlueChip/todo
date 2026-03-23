@@ -1,10 +1,8 @@
-FINIR PAGE COMPOSITION :
-- enlever redondance des titres des 6 derniers graphes
-- (ajouter logo stocks par l'user lui-même)
-- attribuer une couleur par positions
-- changer couleurs des graphes (≠ redondant)
-- fix pb survol du heatmap
-- ajout cacher valeurs
+graphes dividendes :
+- dividend payout per stocks
+- Yield On Cost
+- cumulative line chart
+- dividend calendar (what we expect during this month)
 
 ajouter changements de page par ALT+TAB
 

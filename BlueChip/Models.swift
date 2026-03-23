@@ -1,4 +1,5 @@
-import SwiftUI // Requis pour utiliser 'Color'
+import Foundation
+import SwiftUI
 
 // MARK: - COLOR PALETTES GLOBALES
 let positionColors: [Color] = [.blue, .green, .orange, .purple, .red, .teal, .yellow, .pink, .indigo, .mint, .cyan, .brown]
@@ -26,13 +27,6 @@ struct Position: Identifiable, Codable {
         self.id = id; self.ticker = ticker; self.quantity = quantity; self.averageCost = averageCost; self.currentPrice = currentPrice; self.currency = currency; self.usdToEurRate = usdToEurRate; self.annualDividendNet = annualDividendNet; self.country = country; self.sector = sector; self.marketCap = marketCap; self.dividendMonths = dividendMonths; self.purchaseDate = purchaseDate
     }
     
-    enum CodingKeys: String, CodingKey { case id, ticker, quantity, averageCost, currentPrice, currency, usdToEurRate, annualDividendNet, country, sector, marketCap, dividendMonths, purchaseDate }
-    
-    init(from decoder: Decoder) throws {
-        let container = try decoder.container(keyedBy: CodingKeys.self)
-        id = try container.decodeIfPresent(UUID.self, forKey: .id) ?? UUID(); ticker = try container.decode(String.self, forKey: .ticker); quantity = try container.decode(Double.self, forKey: .quantity); averageCost = try container.decode(Double.self, forKey: .averageCost); currentPrice = try container.decode(Double.self, forKey: .currentPrice); currency = try container.decodeIfPresent(String.self, forKey: .currency) ?? "EUR"; usdToEurRate = try container.decodeIfPresent(Double.self, forKey: .usdToEurRate) ?? 1.0; annualDividendNet = try container.decodeIfPresent(Double.self, forKey: .annualDividendNet) ?? 0.0; country = try container.decodeIfPresent(String.self, forKey: .country) ?? ""; sector = try container.decodeIfPresent(String.self, forKey: .sector) ?? ""; marketCap = try container.decodeIfPresent(String.self, forKey: .marketCap) ?? ""; dividendMonths = try container.decodeIfPresent(Set<Int>.self, forKey: .dividendMonths) ?? []; purchaseDate = try container.decodeIfPresent(Date.self, forKey: .purchaseDate) ?? Date()
-    }
-    
     var investedAmountEUR: Double { quantity * averageCost * (currency == "USD" ? usdToEurRate : 1.0) }
     var currentValueEUR: Double { quantity * currentPrice * (currency == "USD" ? usdToEurRate : 1.0) }
     var totalDividendEUR: Double { quantity * annualDividendNet * (currency == "USD" ? usdToEurRate : 1.0) }
@@ -40,6 +34,9 @@ struct Position: Identifiable, Codable {
     var roiPercent: Double { investedAmountEUR > 0 ? roiValue / investedAmountEUR : 0 }
     var daysHeld: Int { max(1, Calendar.current.dateComponents([.day], from: purchaseDate, to: Date()).day ?? 1) }
     var dailyROIValue: Double { roiValue / Double(daysHeld) }
+    
+    // NOUVEAU CALCUL POUR LE GRAPHIQUE DE YIELD
+    var stockYieldEUR: Double { (quantity > 0 && currentPrice > 0) ? (totalDividendEUR / currentValueEUR) : 0 }
 }
 
 struct DividendYear: Identifiable, Codable {
@@ -50,12 +47,32 @@ struct DividendYear: Identifiable, Codable {
     var total: Double { jan + feb + mar + apr + may + jun + jul + aug + sep + oct + nov + dec }
 }
 
+// MISE À JOUR DES OBJECTIFS
 enum GoalType: String, Codable, CaseIterable {
-    case totalValue = "Total Value (€)", dividends = "Annual Dividends (€)", invested = "Initial Investment (€)"
+    case totalValue = "Total Value (€)"
+    case dividendsAnnual = "Annual Expected Dividends (€)"
+    case invested = "Initial Investment (€)"
+    case portfolioYield = "Portfolio Yield Goal (%)"
 }
 
 struct PortfolioSaveData: Codable {
     var positions: [Position]; var availableCash: Double; var manuallyInvested: Double; var goalType: GoalType?; var goalTarget: Double?; var dividendYears: [DividendYear]?; var dividendStartYear: Int?
+}
+
+// NOUVEAUX TYPES POUR CHARTS DIVIDENDES
+struct ExpectedMonthlyDividendSeries: Identifiable {
+    let id = UUID()
+    let month: Int
+    let monthName: String
+    let type: String // "Gross" ou "Net"
+    let ticker: String
+    let amount: Double
+}
+
+struct StockYieldDataItem: Identifiable {
+    let id = UUID()
+    let ticker: String
+    let yield: Double
 }
 
 struct ChartDataItem: Identifiable { let id = UUID(); let name: String; let value: Double }

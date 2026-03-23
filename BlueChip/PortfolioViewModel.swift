@@ -20,15 +20,19 @@ class YahooFinanceService {
 
 @MainActor
 class PortfolioViewModel: ObservableObject {
-    @Published var positions: [Position] = [] { didSet { saveData() } }
-    @Published var availableCash: Double = 0.0 { didSet { saveData() } }
+    @Published var positions: [Position] = [] { didSet { updateDividendsViewData(); saveData() } }
+    @Published var availableCash: Double = 0.0 { didSet { updateDividendsViewData(); saveData() } }
     @Published var manuallyInvested: Double = 0.0 { didSet { saveData() } }
-    @Published var currentGoalType: GoalType = .totalValue { didSet { saveData() } }
-    @Published var currentGoalTarget: Double = 10000.0 { didSet { saveData() } }
+    @Published var currentGoalType: GoalType = .dividendsAnnual { didSet { saveData() } }
+    @Published var currentGoalTarget: Double = 1000.0 { didSet { saveData() } }
     @Published var dividendYears: [DividendYear] = [] { didSet { saveData() } }
     @Published var dividendStartYear: Int = 2022 { didSet { setupDividendYears(); saveData() } }
     @Published var isLoading = false
     @Published var sortOrder = [KeyPathComparator(\Position.ticker)] { didSet { positions.sort(using: sortOrder) } }
+    
+    // LES VOICI ! Les variables manquantes dont Xcode se plaint :
+    @Published var expectedMonthlyDividendSeries: [ExpectedMonthlyDividendSeries] = []
+    @Published var stockYieldsData: [StockYieldDataItem] = []
     
     private let yahooService = YahooFinanceService()
     
@@ -47,9 +51,13 @@ class PortfolioViewModel: ObservableObject {
         return .gray
     }
     
+    // MISE À JOUR POUR GÉRER LES NOUVEAUX OBJECTIFS
     var currentGoalValue: Double {
         switch currentGoalType {
-        case .totalValue: return currentTotalCapital; case .dividends: return totalDividends; case .invested: return manuallyInvested
+        case .totalValue: return currentTotalCapital
+        case .dividendsAnnual: return totalDividends
+        case .invested: return manuallyInvested
+        case .portfolioYield: return portfolioYield * 100.0
         }
     }
     
@@ -85,7 +93,7 @@ class PortfolioViewModel: ObservableObject {
         if pvLatente > 0 { items.append(ValueSourceItem(category: "Unrealized P/L", value: pvLatente)) }; return items
     }
     
-    init() { loadData(); setupDividendYears(); Task { await refreshPrices() } }
+    init() { loadData(); setupDividendYears(); Task { await refreshPrices() }; updateDividendsViewData() }
     
     func setupDividendYears() {
         let currentYear = Calendar.current.component(.year, from: Date())
@@ -104,7 +112,31 @@ class PortfolioViewModel: ObservableObject {
                 for i in 0..<positions.count where positions[i].ticker == ticker { positions[i].currentPrice = data.price; positions[i].currency = data.currency; positions[i].usdToEurRate = rate }
             }
         }
-        positions.sort(using: sortOrder); saveData(); isLoading = false
+        positions.sort(using: sortOrder); updateDividendsViewData(); saveData(); isLoading = false
+    }
+    
+    // C'EST ICI QU'ON CALCULE TOUTES LES DONNÉES DE TES GRAPHIQUES DE DIVIDENDES
+    func updateDividendsViewData() {
+        let monthsShort = Calendar.current.shortMonthSymbols
+        var newExpectedSeries: [ExpectedMonthlyDividendSeries] = []
+        
+        for pos in positions {
+            guard pos.totalDividendEUR > 0, !pos.dividendMonths.isEmpty else { continue }
+            let netPerMonthEUR = pos.totalDividendEUR / Double(pos.dividendMonths.count)
+            let brutPerMonthEUR = netPerMonthEUR / 0.85 // Calcul du brut à 85%
+            
+            for m in pos.dividendMonths {
+                guard m >= 1 && m <= 12 else { continue }
+                let monthName = monthsShort[m-1]
+                newExpectedSeries.append(ExpectedMonthlyDividendSeries(month: m, monthName: monthName, type: "Net", ticker: pos.ticker, amount: netPerMonthEUR))
+                newExpectedSeries.append(ExpectedMonthlyDividendSeries(month: m, monthName: monthName, type: "Gross", ticker: pos.ticker, amount: brutPerMonthEUR))
+            }
+        }
+        self.expectedMonthlyDividendSeries = newExpectedSeries.sorted { $0.month < $1.month }
+        
+        self.stockYieldsData = positions.filter { $0.currentValueEUR > 0 }
+            .map { StockYieldDataItem(ticker: $0.ticker, yield: $0.stockYieldEUR * 100.0) }
+            .sorted { $0.ticker < $1.ticker }
     }
     
     func addPosition(ticker: String, quantity: Double, pru: Double, dividend: Double, country: String, sector: String, marketCap: String, purchaseDate: Date) {
@@ -119,6 +151,7 @@ class PortfolioViewModel: ObservableObject {
     func deletePosition(id: UUID) { positions.removeAll { $0.id == id } }
     
     private var saveFileURL: URL { FileManager.default.urls(for: .documentDirectory, in: .userDomainMask)[0].appendingPathComponent("BlueChip_Data.json") }
+    
     func saveData() {
         let dataToSave = PortfolioSaveData(positions: positions, availableCash: availableCash, manuallyInvested: manuallyInvested, goalType: currentGoalType, goalTarget: currentGoalTarget, dividendYears: dividendYears, dividendStartYear: dividendStartYear)
         do { try JSONEncoder().encode(dataToSave).write(to: saveFileURL, options: [.atomic]) } catch {}

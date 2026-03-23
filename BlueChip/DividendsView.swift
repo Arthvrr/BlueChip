@@ -3,10 +3,11 @@ import Charts
 
 // MARK: - SPECIFIC ZOOM ENUM FOR DIVIDENDS
 enum DividendChartZoomType: String, Identifiable {
-    case monthly, yearly
+    case monthly, yearly, expectedMonthly, stockYield
     var id: String { self.rawValue }
 }
 
+// MARK: - MAIN VIEW (Ultra-légère pour compilation instantanée)
 struct DividendsView: View {
     @ObservedObject var viewModel: PortfolioViewModel
     @Binding var privacyMode: Bool
@@ -14,17 +15,41 @@ struct DividendsView: View {
     @State private var showGoalSheet = false
     @State private var chartToZoom: DividendChartZoomType? = nil
     
-    typealias YearBinding = Binding<DividendYear>
+    var body: some View {
+        ScrollView(.vertical) {
+            VStack(spacing: 24) {
+                DividendsDashboardSection(viewModel: viewModel, privacyMode: $privacyMode)
+                
+                DividendGoalProgressBar(viewModel: viewModel, privacyMode: $privacyMode)
+                    .contentShape(Rectangle())
+                    .onTapGesture(count: 2) { showGoalSheet = true }
+                
+                DividendsProjectedChartsSection(viewModel: viewModel, chartToZoom: $chartToZoom)
+                
+                DividendsTableSection(viewModel: viewModel)
+                
+                DividendsManualChartsSection(viewModel: viewModel, chartToZoom: $chartToZoom)
+            }
+            .padding()
+        }
+        .sheet(isPresented: $showGoalSheet) { EditGoalView(viewModel: viewModel) }
+        .sheet(item: $chartToZoom) { type in DividendFullScreenChartView(zoomType: type, viewModel: viewModel) }
+    }
+}
+
+// =========================================================================
+// MARK: - SECTIONS DÉCOUPÉES (Pour sauver le compilateur de Xcode)
+// =========================================================================
+
+struct DividendsDashboardSection: View {
+    @ObservedObject var viewModel: PortfolioViewModel
+    @Binding var privacyMode: Bool
     
-    // --- CALCUL DES STATISTIQUES ---
     var totalReceivedAllTime: Double { viewModel.dividendYears.reduce(0) { $0 + $1.total } }
-    
     var currentYear: Int { Calendar.current.component(.year, from: Date()) }
     var currentMonthIndex: Int { Calendar.current.component(.month, from: Date()) }
-    
     var thisYearData: DividendYear? { viewModel.dividendYears.first { $0.year == currentYear } }
     var lastYearData: DividendYear? { viewModel.dividendYears.first { $0.year == currentYear - 1 } }
-    
     var receivedThisYear: Double { thisYearData?.total ?? 0 }
     var receivedLastYear: Double { lastYearData?.total ?? 0 }
     
@@ -40,192 +65,292 @@ struct DividendsView: View {
     }
     
     var bestYear: Double { viewModel.dividendYears.map { $0.total }.max() ?? 0 }
-    
-    var yoyGrowth: Double {
-        guard receivedLastYear > 0 else { return 0 }
-        return (receivedThisYear - receivedLastYear) / receivedLastYear
-    }
+    var yoyGrowth: Double { guard receivedLastYear > 0 else { return 0 }; return (receivedThisYear - receivedLastYear) / receivedLastYear }
     
     var body: some View {
-        ScrollView(.vertical) {
-            VStack(spacing: 24) {
-                
-                // --- 1. DASHBOARD CARDS ---
-                VStack(spacing: 16) {
-                    HStack(spacing: 16) {
-                        DashboardCard(title: "Total Received (All Time)", value: totalReceivedAllTime.formatted(.currency(code: "EUR")), privacyMode: $privacyMode)
-                        DashboardCard(title: "Received This Year", value: receivedThisYear.formatted(.currency(code: "EUR")), privacyMode: $privacyMode)
-                        DashboardCard(title: "Received This Month", value: receivedThisMonth.formatted(.currency(code: "EUR")), privacyMode: $privacyMode)
-                        DashboardCard(title: "Avg. Monthly (This Year)", value: averageMonthlyThisYear.formatted(.currency(code: "EUR")) + "/mo", privacyMode: $privacyMode)
-                    }
-                    
-                    HStack(spacing: 16) {
-                        DashboardCard(title: "Best Year", value: bestYear.formatted(.currency(code: "EUR")), privacyMode: $privacyMode)
-                        
-                        VStack(alignment: .leading, spacing: 6) {
-                            Text("YoY Growth (vs Last Year)").font(.subheadline).foregroundColor(.secondary).lineLimit(1)
-                            Text(yoyGrowth.formatted(.percent.precision(.fractionLength(1)).sign(strategy: .always())))
-                                .font(.title2).fontWeight(.bold)
-                                .foregroundColor(yoyGrowth >= 0 ? .green : .red)
-                                .blur(radius: privacyMode ? 8 : 0)
-                        }
-                        .padding()
-                        .frame(maxWidth: .infinity, alignment: .leading)
-                        .frame(height: 110)
-                        .background(Color(NSColor.controlBackgroundColor))
-                        .cornerRadius(10)
-                        .shadow(color: Color.black.opacity(0.05), radius: 2, x: 0, y: 1)
-                        
-                        DashboardCard(title: "Projected Annual Yield", value: viewModel.portfolioYield.formatted(.percent.precision(.fractionLength(2))), privacyMode: $privacyMode)
-                        
-                        VStack(alignment: .leading, spacing: 6) {
-                            Text("Start Year").font(.subheadline).foregroundColor(.secondary)
-                            TextField("Year", value: $viewModel.dividendStartYear, format: .number.grouping(.never))
-                                .textFieldStyle(.roundedBorder)
-                                .frame(maxWidth: 80)
-                                .font(.title3.bold())
-                        }
-                        .padding()
-                        .frame(maxWidth: .infinity, alignment: .leading)
-                        .frame(height: 110)
-                        .background(Color(NSColor.controlBackgroundColor))
-                        .cornerRadius(10)
-                        .shadow(color: Color.black.opacity(0.05), radius: 2, x: 0, y: 1)
-                    }
-                }
-                
-                // --- 2. PROGRESS BAR CUSTOM DIVIDEND ---
-                DividendGoalProgressBar(
-                    currentValue: receivedThisYear,
-                    targetValue: viewModel.currentGoalTarget,
-                    currentCapital: viewModel.currentTotalCapital,
-                    privacyMode: $privacyMode
-                )
-                .contentShape(Rectangle())
-                .onTapGesture(count: 2) { showGoalSheet = true }
-                
-                // --- 3. SPREADSHEET TABLE ---
-                VStack(alignment: .leading, spacing: 8) {
-                    Text("Dividend Tracker").font(.headline).foregroundColor(.secondary).padding(.bottom, 4)
-                    
-                    Table($viewModel.dividendYears) {
-                        
-                        Group {
-                            TableColumn("Year") { (yearBinding: YearBinding) in
-                                Text(String(yearBinding.wrappedValue.year)).fontWeight(.bold)
-                            }.width(50)
-                            
-                            TableColumn("Jan") { (yearBinding: YearBinding) in
-                                TextField("", value: yearBinding.jan, format: .number).textFieldStyle(.plain)
-                            }
-                            TableColumn("Feb") { (yearBinding: YearBinding) in
-                                TextField("", value: yearBinding.feb, format: .number).textFieldStyle(.plain)
-                            }
-                            TableColumn("Mar") { (yearBinding: YearBinding) in
-                                TextField("", value: yearBinding.mar, format: .number).textFieldStyle(.plain)
-                            }
-                            TableColumn("Apr") { (yearBinding: YearBinding) in
-                                TextField("", value: yearBinding.apr, format: .number).textFieldStyle(.plain)
-                            }
-                            TableColumn("May") { (yearBinding: YearBinding) in
-                                TextField("", value: yearBinding.may, format: .number).textFieldStyle(.plain)
-                            }
-                            TableColumn("Jun") { (yearBinding: YearBinding) in
-                                TextField("", value: yearBinding.jun, format: .number).textFieldStyle(.plain)
-                            }
-                        }
-                        
-                        Group {
-                            TableColumn("Jul") { (yearBinding: YearBinding) in
-                                TextField("", value: yearBinding.jul, format: .number).textFieldStyle(.plain)
-                            }
-                            TableColumn("Aug") { (yearBinding: YearBinding) in
-                                TextField("", value: yearBinding.aug, format: .number).textFieldStyle(.plain)
-                            }
-                            TableColumn("Sep") { (yearBinding: YearBinding) in
-                                TextField("", value: yearBinding.sep, format: .number).textFieldStyle(.plain)
-                            }
-                            TableColumn("Oct") { (yearBinding: YearBinding) in
-                                TextField("", value: yearBinding.oct, format: .number).textFieldStyle(.plain)
-                            }
-                            TableColumn("Nov") { (yearBinding: YearBinding) in
-                                TextField("", value: yearBinding.nov, format: .number).textFieldStyle(.plain)
-                            }
-                            TableColumn("Dec") { (yearBinding: YearBinding) in
-                                TextField("", value: yearBinding.dec, format: .number).textFieldStyle(.plain)
-                            }
-                            
-                            TableColumn("Total") { (yearBinding: YearBinding) in
-                                Text(yearBinding.wrappedValue.total.formatted(.currency(code: "EUR")))
-                                    .fontWeight(.bold)
-                                    .foregroundColor(.green)
-                            }.width(80)
-                        }
-                    }
-                    .tableStyle(.inset)
-                }
-                .frame(height: 400)
-                .padding()
-                .background(Color(NSColor.controlBackgroundColor))
-                .cornerRadius(12)
-                .shadow(color: Color.black.opacity(0.05), radius: 2, x: 0, y: 1)
-                
-                // --- 4. CHARTS ---
-                HStack(spacing: 24) {
-                    MonthlyDividendChart(viewModel: viewModel, expandedChart: $chartToZoom)
-                    YearlyDividendChart(viewModel: viewModel, expandedChart: $chartToZoom)
-                }
-                
-            }.padding()
+        VStack(spacing: 16) {
+            HStack(spacing: 16) {
+                DashboardCard(title: "Total Received (All Time)", value: totalReceivedAllTime.formatted(.currency(code: "EUR")), privacyMode: $privacyMode)
+                DashboardCard(title: "Received This Year", value: receivedThisYear.formatted(.currency(code: "EUR")), privacyMode: $privacyMode)
+                DashboardCard(title: "Received This Month", value: receivedThisMonth.formatted(.currency(code: "EUR")), privacyMode: $privacyMode)
+                DashboardCard(title: "Avg. Monthly (This Year)", value: averageMonthlyThisYear.formatted(.currency(code: "EUR")) + "/mo", privacyMode: $privacyMode)
+            }
+            HStack(spacing: 16) {
+                DashboardCard(title: "Best Year", value: bestYear.formatted(.currency(code: "EUR")), privacyMode: $privacyMode)
+                YoYCard(yoyGrowth: yoyGrowth, privacyMode: $privacyMode)
+                DashboardCard(title: "Projected Annual Yield", value: viewModel.portfolioYield.formatted(.percent.precision(.fractionLength(2))), privacyMode: $privacyMode)
+                StartYearCard(viewModel: viewModel)
+            }
         }
-        .sheet(isPresented: $showGoalSheet) { EditGoalView(viewModel: viewModel) }
-        .sheet(item: $chartToZoom) { type in DividendFullScreenChartView(zoomType: type, viewModel: viewModel) }
     }
 }
 
-// MARK: - DIVIDEND CUSTOM UI COMPONENTS
+struct YoYCard: View {
+    let yoyGrowth: Double
+    @Binding var privacyMode: Bool
+    var body: some View {
+        VStack(alignment: .leading, spacing: 6) {
+            Text("YoY Growth (vs Last Year)").font(.subheadline).foregroundColor(.secondary).lineLimit(1)
+            Text(yoyGrowth.formatted(.percent.precision(.fractionLength(1)).sign(strategy: .always())))
+                .font(.title2).fontWeight(.bold).foregroundColor(yoyGrowth >= 0 ? .green : .red).blur(radius: privacyMode ? 8 : 0)
+        }.padding().frame(maxWidth: .infinity, alignment: .leading).frame(height: 110).background(Color(NSColor.controlBackgroundColor)).cornerRadius(10).shadow(color: Color.black.opacity(0.05), radius: 2, x: 0, y: 1)
+    }
+}
+
+struct StartYearCard: View {
+    @ObservedObject var viewModel: PortfolioViewModel
+    var body: some View {
+        VStack(alignment: .leading, spacing: 6) {
+            Text("Start Year").font(.subheadline).foregroundColor(.secondary)
+            TextField("Year", value: $viewModel.dividendStartYear, format: .number.grouping(.never))
+                .textFieldStyle(.roundedBorder).frame(maxWidth: 80).font(.title3.bold())
+        }.padding().frame(maxWidth: .infinity, alignment: .leading).frame(height: 110).background(Color(NSColor.controlBackgroundColor)).cornerRadius(10).shadow(color: Color.black.opacity(0.05), radius: 2, x: 0, y: 1)
+    }
+}
+
+struct DividendsProjectedChartsSection: View {
+    @ObservedObject var viewModel: PortfolioViewModel
+    @Binding var chartToZoom: DividendChartZoomType?
+    
+    var body: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            Text("Projected Dividend Analytics").font(.title2).fontWeight(.bold).foregroundColor(.secondary)
+            HStack(spacing: 24) {
+                ExpectedMonthlyDividendChart(viewModel: viewModel, expandedChart: $chartToZoom)
+                StockYieldChart(viewModel: viewModel, expandedChart: $chartToZoom)
+            }
+        }
+    }
+}
+
+// Le Tableau Custom qui compile instantanément (bye bye le Table d'Apple trop lourd)
+struct DividendsTableSection: View {
+    @ObservedObject var viewModel: PortfolioViewModel
+    
+    var body: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            Text("Manual Dividend Received Tracker").font(.title2).fontWeight(.bold).foregroundColor(.secondary).padding(.bottom, 4)
+            
+            VStack(spacing: 0) {
+                // HEADER
+                HStack(spacing: 8) {
+                    Text("Year").fontWeight(.bold).frame(width: 50, alignment: .leading)
+                    Group {
+                        Text("Jan").frame(maxWidth: .infinity, alignment: .leading)
+                        Text("Feb").frame(maxWidth: .infinity, alignment: .leading)
+                        Text("Mar").frame(maxWidth: .infinity, alignment: .leading)
+                        Text("Apr").frame(maxWidth: .infinity, alignment: .leading)
+                        Text("May").frame(maxWidth: .infinity, alignment: .leading)
+                        Text("Jun").frame(maxWidth: .infinity, alignment: .leading)
+                        Text("Jul").frame(maxWidth: .infinity, alignment: .leading)
+                        Text("Aug").frame(maxWidth: .infinity, alignment: .leading)
+                        Text("Sep").frame(maxWidth: .infinity, alignment: .leading)
+                        Text("Oct").frame(maxWidth: .infinity, alignment: .leading)
+                        Text("Nov").frame(maxWidth: .infinity, alignment: .leading)
+                        Text("Dec").frame(maxWidth: .infinity, alignment: .leading)
+                    }.font(.subheadline).foregroundColor(.secondary)
+                    Text("Total").fontWeight(.bold).frame(width: 80, alignment: .trailing)
+                }
+                .padding(.horizontal, 16).padding(.vertical, 12).background(Color(NSColor.windowBackgroundColor))
+                
+                Divider()
+                
+                // LIGNES SCROLLABLES
+                ScrollView {
+                    LazyVStack(spacing: 0) {
+                        ForEach($viewModel.dividendYears) { $yearData in
+                            SpreadsheetRowView(yearData: $yearData)
+                                .padding(.horizontal, 16).padding(.vertical, 8)
+                            Divider()
+                        }
+                    }
+                }
+            }
+            .background(Color(NSColor.controlBackgroundColor))
+            .cornerRadius(8)
+            .overlay(RoundedRectangle(cornerRadius: 8).stroke(Color.gray.opacity(0.2), lineWidth: 1))
+        }
+        .frame(height: 380).padding().background(Color(NSColor.controlBackgroundColor)).cornerRadius(12).shadow(color: Color.black.opacity(0.05), radius: 2, x: 0, y: 1)
+    }
+}
+
+// Ligne unique du tableau
+struct SpreadsheetRowView: View {
+    @Binding var yearData: DividendYear
+    var body: some View {
+        HStack(spacing: 8) {
+            Text(String(yearData.year)).fontWeight(.bold).frame(width: 50, alignment: .leading)
+            MonthField(value: $yearData.jan); MonthField(value: $yearData.feb); MonthField(value: $yearData.mar)
+            MonthField(value: $yearData.apr); MonthField(value: $yearData.may); MonthField(value: $yearData.jun)
+            MonthField(value: $yearData.jul); MonthField(value: $yearData.aug); MonthField(value: $yearData.sep)
+            MonthField(value: $yearData.oct); MonthField(value: $yearData.nov); MonthField(value: $yearData.dec)
+            Text(yearData.total.formatted(.currency(code: "EUR"))).fontWeight(.bold).foregroundColor(.green).frame(width: 80, alignment: .trailing)
+        }
+    }
+}
+
+struct MonthField: View {
+    @Binding var value: Double
+    var body: some View {
+        TextField("0", value: $value, format: .number).textFieldStyle(.plain).frame(maxWidth: .infinity, alignment: .leading)
+    }
+}
+
+struct DividendsManualChartsSection: View {
+    @ObservedObject var viewModel: PortfolioViewModel
+    @Binding var chartToZoom: DividendChartZoomType?
+    var currentYear: Int { Calendar.current.component(.year, from: Date()) }
+    var thisYearData: DividendYear? { viewModel.dividendYears.first { $0.year == currentYear } }
+    
+    var body: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            Text("Spreadsheet Received History").font(.title2).fontWeight(.bold).foregroundColor(.secondary)
+            HStack(spacing: 24) {
+                MonthlyDividendChart(viewModel: viewModel, thisYearData: thisYearData, expandedChart: $chartToZoom)
+                YearlyDividendChart(viewModel: viewModel, currentYear: currentYear, expandedChart: $chartToZoom)
+            }
+        }
+    }
+}
+
+// =========================================================================
+// MARK: - DIVIDEND CUSTOM UI COMPONENTS & CHARTS
+// =========================================================================
 
 struct DividendGoalProgressBar: View {
-    var currentValue: Double
-    var targetValue: Double
-    var currentCapital: Double
+    @ObservedObject var viewModel: PortfolioViewModel
     @Binding var privacyMode: Bool
     
-    var progress: Double { guard targetValue > 0 else { return 0 }; return min(max(currentValue / targetValue, 0), 1) }
-    var targetYield: Double { guard currentCapital > 0 else { return 0 }; return targetValue / currentCapital }
+    var isYieldGoal: Bool { viewModel.currentGoalType == .portfolioYield }
+    var targetTitle: String { isYieldGoal ? "Portfolio Yield" : "Annual Expected Dividends" }
+    var currentValueString: String { isYieldGoal ? viewModel.portfolioYield.formatted(.percent.precision(.fractionLength(2))) : viewModel.totalDividends.formatted(.currency(code: "EUR").precision(.fractionLength(0))) }
+    var targetValueString: String { isYieldGoal ? (viewModel.currentGoalTarget / 100.0).formatted(.percent.precision(.fractionLength(2))) : viewModel.currentGoalTarget.formatted(.currency(code: "EUR").precision(.fractionLength(0))) }
+    var progress: Double {
+        guard viewModel.currentGoalTarget > 0 else { return 0 }
+        if isYieldGoal { return min(max(viewModel.portfolioYield / (viewModel.currentGoalTarget / 100.0), 0), 1) }
+        else { return min(max(viewModel.totalDividends / viewModel.currentGoalTarget, 0), 1) }
+    }
     
     var body: some View {
         VStack(alignment: .leading, spacing: 8) {
             HStack {
-                Text("Annual Dividend Goal : \(targetValue.formatted(.currency(code: "EUR"))) (\(targetYield.formatted(.percent.precision(.fractionLength(2)))) Yield)").font(.headline)
+                Text("\(targetTitle) Goal").font(.headline)
                 Spacer()
-                Text("\(currentValue.formatted(.currency(code: "EUR"))) / \(targetValue.formatted(.currency(code: "EUR")))")
-                    .font(.subheadline).fontWeight(.bold)
-                    .foregroundColor(progress >= 1 ? .green : .primary)
-                    .blur(radius: privacyMode ? 8 : 0)
+                Text("\(currentValueString) / \(targetValueString)").font(.subheadline).fontWeight(.bold).foregroundColor(progress >= 1 ? .green : .primary).blur(radius: privacyMode ? 8 : 0)
             }
             GeometryReader { geometry in
                 ZStack(alignment: .leading) {
                     RoundedRectangle(cornerRadius: 8).fill(Color(NSColor.windowBackgroundColor)).frame(height: 14)
-                    RoundedRectangle(cornerRadius: 8).fill(LinearGradient(gradient: Gradient(colors: [.blue, .purple]), startPoint: .leading, endPoint: .trailing)).frame(width: max(0, geometry.size.width * CGFloat(progress)), height: 14).animation(.spring(), value: progress)
+                    RoundedRectangle(cornerRadius: 8).fill(LinearGradient(gradient: Gradient(colors: [.orange, .purple]), startPoint: .leading, endPoint: .trailing)).frame(width: max(0, geometry.size.width * CGFloat(progress)), height: 14).animation(.spring(), value: progress)
                 }
             }.frame(height: 14)
         }.padding().background(Color(NSColor.controlBackgroundColor)).cornerRadius(12).shadow(color: Color.black.opacity(0.05), radius: 2, x: 0, y: 1).help("Double-click to edit your goal")
     }
 }
 
-struct MonthlyDividendChart: View {
+// Tooltip customisé pour alléger le compilateur
+struct ChartTooltip: View {
+    let title: String; let val1: String; var val2: String? = nil; var color2: Color = .orange
+    var body: some View {
+        VStack(alignment: .leading, spacing: 2) {
+            Text(title).font(.caption.bold())
+            Text(val1).font(.caption2).foregroundColor(.secondary)
+            if let val2 = val2 { Text(val2).font(.caption2).foregroundColor(color2) }
+        }.padding(6).background(Color(NSColor.windowBackgroundColor).opacity(0.95)).cornerRadius(6).shadow(radius: 2)
+    }
+}
+
+struct ExpectedMonthlyDividendChart: View {
     @ObservedObject var viewModel: PortfolioViewModel
     var isExpanded: Bool = false
     @Binding var expandedChart: DividendChartZoomType?
+    @State private var hoveredMonth: String? = nil
     
-    var currentYear: Int { Calendar.current.component(.year, from: Date()) }
-    var thisYearData: DividendYear? { viewModel.dividendYears.first { $0.year == currentYear } }
+    func getHoverData(for month: String) -> (gross: Double, net: Double) {
+        let gross = viewModel.expectedMonthlyDividendSeries.filter { $0.monthName == month && $0.type == "Gross" }.reduce(0) { $0 + $1.amount }
+        let net = viewModel.expectedMonthlyDividendSeries.filter { $0.monthName == month && $0.type == "Net" }.reduce(0) { $0 + $1.amount }
+        return (gross, net)
+    }
     
     var body: some View {
         VStack {
             HStack {
-                if !isExpanded { Text("Dividends Received This Year").font(.headline).foregroundColor(.secondary) }
+                if !isExpanded { Text("Expected Monthly Income (Net vs Gross)").font(.headline).foregroundColor(.secondary) }
+                Spacer()
+                if !isExpanded { Button(action: { expandedChart = .expectedMonthly }) { Image(systemName: "plus.magnifyingglass").foregroundColor(.secondary) }.buttonStyle(.plain) }
+            }.padding(.bottom, 8)
+            
+            if viewModel.expectedMonthlyDividendSeries.isEmpty { Spacer(); Text("No data").foregroundColor(.secondary); Spacer() } else {
+                Chart(viewModel.expectedMonthlyDividendSeries) { item in
+                    // Barre empilée du montant
+                    BarMark(x: .value("Month", item.monthName), y: .value("Amount", item.amount))
+                        .foregroundStyle(item.type == "Net" ? viewModel.color(for: item.ticker) : viewModel.color(for: item.ticker).opacity(0.4))
+                        .position(by: .value("Type", item.type)).cornerRadius(4)
+                    
+                    if let hoveredMonth = hoveredMonth, hoveredMonth == item.monthName {
+                        RuleMark(x: .value("Month", item.monthName)).lineStyle(StrokeStyle(lineWidth: 1.5, dash: [4])).foregroundStyle(.secondary.opacity(0.4))
+                            .annotation(position: .top, alignment: .center) {
+                                let data = getHoverData(for: item.monthName)
+                                ChartTooltip(title: item.monthName, val1: "Gross: \(data.gross.formatted(.currency(code: "EUR").precision(.fractionLength(0))))", val2: "Net: \(data.net.formatted(.currency(code: "EUR").precision(.fractionLength(0))))")
+                            }
+                    }
+                }
+                .chartLegend(.hidden)
+                .chartYAxis { AxisMarks(position: .leading) { value in AxisGridLine(); AxisTick(); if let v = value.as(Double.self) { AxisValueLabel(v.formatted(.currency(code: "EUR").precision(.fractionLength(0)))) } } }
+                .chartXSelection(value: $hoveredMonth)
+            }
+            BlueChipWatermark()
+        }.padding().frame(minHeight: 360, maxHeight: isExpanded ? .infinity : 360).background(Color(NSColor.controlBackgroundColor)).cornerRadius(12).shadow(color: Color.black.opacity(0.05), radius: 2, x: 0, y: 1)
+    }
+}
+
+struct StockYieldChart: View {
+    @ObservedObject var viewModel: PortfolioViewModel
+    var isExpanded: Bool = false
+    @Binding var expandedChart: DividendChartZoomType?
+    @State private var hoveredTicker: String? = nil
+    
+    var body: some View {
+        VStack {
+            HStack {
+                if !isExpanded { Text("Current Stock Yield (by Ticker)").font(.headline).foregroundColor(.secondary) }
+                Spacer()
+                if !isExpanded { Button(action: { expandedChart = .stockYield }) { Image(systemName: "plus.magnifyingglass").foregroundColor(.secondary) }.buttonStyle(.plain) }
+            }.padding(.bottom, 8)
+            
+            if viewModel.stockYieldsData.isEmpty { Spacer(); Text("No data").foregroundColor(.secondary); Spacer() } else {
+                Chart(viewModel.stockYieldsData) { item in
+                    LineMark(x: .value("Ticker", item.ticker), y: .value("Yield", item.yield)).foregroundStyle(Color.gray.opacity(0.4)).interpolationMethod(.monotone)
+                    PointMark(x: .value("Ticker", item.ticker), y: .value("Yield", item.yield)).foregroundStyle(viewModel.color(for: item.ticker)).symbolSize(hoveredTicker == item.ticker ? 100 : 40)
+                    
+                    if let hoveredTicker = hoveredTicker, hoveredTicker == item.ticker {
+                        RuleMark(x: .value("Ticker", item.ticker)).lineStyle(StrokeStyle(lineWidth: 1, dash: [2])).foregroundStyle(.secondary.opacity(0.3))
+                            .annotation(position: .top, alignment: .center) {
+                                // CORRECTION ICI (.number au lieu de .numeric)
+                                ChartTooltip(title: item.ticker, val1: "\(item.yield.formatted(.number.precision(.fractionLength(2)))) %")
+                            }
+                    }
+                }
+                .chartLegend(.hidden)
+                // CORRECTION ICI AUSSI (.number au lieu de .numeric)
+                .chartYAxis { AxisMarks(position: .leading) { value in AxisGridLine(); AxisTick(); if let v = value.as(Double.self) { AxisValueLabel("\(v.formatted(.number.precision(.fractionLength(0)))) %") } } }
+                .chartXSelection(value: $hoveredTicker)
+            }
+            BlueChipWatermark()
+        }.padding().frame(minHeight: 360, maxHeight: isExpanded ? .infinity : 360).background(Color(NSColor.controlBackgroundColor)).cornerRadius(12).shadow(color: Color.black.opacity(0.05), radius: 2, x: 0, y: 1)
+    }
+}
+
+struct MonthlyDividendChart: View {
+    @ObservedObject var viewModel: PortfolioViewModel
+    var thisYearData: DividendYear?
+    var isExpanded: Bool = false
+    @Binding var expandedChart: DividendChartZoomType?
+    
+    var body: some View {
+        VStack {
+            HStack {
+                if !isExpanded { Text("Spreadsheet: Received This Year").font(.headline).foregroundColor(.secondary) }
                 Spacer()
                 if !isExpanded { Button(action: { expandedChart = .monthly }) { Image(systemName: "plus.magnifyingglass").foregroundColor(.secondary) }.buttonStyle(.plain) }
             }.padding(.bottom, 8)
@@ -237,10 +362,10 @@ struct MonthlyDividendChart: View {
                     ("Sep", thisYear.sep), ("Oct", thisYear.oct), ("Nov", thisYear.nov), ("Dec", thisYear.dec)
                 ]
                 Chart(monthlyData, id: \.0) { item in
-                    BarMark(x: .value("Month", item.0), y: .value("Amount", item.1))
-                        .foregroundStyle(Color.orange.opacity(0.8)).cornerRadius(4)
+                    BarMark(x: .value("Month", item.0), y: .value("Amount", item.1)).foregroundStyle(Color.orange.opacity(0.8)).cornerRadius(4)
                         .annotation(position: .top) { if item.1 > 0 { Text(item.1.formatted(.currency(code: "EUR"))).font(.system(size: 9)).foregroundColor(.secondary) } }
                 }
+                .chartYAxis { AxisMarks { value in if let v = value.as(Double.self) { AxisValueLabel(v.formatted(.currency(code: "EUR").precision(.fractionLength(0)))) } } }
             } else { Spacer(); Text("No data").foregroundColor(.secondary); Spacer() }
             BlueChipWatermark()
         }.padding().frame(minHeight: 360, maxHeight: isExpanded ? .infinity : 360).background(Color(NSColor.controlBackgroundColor)).cornerRadius(12).shadow(color: Color.black.opacity(0.05), radius: 2, x: 0, y: 1)
@@ -249,15 +374,14 @@ struct MonthlyDividendChart: View {
 
 struct YearlyDividendChart: View {
     @ObservedObject var viewModel: PortfolioViewModel
+    var currentYear: Int
     var isExpanded: Bool = false
     @Binding var expandedChart: DividendChartZoomType?
-    
-    var currentYear: Int { Calendar.current.component(.year, from: Date()) }
     
     var body: some View {
         VStack {
             HStack {
-                if !isExpanded { Text("Annual Net Income").font(.headline).foregroundColor(.secondary) }
+                if !isExpanded { Text("Spreadsheet: Annual Received History").font(.headline).foregroundColor(.secondary) }
                 Spacer()
                 if !isExpanded { Button(action: { expandedChart = .yearly }) { Image(systemName: "plus.magnifyingglass").foregroundColor(.secondary) }.buttonStyle(.plain) }
             }.padding(.bottom, 8)
@@ -265,10 +389,10 @@ struct YearlyDividendChart: View {
             let activeYears = viewModel.dividendYears.filter { $0.total > 0 || $0.year == currentYear }
             if activeYears.isEmpty { Spacer(); Text("No data").foregroundColor(.secondary); Spacer() } else {
                 Chart(activeYears) { yearData in
-                    BarMark(x: .value("Year", String(yearData.year)), y: .value("Total", yearData.total))
-                        .foregroundStyle(Color.green.opacity(0.8)).cornerRadius(4)
+                    BarMark(x: .value("Year", String(yearData.year)), y: .value("Total", yearData.total)).foregroundStyle(Color.green.opacity(0.8)).cornerRadius(4)
                         .annotation(position: .top) { if yearData.total > 0 { Text(yearData.total.formatted(.currency(code: "EUR"))).font(.system(size: 9)).foregroundColor(.secondary) } }
                 }
+                .chartYAxis { AxisMarks { value in if let v = value.as(Double.self) { AxisValueLabel(v.formatted(.currency(code: "EUR").precision(.fractionLength(0)))) } } }
             }
             BlueChipWatermark()
         }.padding().frame(minHeight: 360, maxHeight: isExpanded ? .infinity : 360).background(Color(NSColor.controlBackgroundColor)).cornerRadius(12).shadow(color: Color.black.opacity(0.05), radius: 2, x: 0, y: 1)
@@ -280,17 +404,28 @@ struct DividendFullScreenChartView: View {
     let zoomType: DividendChartZoomType
     @ObservedObject var viewModel: PortfolioViewModel
     
+    var currentYear: Int { Calendar.current.component(.year, from: Date()) }
+    var thisYearData: DividendYear? { viewModel.dividendYears.first { $0.year == currentYear } }
+    
     var body: some View {
         VStack(spacing: 20) {
             HStack { Text(titleForZoom).font(.title).fontWeight(.bold); Spacer(); Button(action: { dismiss() }) { Image(systemName: "xmark.circle.fill").font(.title).foregroundColor(.secondary) }.buttonStyle(.plain) }
             
-            if zoomType == .monthly {
-                MonthlyDividendChart(viewModel: viewModel, isExpanded: true, expandedChart: .constant(nil))
-            } else {
-                YearlyDividendChart(viewModel: viewModel, isExpanded: true, expandedChart: .constant(nil))
+            switch zoomType {
+            case .expectedMonthly: ExpectedMonthlyDividendChart(viewModel: viewModel, isExpanded: true, expandedChart: .constant(nil))
+            case .stockYield: StockYieldChart(viewModel: viewModel, isExpanded: true, expandedChart: .constant(nil))
+            case .monthly: MonthlyDividendChart(viewModel: viewModel, thisYearData: thisYearData, isExpanded: true, expandedChart: .constant(nil))
+            case .yearly: YearlyDividendChart(viewModel: viewModel, currentYear: currentYear, isExpanded: true, expandedChart: .constant(nil))
             }
         }.padding(30).frame(minWidth: 900, minHeight: 700)
     }
     
-    var titleForZoom: String { zoomType == .monthly ? "Dividends Received This Year" : "Annual Net Income" }
+    var titleForZoom: String {
+        switch zoomType {
+        case .expectedMonthly: return "Expected Monthly Income (Net vs Gross)"
+        case .stockYield: return "Current Stock Yield by Ticker"
+        case .monthly: return "Spreadsheet: Received This Year"
+        case .yearly: return "Spreadsheet: Annual Received History"
+        }
+    }
 }
