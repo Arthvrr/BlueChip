@@ -234,19 +234,48 @@ struct DividendGoalProgressBar: View {
     }
 }
 
-// MARK: - CHART 1: EXPECTED MONTHLY (Survol façon YoY)
+// MARK: - CHART 1: EXPECTED MONTHLY (Simplifié : Gross vs Net groupés)
+// MARK: - CHART 1: EXPECTED MONTHLY (Simplifié : Gross vs Net groupés & Légende Interactive)
 struct ExpectedMonthlyDividendChart: View {
     @ObservedObject var viewModel: PortfolioViewModel
     var isExpanded: Bool = false
     @Binding var expandedChart: DividendChartZoomType?
     @State private var hoveredMonth: String? = nil
     
-    var monthlyTotals: [(String, Double)] {
+    // Gère les catégories masquées
+    @State private var hiddenTypes: Set<String> = []
+    
+    // Structure interne pour fusionner les montants de toutes les actions
+    struct MonthlyAggregated: Identifiable {
+        var id = UUID()
+        var month: String
+        var type: String
+        var amount: Double
+    }
+    
+    var aggregatedData: [MonthlyAggregated] {
         let months = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"]
-        return months.map { month in
-            let total = viewModel.expectedMonthlyDividendSeries.filter { $0.monthName == month && $0.type == "Net" }.reduce(0) { $0 + $1.amount }
-            return (month, total)
+        var result: [MonthlyAggregated] = []
+        for month in months {
+            let net = viewModel.expectedMonthlyDividendSeries.filter { $0.monthName == month && $0.type == "Net" }.reduce(0) { $0 + $1.amount }
+            let gross = viewModel.expectedMonthlyDividendSeries.filter { $0.monthName == month && $0.type == "Gross" }.reduce(0) { $0 + $1.amount }
+            if gross > 0 {
+                result.append(MonthlyAggregated(month: month, type: "Gross", amount: gross))
+                result.append(MonthlyAggregated(month: month, type: "Net", amount: net))
+            }
         }
+        return result
+    }
+    
+    // Données filtrées selon la légende
+    var filteredData: [MonthlyAggregated] {
+        aggregatedData.filter { !hiddenTypes.contains($0.type) }
+    }
+    
+    // FIX YO-YO EFFECT : Basé sur les données filtrées pour que l'échelle s'adapte si on masque le "Gross"
+    var yMaxStatic: Double {
+        let maxTotal = filteredData.map { $0.amount }.max() ?? 10.0
+        return maxTotal > 0 ? maxTotal * 1.25 : 100.0
     }
     
     var body: some View {
@@ -255,36 +284,64 @@ struct ExpectedMonthlyDividendChart: View {
                 if !isExpanded { Text("Expected Monthly Income (Net vs Gross)").font(.headline).foregroundColor(.secondary) }
                 Spacer()
                 if !isExpanded { Button(action: { expandedChart = .expectedMonthly }) { Image(systemName: "plus.magnifyingglass").foregroundColor(.secondary) }.buttonStyle(.plain) }
-            }.padding(.bottom, 8)
+            }.padding(.bottom, 4)
             
-            if viewModel.expectedMonthlyDividendSeries.isEmpty { Spacer(); Text("No data").foregroundColor(.secondary); Spacer() } else {
-                Chart {
-                    ForEach(viewModel.expectedMonthlyDividendSeries) { item in
-                        BarMark(x: .value("Month", item.monthName), y: .value("Amount", item.amount))
-                            .foregroundStyle(item.type == "Net" ? viewModel.color(for: item.ticker) : viewModel.color(for: item.ticker).opacity(0.4))
-                            .position(by: .value("Type", item.type)).cornerRadius(4)
-                    }
-                    
-                    // Annotation au survol (façon YoY)
-                    if let hoveredMonth = hoveredMonth {
-                        if let totalForHoveredMonth = monthlyTotals.first(where: { $0.0 == hoveredMonth })?.1 {
-                            RuleMark(x: .value("Month", hoveredMonth))
-                                .lineStyle(StrokeStyle(lineWidth: 1, dash: [4]))
-                                .foregroundStyle(.secondary.opacity(0.5))
-                                .annotation(position: .top, alignment: .center) {
-                                    Text(totalForHoveredMonth.formatted(.currency(code: "EUR").precision(.fractionLength(2))))
-                                        .font(.system(size: 9, weight: .bold))
-                                        .padding(4).background(Color(NSColor.windowBackgroundColor).opacity(0.8)).cornerRadius(4)
-                                }
-                        }
+            // LÉGENDE INTERACTIVE
+            HStack(spacing: 16) {
+                Button(action: { toggle("Gross") }) {
+                    HStack(spacing: 6) {
+                        Circle().fill(Color.green).frame(width: 8, height: 8)
+                        Text("Gross").font(.caption).foregroundColor(hiddenTypes.contains("Gross") ? .secondary : .primary)
                     }
                 }
+                .buttonStyle(.plain)
+                .opacity(hiddenTypes.contains("Gross") ? 0.4 : 1.0)
+                
+                Button(action: { toggle("Net") }) {
+                    HStack(spacing: 6) {
+                        Circle().fill(Color.green.opacity(0.5)).frame(width: 8, height: 8)
+                        Text("Net").font(.caption).foregroundColor(hiddenTypes.contains("Net") ? .secondary : .primary)
+                    }
+                }
+                .buttonStyle(.plain)
+                .opacity(hiddenTypes.contains("Net") ? 0.4 : 1.0)
+            }.padding(.bottom, 8)
+            
+            if filteredData.isEmpty { Spacer(); Text("No data").foregroundColor(.secondary); Spacer() } else {
+                Chart(filteredData) { item in
+                    // Grouped Bar Chart (Côte à côte par mois)
+                    BarMark(x: .value("Month", item.month), y: .value("Amount", item.amount))
+                        .foregroundStyle(item.type == "Gross" ? Color.green : Color.green.opacity(0.5))
+                        .position(by: .value("Type", item.type))
+                        .cornerRadius(4)
+                        
+                        // ANNOTATION AU SURVOL
+                        .annotation(position: .top) {
+                            if hoveredMonth == item.month {
+                                Text(item.amount.formatted(.currency(code: "EUR").precision(.fractionLength(2))))
+                                    .font(.system(size: 8, weight: .bold))
+                                    .foregroundColor(.secondary)
+                            }
+                        }
+                }
                 .chartLegend(.hidden)
+                .chartYScale(domain: 0...yMaxStatic) // Empêche l'axe Y de sauter au survol
                 .chartYAxis { AxisMarks(position: .leading) { value in AxisGridLine(); AxisTick(); if let v = value.as(Double.self) { AxisValueLabel(v.formatted(.currency(code: "EUR").precision(.fractionLength(0)))) } } }
                 .chartXSelection(value: $hoveredMonth)
             }
             BlueChipWatermark()
         }.padding().frame(minHeight: 360, maxHeight: isExpanded ? .infinity : 360).background(Color(NSColor.controlBackgroundColor)).cornerRadius(12).shadow(color: Color.black.opacity(0.05), radius: 2, x: 0, y: 1)
+    }
+    
+    // Fonction d'animation de la légende
+    func toggle(_ type: String) {
+        withAnimation {
+            if hiddenTypes.contains(type) {
+                hiddenTypes.remove(type)
+            } else {
+                hiddenTypes.insert(type)
+            }
+        }
     }
 }
 
@@ -427,7 +484,7 @@ struct YieldOnCostChart: View {
     }
 }
 
-// MARK: - CHART 7: ALL-TIME HISTORY & TREND LINE (Survol façon YoY)
+// MARK: - CHART 7: ALL-TIME HISTORY & TREND LINE
 struct HistoricalDividendItem: Identifiable {
     let id = UUID()
     let date: Date
@@ -507,7 +564,6 @@ struct AllTimeHistoryChart: View {
                             .lineStyle(StrokeStyle(lineWidth: 2, dash: [5]))
                     }
                     
-                    // Annotation au survol (façon YoY)
                     if let hoveredDate = hoveredDate {
                         if let item = historicalData.min(by: { abs($0.date.timeIntervalSince(hoveredDate)) < abs($1.date.timeIntervalSince(hoveredDate)) }) {
                             RuleMark(x: .value("Date", item.date))
