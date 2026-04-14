@@ -33,12 +33,20 @@ class PortfolioViewModel: ObservableObject {
     @Published var dividendGoalTarget: Double = 1000.0 { didSet { saveData() } }
     
     @Published var dividendYears: [DividendYear] = [] { didSet { saveData() } }
-    @Published var dividendStartYear: Int = 2022 { didSet { setupDividendYears(); saveData() } }
+    @Published var dividendStartYear: Int = 2022 { didSet { setupDividendYears(); setupGrowthYears(); saveData() } }
     @Published var isLoading = false
     @Published var sortOrder = [KeyPathComparator(\Position.ticker)] { didSet { positions.sort(using: sortOrder) } }
     
     @Published var expectedMonthlyDividendSeries: [ExpectedMonthlyDividendSeries] = []
     @Published var stockYieldsData: [StockYieldDataItem] = []
+    
+    // ==================
+    // GOAL GROWTH (NOUVEAU)
+    // ==================
+    @Published var growthGoalType: GrowthGoalType = .targetReturnPercent { didSet { saveData() } }
+    @Published var growthGoalTarget: Double = 10.0 { didSet { saveData() } }
+
+    @Published var growthYears: [GrowthYear] = [] { didSet { saveData() } }
     
     private let yahooService = YahooFinanceService()
     
@@ -96,7 +104,13 @@ class PortfolioViewModel: ObservableObject {
         if pvLatente > 0 { items.append(ValueSourceItem(category: "Unrealized P/L", value: pvLatente)) }; return items
     }
     
-    init() { loadData(); setupDividendYears(); Task { await refreshPrices() }; updateDividendsViewData() }
+    init() {
+        loadData()
+        setupDividendYears()
+        setupGrowthYears()
+        Task { await refreshPrices() }
+        updateDividendsViewData()
+        }
     
     func setupDividendYears() {
         let currentYear = Calendar.current.component(.year, from: Date())
@@ -106,6 +120,22 @@ class PortfolioViewModel: ObservableObject {
             if let existing = dividendYears.first(where: { $0.year == y }) { newYears.append(existing) } else { newYears.append(DividendYear(year: y)) }
         }
         if newYears.count != dividendYears.count || newYears.first?.year != dividendYears.first?.year { dividendYears = newYears }
+    }
+    
+    func setupGrowthYears() {
+        let currentYear = Calendar.current.component(.year, from: Date())
+        let endYear = currentYear + 30
+        var newYears: [GrowthYear] = []
+        for y in dividendStartYear...endYear {
+            if let existing = growthYears.first(where: { $0.year == y }) {
+                newYears.append(existing)
+            } else {
+                newYears.append(GrowthYear(year: y, startWallet: 0, invested: 0, endWallet: 0, totalInvest: 0))
+            }
+        }
+        if newYears.count != growthYears.count || newYears.first?.year != growthYears.first?.year {
+            growthYears = newYears
+        }
     }
     
     func refreshPrices() async {
@@ -155,7 +185,23 @@ class PortfolioViewModel: ObservableObject {
     private var saveFileURL: URL { FileManager.default.urls(for: .documentDirectory, in: .userDomainMask)[0].appendingPathComponent("BlueChip_Data.json") }
     
     func saveData() {
-        let dataToSave = PortfolioSaveData(positions: positions, availableCash: availableCash, manuallyInvested: manuallyInvested, goalType: currentGoalType, goalTarget: currentGoalTarget, dividendGoalType: dividendGoalType, dividendGoalTarget: dividendGoalTarget, dividendYears: dividendYears, dividendStartYear: dividendStartYear)
+        let dataToSave = PortfolioSaveData(
+            positions: positions,
+            availableCash: availableCash,
+            manuallyInvested: manuallyInvested,
+            
+            goalType: currentGoalType,
+            goalTarget: currentGoalTarget,
+            
+            dividendGoalType: dividendGoalType,
+            dividendGoalTarget: dividendGoalTarget,
+            dividendYears: dividendYears,
+            dividendStartYear: dividendStartYear,
+            
+            growthGoalType: growthGoalType,
+            growthGoalTarget: growthGoalTarget,
+            growthYears: growthYears,
+        )
         do { try JSONEncoder().encode(dataToSave).write(to: saveFileURL, options: [.atomic]) } catch {}
     }
     func loadData() {
@@ -165,10 +211,17 @@ class PortfolioViewModel: ObservableObject {
             positions = decoded.positions.sorted(using: sortOrder); availableCash = decoded.availableCash; manuallyInvested = decoded.manuallyInvested
             if let savedGoalType = decoded.goalType { currentGoalType = savedGoalType }
             if let savedGoalTarget = decoded.goalTarget { currentGoalTarget = savedGoalTarget }
+            
+            //DIVIDENDS
             if let savedDivGoalType = decoded.dividendGoalType { dividendGoalType = savedDivGoalType }
             if let savedDivGoalTarget = decoded.dividendGoalTarget { dividendGoalTarget = savedDivGoalTarget }
             if let savedDivYears = decoded.dividendYears { dividendYears = savedDivYears }
             if let savedStartYear = decoded.dividendStartYear { dividendStartYear = savedStartYear }
+            
+            //GROWTH
+            if let savedGrowthGoalType = decoded.growthGoalType { growthGoalType = savedGrowthGoalType }
+            if let savedGrowthGoalTarget = decoded.growthGoalTarget { growthGoalTarget = savedGrowthGoalTarget }
+            if let savedGrowthYears = decoded.growthYears { growthYears = savedGrowthYears }
         } catch { print("ℹ️ JSON File not found or read error.") }
     }
 }

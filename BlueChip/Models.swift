@@ -58,10 +58,21 @@ enum DividendGoalType: String, Codable, CaseIterable {
 }
 
 struct PortfolioSaveData: Codable {
-    var positions: [Position]; var availableCash: Double; var manuallyInvested: Double;
-    var goalType: GoalType?; var goalTarget: Double?;
-    var dividendGoalType: DividendGoalType?; var dividendGoalTarget: Double?; // NOUVEAU
-    var dividendYears: [DividendYear]?; var dividendStartYear: Int?
+    var positions: [Position];
+    var availableCash: Double;
+    var manuallyInvested: Double;
+    
+    var goalType: GoalType?;
+    var goalTarget: Double?;
+    
+    var dividendGoalType: DividendGoalType?;
+    var dividendGoalTarget: Double?;
+    var dividendYears: [DividendYear]?;
+    var dividendStartYear: Int?
+    
+    var growthGoalType: GrowthGoalType?
+    var growthGoalTarget: Double?
+    var growthYears: [GrowthYear]?
 }
 
 struct ExpectedMonthlyDividendSeries: Identifiable {
@@ -84,3 +95,29 @@ struct PriceCompareItem: Identifiable { let id = UUID(); let ticker: String; let
 struct ScatterItem: Identifiable { let id = UUID(); let ticker: String; let weight: Double; let roi: Double }
 struct ValueSourceItem: Identifiable { let id = UUID(); let category: String; let value: Double }
 struct TreemapNode: Identifiable { let id = UUID(); let position: Position; let rect: CGRect }
+
+// MARK: - GROWTH MODELS
+
+// 1. Enum pour les objectifs de croissance
+enum GrowthGoalType: String, Codable, CaseIterable {
+    case targetReturnCurrency = "Target Return (€)"
+    case targetReturnPercent = "Target Return (%)"
+}
+
+// 2. Structure pour le tableau de croissance
+struct GrowthYear: Identifiable, Codable {
+    var id = UUID()
+    var year: Int
+    var startWallet: Double
+    var invested: Double
+    var endWallet: Double
+    var totalInvest: Double
+    
+    // Calculs automatiques
+    var returnAmount: Double { endWallet - startWallet - invested }
+    var returnPercent: Double {
+        let base = startWallet + invested
+        guard base > 0 else { return 0 }
+        return returnAmount / base
+    }
+}
