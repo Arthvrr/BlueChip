@@ -95,12 +95,19 @@ struct GrowthDashboardSection: View {
     // 1. LES VRAIES VALEURS DE LA PAGE COMPOSITION SONT ICI
     var currentWallet: Double { viewModel.currentTotalCapital }
     var totalInvested: Double { viewModel.manuallyInvested > 0 ? viewModel.manuallyInvested : viewModel.positionsInvestedSum }
+
+    // Aligned with CompositionView "Unrealized P/L" — based on positions only (not cash)
+    var allTimeReturnEUR: Double { viewModel.totalROIValue }
+    var allTimeReturnPercent: Double { viewModel.totalROIPercent }
     
-    var allTimeReturnEUR: Double { currentWallet - totalInvested }
-    var allTimeReturnPercent: Double { totalInvested > 0 ? (allTimeReturnEUR / totalInvested) : 0 }
-    
-    // 2. RECHERCHE DES ANNÉES ACTIVES
-    var activeYears: [GrowthYear] { viewModel.growthYears.filter { $0.year <= currentYear } }
+    // 2. RECHERCHE DES ANNÉES ACTIVES (avec données réelles uniquement)
+    var activeYears: [GrowthYear] {
+        viewModel.growthYears.filter { yearData in
+            let isCurrentYear = yearData.year == currentYear
+            let effectiveEnd = isCurrentYear ? currentWallet : yearData.endWallet
+            return yearData.year <= currentYear && (yearData.startWallet > 0 || yearData.invested > 0 || effectiveEnd > 0)
+        }
+    }
     var activeYearsCount: Int { max(1, activeYears.count) }
     
     // 3. MOYENNES
@@ -137,14 +144,30 @@ struct GrowthDashboardSection: View {
             HStack(spacing: 16) {
                 DashboardCard(title: "Current Wallet Value", value: currentWallet.formatted(.currency(code: "EUR").precision(.fractionLength(2))), privacyMode: $privacyMode)
                 DashboardCard(title: "Total Invested", value: totalInvested.formatted(.currency(code: "EUR").precision(.fractionLength(2))), privacyMode: $privacyMode)
-                DashboardCard(title: "All-Time Return (€)", value: allTimeReturnEUR.formatted(.currency(code: "EUR").precision(.fractionLength(2)).sign(strategy: .always())), privacyMode: $privacyMode)
-                DashboardCard(title: "All-Time Return (%)", value: allTimeReturnPercent.formatted(.percent.precision(.fractionLength(2)).sign(strategy: .always())), privacyMode: $privacyMode)
+                // All-Time Return — même style que "Unrealized P/L" dans CompositionView
+                VStack(alignment: .leading, spacing: 4) {
+                    Text("All-Time Return").font(.subheadline).foregroundColor(.secondary).lineLimit(1)
+                    Text(allTimeReturnEUR.formatted(.currency(code: "EUR").precision(.fractionLength(2)).sign(strategy: .always())))
+                        .font(.title2).fontWeight(.bold)
+                        .foregroundColor(allTimeReturnEUR >= 0 ? .green : .red)
+                        .blur(radius: privacyMode ? 8 : 0)
+                    Text(allTimeReturnPercent.formatted(.percent.precision(.fractionLength(2)).sign(strategy: .always())))
+                        .font(.caption).padding(.horizontal, 6).padding(.vertical, 2)
+                        .background((allTimeReturnEUR >= 0 ? Color.green : Color.red).opacity(0.1))
+                        .foregroundColor(allTimeReturnEUR >= 0 ? .green : .red)
+                        .cornerRadius(4)
+                        .blur(radius: privacyMode ? 8 : 0)
+                }
+                .padding().frame(maxWidth: .infinity, alignment: .leading).frame(height: 110)
+                .background(Color(NSColor.controlBackgroundColor)).cornerRadius(10)
+                .shadow(color: Color.black.opacity(0.05), radius: 2, x: 0, y: 1)
+                DashboardCard(title: "Best Year Return", value: bestYearReturn.formatted(.percent.precision(.fractionLength(2))), privacyMode: $privacyMode)
             }
             HStack(spacing: 16) {
                 DashboardCard(title: "Avg. Return / Year (€)", value: averageReturnEUR.formatted(.currency(code: "EUR").precision(.fractionLength(2)).sign(strategy: .always())), privacyMode: $privacyMode)
                 DashboardCard(title: "Avg. Return / Year (%)", value: averageReturnPercent.formatted(.percent.precision(.fractionLength(2)).sign(strategy: .always())), privacyMode: $privacyMode)
                 DashboardCard(title: "CAGR (Compound Growth)", value: cagr.formatted(.percent.precision(.fractionLength(2))), privacyMode: $privacyMode)
-                DashboardCard(title: "Best Year Return", value: bestYearReturn.formatted(.percent.precision(.fractionLength(2))), privacyMode: $privacyMode)
+                DashboardCard(title: "Active Years Tracked", value: "\(activeYearsCount)", privacyMode: .constant(false))
             }
         }
     }
@@ -305,28 +328,20 @@ struct GrowthPerformanceChartsSection: View {
     
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
-            Text("Annual Performance Metrics").font(.title2).fontWeight(.bold).foregroundColor(.secondary)
+            Text("Annual Performance & Long Term Growth").font(.title2).fontWeight(.bold).foregroundColor(.secondary)
             HStack(spacing: 24) {
                 AnnualReturnsComboChart(viewModel: viewModel, expandedChart: $chartToZoom)
-                VsSP500PerformanceChart(viewModel: viewModel, expandedChart: $chartToZoom)
+                InvestedVsValueChart(viewModel: viewModel, expandedChart: $chartToZoom)
             }
         }
     }
 }
 
+// Kept for architecture — not rendered in the main view
 struct GrowthBenchmarkChartsSection: View {
     @ObservedObject var viewModel: PortfolioViewModel
     @Binding var chartToZoom: GrowthChartZoomType?
-    
-    var body: some View {
-        VStack(alignment: .leading, spacing: 12) {
-            Text("Benchmarks & Long Term Growth").font(.title2).fontWeight(.bold).foregroundColor(.secondary)
-            HStack(spacing: 24) {
-                InvestedVsValueChart(viewModel: viewModel, expandedChart: $chartToZoom)
-                Benchmark10kChart(viewModel: viewModel, expandedChart: $chartToZoom)
-            }
-        }
-    }
+    var body: some View { EmptyView() }
 }
 
 // =========================================================================
@@ -525,29 +540,367 @@ struct GainsProvenanceChart: View {
 // (LES AUTRES GRAPHES RESTENT EN PLACEHOLDER FONCTIONNEL POUR LE MOMENT)
 // =========================================================================
 
+// CHART 4: Annual Returns — Barres € + ligne % (combo chart)
 struct AnnualReturnsComboChart: View {
     @ObservedObject var viewModel: PortfolioViewModel
     var isExpanded: Bool = false
     @Binding var expandedChart: GrowthChartZoomType?
-    var body: some View { VStack { Text("Chart 4") } }
+
+    var currentYear: Int { Calendar.current.component(.year, from: Date()) }
+
+    struct AnnualReturnItem: Identifiable {
+        let id = UUID()
+        let year: Int
+        let returnEUR: Double
+        let returnPercent: Double
+    }
+
+    var data: [AnnualReturnItem] {
+        viewModel.growthYears.compactMap { yearData in
+            let effectiveEnd = (yearData.year == currentYear) ? viewModel.currentTotalCapital : yearData.endWallet
+            let base = yearData.startWallet + yearData.invested
+            guard base > 0 else { return nil }
+            let retEUR = effectiveEnd - base
+            let retPct = (retEUR / base) * 100.0
+            return AnnualReturnItem(year: yearData.year, returnEUR: retEUR, returnPercent: retPct)
+        }
+        .filter { $0.year <= currentYear }
+    }
+
+    var maxAbsEUR: Double { max(data.map { abs($0.returnEUR) }.max() ?? 1, 1) }
+    var maxAbsPct: Double { max(data.map { abs($0.returnPercent) }.max() ?? 1, 1) }
+    func scaledPct(_ pct: Double) -> Double { (pct / maxAbsPct) * maxAbsEUR }
+
+    // Légende interactive
+    @State private var hiddenSeries: Set<String> = []
+    // Survol
+    @State private var hoveredYear: String? = nil
+
+    var hoveredItem: AnnualReturnItem? {
+        guard let y = hoveredYear, let yr = Int(y) else { return nil }
+        return data.first { $0.year == yr }
+    }
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            HStack {
+                if !isExpanded {
+                    Text("Annual Returns").font(.headline).foregroundColor(.secondary)
+                }
+                Spacer()
+                // Légende interactive cliquable
+                HStack(spacing: 12) {
+                    Button(action: { withAnimation { toggle("Return €") } }) {
+                        HStack(spacing: 4) {
+                            RoundedRectangle(cornerRadius: 2).fill(Color.blue.opacity(0.55)).frame(width: 12, height: 12)
+                            Text("Return €").font(.caption).foregroundColor(hiddenSeries.contains("Return €") ? .secondary : .primary)
+                        }
+                    }.buttonStyle(.plain).opacity(hiddenSeries.contains("Return €") ? 0.4 : 1.0)
+
+                    Button(action: { withAnimation { toggle("Return %") } }) {
+                        HStack(spacing: 4) {
+                            Circle().fill(Color.orange).frame(width: 8, height: 8)
+                            Text("Return %").font(.caption).foregroundColor(hiddenSeries.contains("Return %") ? .secondary : .primary)
+                        }
+                    }.buttonStyle(.plain).opacity(hiddenSeries.contains("Return %") ? 0.4 : 1.0)
+                }
+                if !isExpanded {
+                    Button(action: { expandedChart = .annualReturnsCombo }) {
+                        Image(systemName: "plus.magnifyingglass").foregroundColor(.secondary)
+                    }.buttonStyle(.plain).padding(.leading, 8)
+                }
+            }.padding(.bottom, 4)
+
+            // Tooltip survol
+            if let item = hoveredItem {
+                HStack(spacing: 16) {
+                    Text(String(item.year)).fontWeight(.bold)
+                    Text(item.returnEUR.formatted(.currency(code: "EUR").precision(.fractionLength(2)).sign(strategy: .always())))
+                        .foregroundColor(item.returnEUR >= 0 ? .green : .red).fontWeight(.semibold)
+                    Text(String(format: "%+.2f%%", item.returnPercent))
+                        .padding(.horizontal, 6).padding(.vertical, 2)
+                        .background((item.returnPercent >= 0 ? Color.green : Color.red).opacity(0.1))
+                        .foregroundColor(item.returnPercent >= 0 ? .green : .red)
+                        .cornerRadius(4).fontWeight(.semibold)
+                }
+                .font(.caption)
+                .padding(.horizontal, 8).padding(.vertical, 4)
+                .background(Color(NSColor.windowBackgroundColor))
+                .cornerRadius(6)
+                .transition(.opacity)
+            }
+
+            if data.isEmpty {
+                Spacer()
+                Text("Fill in the Growth table to see annual returns.").foregroundColor(.secondary).frame(maxWidth: .infinity, alignment: .center)
+                Spacer()
+            } else {
+                Chart {
+                    if !hiddenSeries.contains("Return €") {
+                        ForEach(data) { item in
+                            BarMark(
+                                x: .value("Year", String(item.year)),
+                                y: .value("Return €", item.returnEUR)
+                            )
+                            .foregroundStyle(item.returnEUR >= 0 ? Color.blue.opacity(0.55) : Color.red.opacity(0.55))
+                            .cornerRadius(4)
+                            .opacity(hoveredYear == nil || hoveredYear == String(item.year) ? 1.0 : 0.4)
+                        }
+                    }
+                    if !hiddenSeries.contains("Return %") {
+                        ForEach(data) { item in
+                            LineMark(
+                                x: .value("Year", String(item.year)),
+                                y: .value("Return % (scaled)", scaledPct(item.returnPercent))
+                            )
+                            .foregroundStyle(Color.orange)
+                            .lineStyle(StrokeStyle(lineWidth: 2))
+                            .symbol {
+                                Circle()
+                                    .fill(item.returnPercent >= 0 ? Color.orange : Color.red)
+                                    .frame(width: 7, height: 7)
+                            }
+                        }
+                    }
+                }
+                .chartXSelection(value: $hoveredYear)
+                .chartYAxis {
+                    AxisMarks(position: .leading) { value in
+                        AxisGridLine(); AxisTick()
+                        AxisValueLabel {
+                            if let v = value.as(Double.self) {
+                                Text(v.formatted(.currency(code: "EUR").precision(.fractionLength(0)))).font(.system(size: 10))
+                            }
+                        }
+                    }
+                }
+                .chartXAxis {
+                    AxisMarks { value in
+                        AxisValueLabel { if let s = value.as(String.self) { Text(s).font(.caption) } }
+                    }
+                }
+                .animation(.easeInOut(duration: 0.15), value: hoveredYear)
+            }
+            BlueChipWatermark()
+        }
+        .padding()
+        .frame(minHeight: isExpanded ? 500 : 300, maxHeight: isExpanded ? .infinity : 300)
+        .background(Color(NSColor.controlBackgroundColor)).cornerRadius(12).shadow(color: Color.black.opacity(0.05), radius: 2, x: 0, y: 1)
+    }
+
+    func toggle(_ key: String) {
+        if hiddenSeries.contains(key) { hiddenSeries.remove(key) } else { hiddenSeries.insert(key) }
+    }
 }
 struct VsSP500PerformanceChart: View {
     @ObservedObject var viewModel: PortfolioViewModel
     var isExpanded: Bool = false
     @Binding var expandedChart: GrowthChartZoomType?
-    var body: some View { VStack { Text("Chart 5") } }
+    var body: some View { EmptyView() }
 }
+// CHART 6: Invested cumulé vs Valeur réelle du portefeuille dans le temps
 struct InvestedVsValueChart: View {
     @ObservedObject var viewModel: PortfolioViewModel
     var isExpanded: Bool = false
     @Binding var expandedChart: GrowthChartZoomType?
-    var body: some View { VStack { Text("Chart 6") } }
+
+    var currentYear: Int { Calendar.current.component(.year, from: Date()) }
+
+    struct InvestedVsValueItem: Identifiable {
+        let id = UUID()
+        let year: Int
+        let category: String
+        let value: Double
+    }
+
+    // Inclut toutes les années depuis dividendStartYear jusqu'à currentYear, même vides (valeur 0)
+    var cleanData: [InvestedVsValueItem] {
+        let startYear = viewModel.dividendStartYear
+        var items: [InvestedVsValueItem] = []
+        var cumulativeInvested: Double = 0
+        var firstWalletSet = false
+
+        for year in startYear...currentYear {
+            guard let yearData = viewModel.growthYears.first(where: { $0.year == year }) else { continue }
+
+            // Premier startWallet non nul = base initiale
+            if !firstWalletSet && yearData.startWallet > 0 {
+                cumulativeInvested = yearData.startWallet
+                firstWalletSet = true
+            }
+            cumulativeInvested += yearData.invested
+
+            let effectiveEnd: Double
+            if year == currentYear {
+                effectiveEnd = viewModel.currentTotalCapital
+            } else {
+                effectiveEnd = yearData.endWallet
+            }
+
+            items.append(InvestedVsValueItem(year: year, category: "Portfolio Value", value: effectiveEnd))
+            items.append(InvestedVsValueItem(year: year, category: "Cumulative Invested", value: cumulativeInvested))
+        }
+        return items
+    }
+
+    var portfolioItems: [InvestedVsValueItem] { cleanData.filter { $0.category == "Portfolio Value" } }
+    var investedItems: [InvestedVsValueItem] { cleanData.filter { $0.category == "Cumulative Invested" } }
+
+    @State private var hiddenItems: Set<String> = []
+    @State private var hoveredYear: String? = nil
+
+    var hoveredPortfolio: InvestedVsValueItem? {
+        guard let y = hoveredYear else { return nil }
+        return portfolioItems.first { String($0.year) == y }
+    }
+    var hoveredInvested: InvestedVsValueItem? {
+        guard let y = hoveredYear else { return nil }
+        return investedItems.first { String($0.year) == y }
+    }
+
+    func color(for category: String) -> Color {
+        category == "Portfolio Value" ? .blue : .gray.opacity(0.6)
+    }
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            HStack {
+                if !isExpanded {
+                    Text("Invested vs Portfolio Value").font(.headline).foregroundColor(.secondary)
+                }
+                Spacer()
+                InteractiveLegendView(
+                    items: ["Portfolio Value", "Cumulative Invested"],
+                    colorMap: color,
+                    hiddenItems: $hiddenItems
+                )
+                if !isExpanded {
+                    Button(action: { expandedChart = .investedVsValue }) {
+                        Image(systemName: "plus.magnifyingglass").foregroundColor(.secondary)
+                    }.buttonStyle(.plain).padding(.leading, 8)
+                }
+            }.padding(.bottom, 4)
+
+            // Tooltip survol
+            if let pItem = hoveredPortfolio {
+                HStack(spacing: 16) {
+                    Text(String(pItem.year)).fontWeight(.bold)
+                    if !hiddenItems.contains("Portfolio Value") {
+                        HStack(spacing: 4) {
+                            Circle().fill(Color.blue).frame(width: 7, height: 7)
+                            Text(pItem.value.formatted(.currency(code: "EUR").precision(.fractionLength(0))))
+                                .foregroundColor(.blue).fontWeight(.semibold)
+                        }
+                    }
+                    if !hiddenItems.contains("Cumulative Invested"), let iItem = hoveredInvested {
+                        HStack(spacing: 4) {
+                            Circle().fill(Color.gray).frame(width: 7, height: 7)
+                            Text(iItem.value.formatted(.currency(code: "EUR").precision(.fractionLength(0))))
+                                .foregroundColor(.secondary).fontWeight(.semibold)
+                        }
+                    }
+                    if let iItem = hoveredInvested, !hiddenItems.contains("Portfolio Value"), !hiddenItems.contains("Cumulative Invested") {
+                        let diff = pItem.value - iItem.value
+                        Text(diff.formatted(.currency(code: "EUR").precision(.fractionLength(0)).sign(strategy: .always())))
+                            .foregroundColor(diff >= 0 ? .green : .red).fontWeight(.bold)
+                    }
+                }
+                .font(.caption)
+                .padding(.horizontal, 8).padding(.vertical, 4)
+                .background(Color(NSColor.windowBackgroundColor))
+                .cornerRadius(6)
+                .transition(.opacity)
+            }
+
+            if cleanData.isEmpty {
+                Spacer()
+                Text("Fill in the Growth table to see the evolution.").foregroundColor(.secondary).frame(maxWidth: .infinity, alignment: .center)
+                Spacer()
+            } else {
+                Chart {
+                    // Portfolio Value : AreaMark + LineMark avec même series pour éviter la ligne parasite
+                    if !hiddenItems.contains("Portfolio Value") {
+                        ForEach(portfolioItems) { item in
+                            AreaMark(
+                                x: .value("Year", String(item.year)),
+                                y: .value("€", item.value),
+                                series: .value("Series", "portfolio")
+                            )
+                            .foregroundStyle(
+                                LinearGradient(
+                                    colors: [Color.blue.opacity(0.35), Color.blue.opacity(0.05)],
+                                    startPoint: .top, endPoint: .bottom
+                                )
+                            )
+                            .interpolationMethod(.monotone)
+                        }
+                        ForEach(portfolioItems) { item in
+                            LineMark(
+                                x: .value("Year", String(item.year)),
+                                y: .value("€", item.value),
+                                series: .value("Series", "portfolio")
+                            )
+                            .foregroundStyle(Color.blue)
+                            .lineStyle(StrokeStyle(lineWidth: 2.5))
+                            .interpolationMethod(.monotone)
+                            .symbol { Circle().fill(Color.blue).frame(width: 7, height: 7) }
+                        }
+                    }
+
+                    // Cumulative Invested : ligne pointillée, série séparée
+                    if !hiddenItems.contains("Cumulative Invested") {
+                        ForEach(investedItems) { item in
+                            LineMark(
+                                x: .value("Year", String(item.year)),
+                                y: .value("€", item.value),
+                                series: .value("Series", "invested")
+                            )
+                            .foregroundStyle(Color.gray.opacity(0.7))
+                            .lineStyle(StrokeStyle(lineWidth: 2, dash: [6, 4]))
+                            .interpolationMethod(.linear)
+                            .symbol { Circle().fill(Color.gray).frame(width: 6, height: 6) }
+                        }
+                    }
+
+                    // Règle verticale au survol
+                    if let y = hoveredYear {
+                        RuleMark(x: .value("Year", y))
+                            .foregroundStyle(Color.secondary.opacity(0.4))
+                            .lineStyle(StrokeStyle(lineWidth: 1, dash: [4, 3]))
+                    }
+                }
+                .chartXSelection(value: $hoveredYear)
+                .chartYAxis {
+                    AxisMarks(position: .leading) { value in
+                        AxisGridLine(); AxisTick()
+                        AxisValueLabel {
+                            if let v = value.as(Double.self) {
+                                Text(v.formatted(.currency(code: "EUR").precision(.fractionLength(0)))).font(.system(size: 10))
+                            }
+                        }
+                    }
+                }
+                .chartXAxis {
+                    AxisMarks { value in
+                        AxisValueLabel { if let s = value.as(String.self) { Text(s).font(.caption) } }
+                    }
+                }
+                .animation(.easeInOut(duration: 0.1), value: hoveredYear)
+            }
+            BlueChipWatermark()
+        }
+        .padding()
+        .frame(minHeight: isExpanded ? 500 : 300, maxHeight: isExpanded ? .infinity : 300)
+        .background(Color(NSColor.controlBackgroundColor))
+        .cornerRadius(12)
+        .shadow(color: Color.black.opacity(0.05), radius: 2, x: 0, y: 1)
+    }
 }
 struct Benchmark10kChart: View {
     @ObservedObject var viewModel: PortfolioViewModel
     var isExpanded: Bool = false
     @Binding var expandedChart: GrowthChartZoomType?
-    var body: some View { VStack { Text("Chart 7") } }
+    var body: some View { EmptyView() }
 }
 
 // MARK: - FULL SCREEN ZOOM GROWTH
@@ -555,25 +908,39 @@ struct GrowthFullScreenChartView: View {
     @Environment(\.dismiss) var dismiss
     let zoomType: GrowthChartZoomType
     @ObservedObject var viewModel: PortfolioViewModel
-    
+
+    var chartTitle: String {
+        switch zoomType {
+        case .cashVsStocks:       return "Cash vs Stocks"
+        case .capitalVsGains:     return "Value Source"
+        case .gainsProvenance:    return "Gains Source"
+        case .annualReturnsCombo: return "Annual Returns"
+        case .vsSP500:            return "vs S&P 500"
+        case .investedVsValue:    return "Invested vs Portfolio Value"
+        case .benchmark10k:       return "Benchmark 10k"
+        }
+    }
+
     var body: some View {
         VStack(spacing: 20) {
             HStack {
-                Text("Analysis Detail").font(.title).fontWeight(.bold)
+                Text(chartTitle).font(.title).fontWeight(.bold)
                 Spacer()
-                Button(action: { dismiss() }) { Image(systemName: "xmark.circle.fill").font(.title).foregroundColor(.secondary) }.buttonStyle(.plain)
+                Button(action: { dismiss() }) {
+                    Image(systemName: "xmark.circle.fill").font(.title).foregroundColor(.secondary)
+                }.buttonStyle(.plain)
             }
-            
+
             switch zoomType {
-            case .cashVsStocks: CashVsStocksChart(viewModel: viewModel, isExpanded: true, expandedChart: .constant(nil))
-            case .capitalVsGains: CapitalVsGainsChart(viewModel: viewModel, isExpanded: true, expandedChart: .constant(nil))
-            case .gainsProvenance: GainsProvenanceChart(viewModel: viewModel, isExpanded: true, expandedChart: .constant(nil))
+            case .cashVsStocks:       CashVsStocksChart(viewModel: viewModel, isExpanded: true, expandedChart: .constant(nil))
+            case .capitalVsGains:     CapitalVsGainsChart(viewModel: viewModel, isExpanded: true, expandedChart: .constant(nil))
+            case .gainsProvenance:    GainsProvenanceChart(viewModel: viewModel, isExpanded: true, expandedChart: .constant(nil))
             case .annualReturnsCombo: AnnualReturnsComboChart(viewModel: viewModel, isExpanded: true, expandedChart: .constant(nil))
-            case .vsSP500: VsSP500PerformanceChart(viewModel: viewModel, isExpanded: true, expandedChart: .constant(nil))
-            case .investedVsValue: InvestedVsValueChart(viewModel: viewModel, isExpanded: true, expandedChart: .constant(nil))
-            case .benchmark10k: Benchmark10kChart(viewModel: viewModel, isExpanded: true, expandedChart: .constant(nil))
+            case .vsSP500:            VsSP500PerformanceChart(viewModel: viewModel, isExpanded: true, expandedChart: .constant(nil))
+            case .investedVsValue:    InvestedVsValueChart(viewModel: viewModel, isExpanded: true, expandedChart: .constant(nil))
+            case .benchmark10k:       Benchmark10kChart(viewModel: viewModel, isExpanded: true, expandedChart: .constant(nil))
             }
-            
+
         }.padding(30).frame(minWidth: 900, minHeight: 700)
     }
 }
