@@ -109,51 +109,61 @@ struct BenchmarkDashboardSection: View {
     var currentYear: Int { Calendar.current.component(.year, from: Date()) }
     var startYear: Int { viewModel.dividendStartYear }
 
-    // Retours du portefeuille par année (depuis GrowthView)
+    // Toutes les années depuis le début, 2022 inclus même si vide
+    var allYears: [Int] { Array(startYear...currentYear) }
+
+    // Retours du portefeuille — années sans données = 0% (tu investissais mais sans tracker)
     var portfolioReturns: [Int: Double] {
         var dict: [Int: Double] = [:]
-        for yearData in viewModel.growthYears {
-            guard yearData.year >= startYear && yearData.year <= currentYear else { continue }
-            let isCurrentYear = yearData.year == currentYear
+        for year in allYears {
+            guard let yearData = viewModel.growthYears.first(where: { $0.year == year }) else {
+                dict[year] = 0; continue
+            }
+            let isCurrentYear = year == currentYear
             let effectiveEnd = isCurrentYear ? viewModel.currentTotalCapital : yearData.endWallet
             let base = yearData.startWallet + yearData.invested
-            guard base > 0 else { continue }
-            dict[yearData.year] = ((effectiveEnd - base) / base) * 100.0
+            if base > 0 {
+                dict[year] = ((effectiveEnd - base) / base) * 100.0
+            } else {
+                dict[year] = 0  // 2022 sans données = 0%
+            }
         }
         return dict
     }
 
-    var activeYears: [Int] { Array(startYear...currentYear) }
-
+    // Moyenne portfolio sur TOUTES les années (2022 inclus à 0%)
     var portfolioAvgReturn: Double {
-        let vals = activeYears.compactMap { portfolioReturns[$0] }
+        let vals = allYears.map { portfolioReturns[$0] ?? 0 }
         guard !vals.isEmpty else { return 0 }
         return vals.reduce(0, +) / Double(vals.count)
     }
 
     var portfolioCurrentYear: Double { portfolioReturns[currentYear] ?? 0 }
 
+    // Meilleur indice sur les mêmes années (allYears, années manquantes = 0%)
     var bestIndex: BenchmarkIndex? {
         viewModel.benchmarkIndices.max { a, b in
-            a.averageReturn(years: activeYears) < b.averageReturn(years: activeYears)
+            a.averageReturn(years: allYears) < b.averageReturn(years: allYears)
         }
     }
 
     var portfolioVsBest: Double {
         guard let best = bestIndex else { return 0 }
-        return portfolioAvgReturn - best.averageReturn(years: activeYears)
+        return portfolioAvgReturn - best.averageReturn(years: allYears)
     }
 
-    // 10k simulé pour le portefeuille
+    // 10k simulé pour le portefeuille sur toutes les années
     var portfolio10k: Double {
         var value = 10000.0
-        for y in activeYears { value *= (1 + (portfolioReturns[y] ?? 0) / 100.0) }
+        for y in allYears { value *= (1 + (portfolioReturns[y] ?? 0) / 100.0) }
         return value
     }
 
     var best10k: Double {
         guard let best = bestIndex else { return 0 }
-        return best.value10k(upToYear: currentYear, startYear: startYear)
+        var value = 10000.0
+        for y in allYears { value *= (1 + (best.returns[y] ?? 0) / 100.0) }
+        return value
     }
 
     var body: some View {
@@ -188,7 +198,7 @@ struct BenchmarkDashboardSection: View {
                     Text("Best Index (Avg.)").font(.subheadline).foregroundColor(.secondary).lineLimit(1)
                     if let best = bestIndex {
                         Text(best.name).font(.title2).fontWeight(.bold).lineLimit(1).minimumScaleFactor(0.7)
-                        Text(best.averageReturn(years: activeYears).formatted(.number.precision(.fractionLength(2)).sign(strategy: .always())) + "%")
+                        Text(best.averageReturn(years: allYears).formatted(.number.precision(.fractionLength(2)).sign(strategy: .always())) + "%")
                             .font(.caption).foregroundColor(.secondary)
                     } else {
                         Text("—").font(.title2).fontWeight(.bold).foregroundColor(.secondary)
@@ -269,13 +279,15 @@ struct BenchmarkGoalProgressBar: View {
 
     var portfolioAvgReturn: Double {
         var vals: [Double] = []
-        for yearData in viewModel.growthYears {
-            guard yearData.year >= startYear && yearData.year <= currentYear else { continue }
-            let isCurrentYear = yearData.year == currentYear
+        let allYears = Array(startYear...currentYear)
+        for year in allYears {
+            guard let yearData = viewModel.growthYears.first(where: { $0.year == year }) else {
+                vals.append(0); continue
+            }
+            let isCurrentYear = year == currentYear
             let effectiveEnd = isCurrentYear ? viewModel.currentTotalCapital : yearData.endWallet
             let base = yearData.startWallet + yearData.invested
-            guard base > 0 else { continue }
-            vals.append(((effectiveEnd - base) / base) * 100.0)
+            vals.append(base > 0 ? ((effectiveEnd - base) / base) * 100.0 : 0)
         }
         guard !vals.isEmpty else { return 0 }
         return vals.reduce(0, +) / Double(vals.count)
@@ -527,7 +539,8 @@ struct BenchmarkAverageRowView: View {
     @ObservedObject var viewModel: PortfolioViewModel
 
     var portfolioAvg: Double {
-        let vals = years.compactMap { portfolioReturn($0) }
+        // nil = année sans données (ex: 2022) → comptée comme 0%
+        let vals = years.map { portfolioReturn($0) ?? 0 }
         guard !vals.isEmpty else { return 0 }
         return vals.reduce(0, +) / Double(vals.count)
     }
@@ -927,3 +940,4 @@ struct BenchmarkFullScreenChartView: View {
         }.padding(30).frame(minWidth: 900, minHeight: 700)
     }
 }
+
