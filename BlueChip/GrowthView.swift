@@ -100,7 +100,7 @@ struct GrowthDashboardSection: View {
     var allTimeReturnEUR: Double { viewModel.totalROIValue }
     var allTimeReturnPercent: Double { viewModel.totalROIPercent }
     
-    // 2. RECHERCHE DES ANNÉES ACTIVES (avec données réelles uniquement)
+    // 2. ANNÉES ACTIVES + COUNT = année courante - année de départ + 1
     var activeYears: [GrowthYear] {
         viewModel.growthYears.filter { yearData in
             let isCurrentYear = yearData.year == currentYear
@@ -108,7 +108,7 @@ struct GrowthDashboardSection: View {
             return yearData.year <= currentYear && (yearData.startWallet > 0 || yearData.invested > 0 || effectiveEnd > 0)
         }
     }
-    var activeYearsCount: Int { max(1, activeYears.count) }
+    var activeYearsCount: Int { currentYear - viewModel.dividendStartYear + 1 }
     
     // 3. MOYENNES
     var averageReturnEUR: Double { allTimeReturnEUR / Double(activeYearsCount) }
@@ -556,15 +556,15 @@ struct AnnualReturnsComboChart: View {
     }
 
     var data: [AnnualReturnItem] {
-        viewModel.growthYears.compactMap { yearData in
-            let effectiveEnd = (yearData.year == currentYear) ? viewModel.currentTotalCapital : yearData.endWallet
+        let startYear = viewModel.dividendStartYear
+        return (startYear...currentYear).compactMap { year in
+            guard let yearData = viewModel.growthYears.first(where: { $0.year == year }) else { return nil }
+            let effectiveEnd = (year == currentYear) ? viewModel.currentTotalCapital : yearData.endWallet
             let base = yearData.startWallet + yearData.invested
-            guard base > 0 else { return nil }
             let retEUR = effectiveEnd - base
-            let retPct = (retEUR / base) * 100.0
-            return AnnualReturnItem(year: yearData.year, returnEUR: retEUR, returnPercent: retPct)
+            let retPct = base > 0 ? (retEUR / base) * 100.0 : 0
+            return AnnualReturnItem(year: year, returnEUR: retEUR, returnPercent: retPct)
         }
-        .filter { $0.year <= currentYear }
     }
 
     var maxAbsEUR: Double { max(data.map { abs($0.returnEUR) }.max() ?? 1, 1) }
@@ -713,32 +713,19 @@ struct InvestedVsValueChart: View {
         let value: Double
     }
 
-    // Inclut toutes les années depuis dividendStartYear jusqu'à currentYear, même vides (valeur 0)
+    // Cumul des "Invested" uniquement — correspond exactement à la colonne TOTAL Invest du tableau
+    // Ex: 2023: 5350 / 2024: 5350+1050=6400 / 2025: 6400+10100=16500 / 2026: 16500+1000=17500
     var cleanData: [InvestedVsValueItem] {
         let startYear = viewModel.dividendStartYear
         var items: [InvestedVsValueItem] = []
-        var cumulativeInvested: Double = 0
-        var firstWalletSet = false
+        var cumInvested: Double = 0
 
         for year in startYear...currentYear {
             guard let yearData = viewModel.growthYears.first(where: { $0.year == year }) else { continue }
-
-            // Premier startWallet non nul = base initiale
-            if !firstWalletSet && yearData.startWallet > 0 {
-                cumulativeInvested = yearData.startWallet
-                firstWalletSet = true
-            }
-            cumulativeInvested += yearData.invested
-
-            let effectiveEnd: Double
-            if year == currentYear {
-                effectiveEnd = viewModel.currentTotalCapital
-            } else {
-                effectiveEnd = yearData.endWallet
-            }
-
+            cumInvested += yearData.invested
+            let effectiveEnd = (year == currentYear) ? viewModel.currentTotalCapital : yearData.endWallet
             items.append(InvestedVsValueItem(year: year, category: "Portfolio Value", value: effectiveEnd))
-            items.append(InvestedVsValueItem(year: year, category: "Cumulative Invested", value: cumulativeInvested))
+            items.append(InvestedVsValueItem(year: year, category: "Cumulative Invested", value: cumInvested))
         }
         return items
     }
