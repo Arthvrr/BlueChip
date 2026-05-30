@@ -73,6 +73,8 @@ struct PortfolioSaveData: Codable {
     var growthGoalType: GrowthGoalType?
     var growthGoalTarget: Double?
     var growthYears: [GrowthYear]?
+    var benchmarkIndices: [BenchmarkIndex]?
+    var benchmarkGoalTarget: Double?
 }
 
 struct ExpectedMonthlyDividendSeries: Identifiable {
@@ -95,6 +97,32 @@ struct PriceCompareItem: Identifiable { let id = UUID(); let ticker: String; let
 struct ScatterItem: Identifiable { let id = UUID(); let ticker: String; let weight: Double; let roi: Double }
 struct ValueSourceItem: Identifiable { let id = UUID(); let category: String; let value: Double }
 struct TreemapNode: Identifiable { let id = UUID(); let position: Position; let rect: CGRect }
+
+// MARK: - BENCHMARK MODELS
+
+struct BenchmarkIndex: Identifiable, Codable {
+    var id: UUID = UUID()
+    var name: String
+    // Clé = année (ex: 2022), valeur = performance en % (ex: -19.44)
+    var returns: [Int: Double]
+
+    // Valeur d'un investissement de 10 000€ à la fin de chaque année
+    func value10k(upToYear year: Int, startYear: Int) -> Double {
+        var value = 10000.0
+        for y in startYear...year {
+            let ret = returns[y] ?? 0
+            value *= (1 + ret / 100.0)
+        }
+        return value
+    }
+
+    // Retour annuel moyen
+    func averageReturn(years: [Int]) -> Double {
+        let validYears = years.compactMap { returns[$0] }
+        guard !validYears.isEmpty else { return 0 }
+        return validYears.reduce(0, +) / Double(validYears.count)
+    }
+}
 
 // MARK: - GROWTH MODELS
 

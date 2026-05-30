@@ -47,6 +47,8 @@ class PortfolioViewModel: ObservableObject {
     @Published var growthGoalTarget: Double = 10.0 { didSet { saveData() } }
 
     @Published var growthYears: [GrowthYear] = [] { didSet { saveData() } }
+    @Published var benchmarkIndices: [BenchmarkIndex] = [] { didSet { saveData() } }
+    @Published var benchmarkGoalTarget: Double = 10.0 { didSet { saveData() } }
     
     private let yahooService = YahooFinanceService()
     
@@ -201,6 +203,8 @@ class PortfolioViewModel: ObservableObject {
             growthGoalType: growthGoalType,
             growthGoalTarget: growthGoalTarget,
             growthYears: growthYears,
+            benchmarkIndices: benchmarkIndices,
+            benchmarkGoalTarget: benchmarkGoalTarget,
         )
         do { try JSONEncoder().encode(dataToSave).write(to: saveFileURL, options: [.atomic]) } catch {}
     }
@@ -222,6 +226,8 @@ class PortfolioViewModel: ObservableObject {
             if let savedGrowthGoalType = decoded.growthGoalType { growthGoalType = savedGrowthGoalType }
             if let savedGrowthGoalTarget = decoded.growthGoalTarget { growthGoalTarget = savedGrowthGoalTarget }
             if let savedGrowthYears = decoded.growthYears { growthYears = savedGrowthYears }
+            if let savedBenchmarks = decoded.benchmarkIndices { benchmarkIndices = savedBenchmarks }
+            if let savedBenchmarkGoal = decoded.benchmarkGoalTarget { benchmarkGoalTarget = savedBenchmarkGoal }
         } catch { print("ℹ️ JSON File not found or read error.") }
     }
 }
