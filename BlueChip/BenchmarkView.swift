@@ -449,14 +449,7 @@ struct BenchmarkRowView: View {
         ScrollView(.horizontal, showsIndicators: false) {
             HStack(spacing: 0) {
                 // Année
-                HStack(spacing: 4) {
-                    Text(String(year)).fontWeight(.bold)
-                    if isCurrentYear {
-                        Text("live").font(.caption2).padding(.horizontal, 4).padding(.vertical, 1)
-                            .background(Color.blue.opacity(0.15)).foregroundColor(.blue).cornerRadius(3)
-                    }
-                }
-                .frame(width: 60, alignment: .leading).padding(.horizontal, 8)
+                
 
                 // Portfolio
                 Group {
@@ -502,8 +495,8 @@ struct BenchmarkReturnCell: View {
                     Text(val.formatted(.number.precision(.fractionLength(2)).sign(strategy: .always())) + "%")
                         .fontWeight(.bold)
                         .padding(.horizontal, 8).padding(.vertical, 2)
-                        .background((val >= 0 ? Color.green : Color.red).opacity(0.12))
-                        .foregroundColor(val >= 0 ? color : .red)
+                        //.background((val >= 0 ? Color.green : Color.red).opacity(0.12))
+                        .foregroundColor(color)
                         .cornerRadius(4)
                         .font(.system(size: 13))
                         .onTapGesture { startEdit() }
