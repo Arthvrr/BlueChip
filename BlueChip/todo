@@ -1,3 +1,12 @@
 ajouter changements de page par ALT+TAB
 
 reconnaitre si on ajoute une action qui a le mm ticker pour l'ajouter dans la position déjà prête
+
+benchmarkpage corriger colonne indices (prendre le + de largeur possible entre les indices & pf)
+
+ajouter graphes transactionsview
+
+ajouter page calendar de dividendes --> + notif quand jour de dividendes !
+
+ajouter date earnings boite --> + notif la veille quand earnings sont dispos
+ajouter lien earnings boite --> pouvoir cliquer sur le lien quand earnings sont dispos

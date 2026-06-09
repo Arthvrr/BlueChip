@@ -49,6 +49,9 @@ class PortfolioViewModel: ObservableObject {
     @Published var growthYears: [GrowthYear] = [] { didSet { saveData() } }
     @Published var benchmarkIndices: [BenchmarkIndex] = [] { didSet { saveData() } }
     @Published var benchmarkGoalTarget: Double = 10.0 { didSet { saveData() } }
+    @Published var transactions: [Transaction] = [] { didSet { saveData() } }
+    @Published var transactionCustomColumns: [String] = ["State Tax", "Broker Tax", "Other Taxes"] { didSet { saveData() } }
+    @Published var transactionGoalTarget: Double = 50 { didSet { saveData() } }
     
     private let yahooService = YahooFinanceService()
     
@@ -205,6 +208,9 @@ class PortfolioViewModel: ObservableObject {
             growthYears: growthYears,
             benchmarkIndices: benchmarkIndices,
             benchmarkGoalTarget: benchmarkGoalTarget,
+            transactions: transactions,
+            transactionCustomColumns: transactionCustomColumns,
+            transactionGoalTarget: transactionGoalTarget,
         )
         do { try JSONEncoder().encode(dataToSave).write(to: saveFileURL, options: [.atomic]) } catch {}
     }
@@ -228,6 +234,9 @@ class PortfolioViewModel: ObservableObject {
             if let savedGrowthYears = decoded.growthYears { growthYears = savedGrowthYears }
             if let savedBenchmarks = decoded.benchmarkIndices { benchmarkIndices = savedBenchmarks }
             if let savedBenchmarkGoal = decoded.benchmarkGoalTarget { benchmarkGoalTarget = savedBenchmarkGoal }
+            if let savedTx = decoded.transactions { transactions = savedTx }
+            if let savedCols = decoded.transactionCustomColumns { transactionCustomColumns = savedCols }
+            if let savedTxGoal = decoded.transactionGoalTarget { transactionGoalTarget = savedTxGoal }
         } catch { print("ℹ️ JSON File not found or read error.") }
     }
 }

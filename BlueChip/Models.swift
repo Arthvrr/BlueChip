@@ -75,6 +75,9 @@ struct PortfolioSaveData: Codable {
     var growthYears: [GrowthYear]?
     var benchmarkIndices: [BenchmarkIndex]?
     var benchmarkGoalTarget: Double?
+    var transactions: [Transaction]?
+    var transactionCustomColumns: [String]?
+    var transactionGoalTarget: Double?
 }
 
 struct ExpectedMonthlyDividendSeries: Identifiable {
@@ -121,6 +124,59 @@ struct BenchmarkIndex: Identifiable, Codable {
         let validYears = years.compactMap { returns[$0] }
         guard !validYears.isEmpty else { return 0 }
         return validYears.reduce(0, +) / Double(validYears.count)
+    }
+}
+
+// MARK: - TRANSACTION MODELS
+
+enum TransactionType: String, Codable, CaseIterable {
+    case deposit   = "Deposit"
+    case withdrawal = "Withdrawal"
+    case buy       = "Buy"
+    case sell      = "Sell"
+    case dividend  = "Dividend"
+    case other     = "Other"
+
+    var icon: String {
+        switch self {
+        case .deposit:    return "arrow.down.circle.fill"
+        case .withdrawal: return "arrow.up.circle.fill"
+        case .buy:        return "cart.fill"
+        case .sell:       return "dollarsign.circle.fill"
+        case .dividend:   return "banknote.fill"
+        case .other:      return "ellipsis.circle.fill"
+        }
+    }
+
+    var color: String {
+        switch self {
+        case .deposit:    return "green"
+        case .withdrawal: return "red"
+        case .buy:        return "blue"
+        case .sell:       return "orange"
+        case .dividend:   return "mint"
+        case .other:      return "gray"
+        }
+    }
+}
+
+struct Transaction: Identifiable, Codable {
+    var id: UUID = UUID()
+    var date: Date
+    var type: TransactionType
+    var ticker: String          // Vide si deposit/withdrawal
+    var quantity: Double        // 0 si deposit/withdrawal
+    var amountEUR: Double       // Montant total en €
+    var note: String
+    // Colonnes custom (clé = nom de la colonne, valeur = montant en €)
+    var customFields: [String: Double]
+
+    init(id: UUID = UUID(), date: Date = Date(), type: TransactionType = .buy,
+         ticker: String = "", quantity: Double = 0, amountEUR: Double = 0,
+         note: String = "", customFields: [String: Double] = [:]) {
+        self.id = id; self.date = date; self.type = type; self.ticker = ticker
+        self.quantity = quantity; self.amountEUR = amountEUR; self.note = note
+        self.customFields = customFields
     }
 }
 
