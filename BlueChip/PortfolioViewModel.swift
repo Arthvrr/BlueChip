@@ -176,11 +176,11 @@ class PortfolioViewModel: ObservableObject {
             .sorted { $0.ticker < $1.ticker }
     }
     
-    func addPosition(ticker: String, quantity: Double, pru: Double, dividend: Double, country: String, sector: String, marketCap: String, purchaseDate: Date) {
-        positions.append(Position(ticker: ticker.uppercased(), quantity: quantity, averageCost: pru, currentPrice: pru, annualDividendNet: dividend, country: country, sector: sector, marketCap: marketCap, purchaseDate: purchaseDate))
+    func addPosition(ticker: String, quantity: Double, pru: Double, dividend: Double, dividendGrowth5Y: Double, country: String, sector: String, marketCap: String, purchaseDate: Date) {
+        positions.append(Position(ticker: ticker.uppercased(), quantity: quantity, averageCost: pru, currentPrice: pru, annualDividendNet: dividend, country: country, sector: sector, marketCap: marketCap, purchaseDate: purchaseDate, dividendGrowth5Y: dividendGrowth5Y))
         positions.sort(using: sortOrder); Task { await refreshPrices() }
     }
-    func updatePosition(id: UUID, quantity: Double, pru: Double, dividend: Double, country: String, sector: String, marketCap: String, dividendMonths: Set<Int>, purchaseDate: Date) {
+    func updatePosition(id: UUID, quantity: Double, pru: Double, dividend: Double, dividendGrowth5Y: Double, country: String, sector: String, marketCap: String, dividendMonths: Set<Int>, purchaseDate: Date) {
         if let idx = positions.firstIndex(where: { $0.id == id }) {
             positions[idx].quantity = quantity; positions[idx].averageCost = pru; positions[idx].annualDividendNet = dividend; positions[idx].country = country; positions[idx].sector = sector; positions[idx].marketCap = marketCap; positions[idx].dividendMonths = dividendMonths; positions[idx].purchaseDate = purchaseDate; positions.sort(using: sortOrder)
         }

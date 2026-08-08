@@ -78,17 +78,35 @@ struct InteractiveLegendView: View {
 struct AddPositionView: View {
     @Environment(\.dismiss) var dismiss; @ObservedObject var viewModel: PortfolioViewModel
     @State private var ticker = ""; @State private var quantity: Double = 0; @State private var pru: Double = 0
-    @State private var dividend: Double = 0; @State private var country = ""; @State private var purchaseDate = Date()
+    @State private var dividend: Double = 0
+    @State private var dividendGrowth5Y: Double = 5.0 // <-- NOUVEAU (Valeur par défaut 5%)
+    @State private var country = ""; @State private var purchaseDate = Date()
     @State private var sector = ""; @State private var marketCap = ""
+    
     var body: some View {
         Form {
             Section(header: Text("New Position").font(.headline)) {
-                TextField("Ticker (e.g., AAPL)", text: $ticker); TextField("Quantity", value: $quantity, format: .number)
-                TextField("Avg Cost (Original Currency)", value: $pru, format: .number); TextField("Net Dividend/Share", value: $dividend, format: .number)
-                TextField("Country (e.g., US, FR)", text: $country); TextField("Sector", text: $sector); TextField("Market Cap", text: $marketCap)
+                TextField("Ticker (e.g., AAPL)", text: $ticker)
+                TextField("Quantity", value: $quantity, format: .number)
+                TextField("Avg Cost (Original Currency)", value: $pru, format: .number)
+                TextField("Net Dividend/Share", value: $dividend, format: .number)
+                TextField("Div Growth 5Y (%)", value: $dividendGrowth5Y, format: .number) // <-- NOUVEAU
+                TextField("Country (e.g., US, FR)", text: $country)
+                TextField("Sector", text: $sector)
+                TextField("Market Cap", text: $marketCap)
                 DatePicker("Purchase Date", selection: $purchaseDate, displayedComponents: .date)
             }.padding()
-            HStack { Button("Cancel") { dismiss() }.keyboardShortcut(.cancelAction); Spacer(); Button("Add") { if !ticker.isEmpty && quantity > 0 { viewModel.addPosition(ticker: ticker, quantity: quantity, pru: pru, dividend: dividend, country: country, sector: sector, marketCap: marketCap, purchaseDate: purchaseDate); dismiss() } }.keyboardShortcut(.defaultAction).buttonStyle(.borderedProminent) }.padding()
+            HStack {
+                Button("Cancel") { dismiss() }.keyboardShortcut(.cancelAction)
+                Spacer()
+                Button("Add") {
+                    if !ticker.isEmpty && quantity > 0 {
+                        // <-- NOUVEAU : On passe dividendGrowth5Y à la fonction
+                        viewModel.addPosition(ticker: ticker, quantity: quantity, pru: pru, dividend: dividend, dividendGrowth5Y: dividendGrowth5Y, country: country, sector: sector, marketCap: marketCap, purchaseDate: purchaseDate)
+                        dismiss()
+                    }
+                }.keyboardShortcut(.defaultAction).buttonStyle(.borderedProminent)
+            }.padding()
         }.frame(width: 400).padding()
     }
 }
@@ -96,22 +114,57 @@ struct AddPositionView: View {
 struct EditPositionView: View {
     @Environment(\.dismiss) var dismiss; @ObservedObject var viewModel: PortfolioViewModel; let position: Position
     @State private var quantity: Double; @State private var pru: Double; @State private var dividend: Double
+    @State private var dividendGrowth5Y: Double // <-- NOUVEAU
     @State private var country: String; @State private var sector: String; @State private var marketCap: String
     @State private var purchaseDate: Date; @State private var dividendMonths: Set<Int>
     let monthsNames = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"]
-    init(viewModel: PortfolioViewModel, position: Position) { self.viewModel = viewModel; self.position = position; _quantity = State(initialValue: position.quantity); _pru = State(initialValue: position.averageCost); _dividend = State(initialValue: position.annualDividendNet); _country = State(initialValue: position.country); _sector = State(initialValue: position.sector); _marketCap = State(initialValue: position.marketCap); _purchaseDate = State(initialValue: position.purchaseDate); _dividendMonths = State(initialValue: position.dividendMonths) }
+    
+    init(viewModel: PortfolioViewModel, position: Position) {
+        self.viewModel = viewModel; self.position = position
+        _quantity = State(initialValue: position.quantity)
+        _pru = State(initialValue: position.averageCost)
+        _dividend = State(initialValue: position.annualDividendNet)
+        _dividendGrowth5Y = State(initialValue: position.dividendGrowth5Y) // <-- NOUVEAU
+        _country = State(initialValue: position.country)
+        _sector = State(initialValue: position.sector)
+        _marketCap = State(initialValue: position.marketCap)
+        _purchaseDate = State(initialValue: position.purchaseDate)
+        _dividendMonths = State(initialValue: position.dividendMonths)
+    }
+    
     var body: some View {
         Form {
             Section(header: Text("Edit \(position.ticker)").font(.headline)) {
-                TextField("Quantity", value: $quantity, format: .number); TextField("Avg Cost", value: $pru, format: .number)
-                TextField("Net Dividend/Share", value: $dividend, format: .number); TextField("Country", text: $country)
-                TextField("Sector", text: $sector); TextField("Market Cap", text: $marketCap)
+                TextField("Quantity", value: $quantity, format: .number)
+                TextField("Avg Cost", value: $pru, format: .number)
+                TextField("Net Dividend/Share", value: $dividend, format: .number)
+                TextField("Div Growth 5Y (%)", value: $dividendGrowth5Y, format: .number) // <-- NOUVEAU
+                TextField("Country", text: $country)
+                TextField("Sector", text: $sector)
+                TextField("Market Cap", text: $marketCap)
                 DatePicker("Purchase Date", selection: $purchaseDate, displayedComponents: .date)
             }.padding(.bottom, 8)
             Section(header: Text("Dividend Months").font(.subheadline).foregroundColor(.secondary)) {
-                LazyVGrid(columns: Array(repeating: GridItem(.flexible()), count: 6), spacing: 8) { ForEach(0..<12, id: \.self) { index in let m = index + 1; Toggle(monthsNames[index], isOn: Binding(get: { dividendMonths.contains(m) }, set: { isSet in if isSet { dividendMonths.insert(m) } else { dividendMonths.remove(m) } })).toggleStyle(.button).font(.caption) } }
+                LazyVGrid(columns: Array(repeating: GridItem(.flexible()), count: 6), spacing: 8) {
+                    ForEach(0..<12, id: \.self) { index in
+                        let m = index + 1
+                        Toggle(monthsNames[index], isOn: Binding(
+                            get: { dividendMonths.contains(m) },
+                            set: { isSet in if isSet { dividendMonths.insert(m) } else { dividendMonths.remove(m) } }
+                        )).toggleStyle(.button).font(.caption)
+                    }
+                }
             }.padding(.bottom, 16)
-            HStack { Button(role: .destructive) { viewModel.deletePosition(id: position.id); dismiss() } label: { Text("Delete") }; Spacer(); Button("Cancel") { dismiss() }.keyboardShortcut(.cancelAction); Button("Save") { viewModel.updatePosition(id: position.id, quantity: quantity, pru: pru, dividend: dividend, country: country, sector: sector, marketCap: marketCap, dividendMonths: dividendMonths, purchaseDate: purchaseDate); dismiss() }.keyboardShortcut(.defaultAction).buttonStyle(.borderedProminent) }
+            HStack {
+                Button(role: .destructive) { viewModel.deletePosition(id: position.id); dismiss() } label: { Text("Delete") }
+                Spacer()
+                Button("Cancel") { dismiss() }.keyboardShortcut(.cancelAction)
+                Button("Save") {
+                    // <-- NOUVEAU : On passe dividendGrowth5Y à la fonction
+                    viewModel.updatePosition(id: position.id, quantity: quantity, pru: pru, dividend: dividend, dividendGrowth5Y: dividendGrowth5Y, country: country, sector: sector, marketCap: marketCap, dividendMonths: dividendMonths, purchaseDate: purchaseDate)
+                    dismiss()
+                }.keyboardShortcut(.defaultAction).buttonStyle(.borderedProminent)
+            }
         }.frame(width: 450).padding()
     }
 }
