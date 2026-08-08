@@ -2,6 +2,15 @@ import SwiftUI
 import Charts
 
 // =========================================================================
+// MARK: - ZOOM ENUM
+// =========================================================================
+
+enum TxChartZoomType: String, Identifiable {
+    case annualCount, typeSummary, buysOverTime, taxBreakdown
+    var id: String { self.rawValue }
+}
+
+// =========================================================================
 // MARK: - HELPERS
 // =========================================================================
 
@@ -57,6 +66,9 @@ struct TransactionsView: View {
     @State private var editingTransaction: Transaction? = nil
     @State private var searchText          = ""
     @State private var filterType: TransactionType? = nil
+    
+    // NOUVEAU: État pour le zoom des graphes
+    @State private var chartToZoom: TxChartZoomType? = nil
 
     var body: some View {
         ScrollView(.vertical) {
@@ -79,7 +91,7 @@ struct TransactionsView: View {
 
                 TransactionsYearlySummarySection(viewModel: viewModel, privacyMode: $privacyMode)
 
-                TransactionsChartsSection(viewModel: viewModel, privacyMode: $privacyMode)
+                TransactionsChartsSection(viewModel: viewModel, privacyMode: $privacyMode, chartToZoom: $chartToZoom)
             }
             .padding()
         }
@@ -94,6 +106,10 @@ struct TransactionsView: View {
         }
         .sheet(isPresented: $showAddColumnSheet) {
             AddCustomColumnView(viewModel: viewModel)
+        }
+        // NOUVEAU: Sheet pour le zoom
+        .sheet(item: $chartToZoom) { type in
+            TransactionsFullScreenChartView(zoomType: type, viewModel: viewModel, privacyMode: $privacyMode)
         }
     }
 }
@@ -186,7 +202,7 @@ struct TransactionsGoalBar: View {
 }
 
 // =========================================================================
-// MARK: - TABLE SECTION  (responsive avec GeometryReader)
+// MARK: - TABLE SECTION
 // =========================================================================
 
 struct TransactionsTableSection: View {
@@ -250,15 +266,11 @@ struct TransactionsTableSection: View {
                 }.buttonStyle(.borderedProminent)
             }.padding(.bottom, 4)
 
-            // Responsive table via GeometryReader
             GeometryReader { geo in
                 let layout = TxColumnLayout.compute(totalWidth: geo.size.width, customCount: columns.count)
                 VStack(spacing: 0) {
-                    // Header
-                    txHeaderRow(layout: layout)
-                        .background(Color(NSColor.windowBackgroundColor))
+                    txHeaderRow(layout: layout).background(Color(NSColor.windowBackgroundColor))
                     Divider()
-                    // Rows
                     if filtered.isEmpty {
                         VStack(spacing: 12) {
                             Image(systemName: "clock.arrow.circlepath").font(.system(size: 36)).foregroundColor(.secondary)
@@ -326,7 +338,6 @@ struct TransactionsTableSection: View {
     }
 }
 
-// MARK: - Transaction Row (responsive)
 struct TransactionRowView: View {
     let tx: Transaction
     let columns: [String]
@@ -393,7 +404,7 @@ struct TransactionRowView: View {
 }
 
 // =========================================================================
-// MARK: - YEARLY SUMMARY (responsive)
+// MARK: - YEARLY SUMMARY
 // =========================================================================
 
 struct TransactionsYearlySummarySection: View {
@@ -407,7 +418,6 @@ struct TransactionsYearlySummarySection: View {
         viewModel.transactions.filter { Calendar.current.component(.year, from: $0.date) == year }
     }
 
-    // Column widths for the summary table
     let yearW: CGFloat      = 65
     let countW: CGFloat     = 105
     let typeW: CGFloat      = 65
@@ -421,13 +431,11 @@ struct TransactionsYearlySummarySection: View {
                 Text("No data yet.").foregroundColor(.secondary).padding()
             } else {
                 VStack(spacing: 0) {
-                    // Header
                     ScrollView(.horizontal, showsIndicators: false) {
                         summaryHeaderRow()
                     }
                     .background(Color(NSColor.windowBackgroundColor))
                     Divider()
-                    // Rows
                     ScrollView(.horizontal, showsIndicators: false) {
                         VStack(spacing: 0) {
                             ForEach(years, id: \.self) { year in
@@ -571,17 +579,18 @@ struct YearlyTotalsRowView: View {
 struct TransactionsChartsSection: View {
     @ObservedObject var viewModel: PortfolioViewModel
     @Binding var privacyMode: Bool
+    @Binding var chartToZoom: TxChartZoomType?
 
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
             Text("Transaction Analytics").font(.title2).fontWeight(.bold).foregroundColor(.secondary)
             HStack(spacing: 24) {
-                TxAnnualCountChart(viewModel: viewModel)
-                TxTotalByTypeChart(viewModel: viewModel, privacyMode: $privacyMode)
+                TxAnnualCountChart(viewModel: viewModel, expandedChart: $chartToZoom)
+                TxTotalByTypeChart(viewModel: viewModel, privacyMode: $privacyMode, expandedChart: $chartToZoom)
             }
             HStack(spacing: 24) {
-                TxBuysOverTimeChart(viewModel: viewModel, privacyMode: $privacyMode)
-                TxTaxBreakdownChart(viewModel: viewModel, privacyMode: $privacyMode)
+                TxBuysOverTimeChart(viewModel: viewModel, privacyMode: $privacyMode, expandedChart: $chartToZoom)
+                TxTaxBreakdownChart(viewModel: viewModel, privacyMode: $privacyMode, expandedChart: $chartToZoom)
             }
         }
     }
@@ -593,10 +602,12 @@ struct TransactionsChartsSection: View {
 
 struct TxAnnualCountChart: View {
     @ObservedObject var viewModel: PortfolioViewModel
+    var isExpanded: Bool = false
+    @Binding var expandedChart: TxChartZoomType?
 
     struct AnnualCountItem: Identifiable {
         let id = UUID()
-        let year: Int
+        let year: String
         let type: TransactionType
         let count: Int
     }
@@ -616,13 +627,14 @@ struct TxAnnualCountChart: View {
             let txYear = viewModel.transactions.filter { Calendar.current.component(.year, from: $0.date) == year }
             for type in stackedTypes {
                 let count = txYear.filter { $0.type == type }.count
-                items.append(AnnualCountItem(year: year, type: type, count: count))
+                items.append(AnnualCountItem(year: String(year), type: type, count: count))
             }
         }
         return items
     }
 
     @State private var hiddenTypes: Set<String> = []
+    @State private var hoveredYear: String? = nil
 
     var seriesLabels: [String] { [TransactionType.buy, .sell, .deposit, .withdrawal].map { $0.rawValue } }
     func color(for label: String) -> Color {
@@ -633,26 +645,42 @@ struct TxAnnualCountChart: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 8) {
             HStack {
-                Text("Transactions per Year").font(.headline).foregroundColor(.secondary)
+                if !isExpanded { Text("Transactions per Year").font(.headline).foregroundColor(.secondary) }
                 Spacer()
-                InteractiveLegendView(items: seriesLabels, colorMap: color, hiddenItems: $hiddenTypes)
+                if !isExpanded { Button(action: { expandedChart = .annualCount }) { Image(systemName: "plus.magnifyingglass").foregroundColor(.secondary) }.buttonStyle(.plain) }
             }
+            InteractiveLegendView(items: seriesLabels, colorMap: color, hiddenItems: $hiddenTypes)
+            
             if data.isEmpty {
                 emptyState("No transactions yet.")
             } else {
                 Chart {
                     ForEach(data.filter { !hiddenTypes.contains($0.type.rawValue) }) { item in
                         BarMark(
-                            x: .value("Year", String(item.year)),
+                            x: .value("Year", item.year),
                             y: .value("Count", item.count)
                         )
                         .foregroundStyle(Color.forTransactionType(item.type).opacity(0.8))
                         .position(by: .value("Type", item.type.rawValue))
                         .cornerRadius(3)
-                        .annotation(position: .top) {
-                            if item.count > 0 {
-                                Text("\(item.count)").font(.system(size: 9)).foregroundColor(.secondary)
-                            }
+                        
+                        // Infobulle Interactive
+                        if let h = hoveredYear, h == item.year {
+                            RuleMark(x: .value("Year", h))
+                                .foregroundStyle(.secondary.opacity(0.5)).lineStyle(StrokeStyle(lineWidth: 1, dash: [4]))
+                                .annotation(position: .top) {
+                                    VStack(alignment: .leading, spacing: 4) {
+                                        Text(h).font(.caption.bold())
+                                        Divider()
+                                        ForEach(seriesLabels.filter { !hiddenTypes.contains($0) }, id: \.self) { label in
+                                            let c = data.first { $0.year == h && $0.type.rawValue == label }?.count ?? 0
+                                            HStack {
+                                                Circle().fill(color(for: label)).frame(width: 6, height: 6)
+                                                Text("\(label): \(c)").font(.caption2)
+                                            }
+                                        }
+                                    }.padding(8).background(Color(NSColor.windowBackgroundColor).opacity(0.95)).cornerRadius(8).shadow(radius: 4)
+                                }
                         }
                     }
                 }
@@ -665,10 +693,11 @@ struct TxAnnualCountChart: View {
                 .chartXAxis {
                     AxisMarks { v in AxisValueLabel { if let s = v.as(String.self) { Text(s).font(.caption) } } }
                 }
+                .chartXSelection(value: $hoveredYear)
             }
             BlueChipWatermark()
         }
-        .chartFrame()
+        .padding().frame(minHeight: isExpanded ? 500 : 360, maxHeight: isExpanded ? .infinity : 360).background(Color(NSColor.controlBackgroundColor)).cornerRadius(12).shadow(color: Color.black.opacity(0.05), radius: 2, x: 0, y: 1)
     }
 }
 
@@ -679,6 +708,8 @@ struct TxAnnualCountChart: View {
 struct TxTotalByTypeChart: View {
     @ObservedObject var viewModel: PortfolioViewModel
     @Binding var privacyMode: Bool
+    var isExpanded: Bool = false
+    @Binding var expandedChart: TxChartZoomType?
 
     let displayedTypes: [TransactionType] = [.buy, .sell, .deposit, .withdrawal, .dividend]
 
@@ -701,11 +732,12 @@ struct TxTotalByTypeChart: View {
     func scaledCount(_ count: Int) -> Double { maxAmount > 0 ? (Double(count) / Double(maxCount)) * maxAmount : 0 }
 
     @State private var hiddenSeries: Set<String> = []
+    @State private var hoveredType: String? = nil
 
     var body: some View {
         VStack(alignment: .leading, spacing: 8) {
             HStack {
-                Text("Summary by Type").font(.headline).foregroundColor(.secondary)
+                if !isExpanded { Text("Summary by Type").font(.headline).foregroundColor(.secondary) }
                 Spacer()
                 HStack(spacing: 12) {
                     Button(action: { withAnimation { toggleHidden("Amount") } }) {
@@ -722,7 +754,8 @@ struct TxTotalByTypeChart: View {
                         }
                     }.buttonStyle(.plain).opacity(hiddenSeries.contains("Count") ? 0.4 : 1)
                 }
-            }
+                if !isExpanded { Button(action: { expandedChart = .typeSummary }) { Image(systemName: "plus.magnifyingglass").foregroundColor(.secondary) }.buttonStyle(.plain) }
+            }.padding(.bottom, 4)
 
             if data.isEmpty {
                 emptyState("No transactions yet.")
@@ -736,10 +769,18 @@ struct TxTotalByTypeChart: View {
                             )
                             .foregroundStyle(Color.forTransactionType(item.type).opacity(0.75))
                             .cornerRadius(4)
-                            .annotation(position: .top) {
-                                Text(item.amount.formatted(.currency(code: "EUR").precision(.fractionLength(0))))
-                                    .font(.system(size: 9, weight: .semibold)).foregroundColor(.secondary)
-                                    .blur(radius: privacyMode ? 4 : 0)
+                            
+                            if let h = hoveredType, h == item.type.rawValue {
+                                RuleMark(x: .value("Type", h))
+                                    .foregroundStyle(.secondary.opacity(0.5)).lineStyle(StrokeStyle(lineWidth: 1, dash: [4]))
+                                    .annotation(position: .top) {
+                                        VStack(alignment: .leading) {
+                                            Text(h).font(.caption.bold())
+                                            Divider()
+                                            Text("Amount: \(item.amount.formatted(.currency(code: "EUR").precision(.fractionLength(0))))").font(.caption2).foregroundColor(Color.forTransactionType(item.type))
+                                            Text("Count: \(item.count)").font(.caption2).foregroundColor(.purple)
+                                        }.padding(8).background(Color(NSColor.windowBackgroundColor).opacity(0.95)).cornerRadius(8).shadow(radius: 4)
+                                    }
                             }
                         }
                     }
@@ -751,13 +792,7 @@ struct TxTotalByTypeChart: View {
                             )
                             .foregroundStyle(Color.purple)
                             .lineStyle(StrokeStyle(lineWidth: 2))
-                            .symbol {
-                                Circle().fill(Color.purple).frame(width: 7, height: 7)
-                            }
-                            .annotation(position: .top) {
-                                Text("\(item.count)")
-                                    .font(.system(size: 9, weight: .bold)).foregroundColor(.purple)
-                            }
+                            .symbol { Circle().fill(Color.purple).frame(width: 7, height: 7) }
                         }
                     }
                 }
@@ -774,10 +809,11 @@ struct TxTotalByTypeChart: View {
                 .chartXAxis {
                     AxisMarks { v in AxisValueLabel { if let s = v.as(String.self) { Text(s).font(.caption) } } }
                 }
+                .chartXSelection(value: $hoveredType)
             }
             BlueChipWatermark()
         }
-        .chartFrame()
+        .padding().frame(minHeight: isExpanded ? 500 : 360, maxHeight: isExpanded ? .infinity : 360).background(Color(NSColor.controlBackgroundColor)).cornerRadius(12).shadow(color: Color.black.opacity(0.05), radius: 2, x: 0, y: 1)
     }
 
     func toggleHidden(_ key: String) {
@@ -792,6 +828,8 @@ struct TxTotalByTypeChart: View {
 struct TxBuysOverTimeChart: View {
     @ObservedObject var viewModel: PortfolioViewModel
     @Binding var privacyMode: Bool
+    var isExpanded: Bool = false
+    @Binding var expandedChart: TxChartZoomType?
 
     struct BuyPoint: Identifiable {
         let id = UUID()
@@ -811,7 +849,6 @@ struct TxBuysOverTimeChart: View {
             .map { BuyPoint(date: $0.date, amount: $0.amountEUR, ticker: $0.ticker) }
     }
 
-    // Trendline via simple linear regression
     var trendPoints: [(date: Date, value: Double)] {
         guard buys.count >= 2 else { return [] }
         let xs = buys.map { $0.date.timeIntervalSince1970 }
@@ -835,21 +872,11 @@ struct TxBuysOverTimeChart: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 8) {
             HStack {
-                Text("Buys over Time").font(.headline).foregroundColor(.secondary)
+                if !isExpanded { Text("Buys over Time").font(.headline).foregroundColor(.secondary) }
                 Spacer()
-                if let d = hoveredDate, let buy = buys.min(by: { abs($0.date.timeIntervalSince(d)) < abs($1.date.timeIntervalSince(d)) }) {
-                    HStack(spacing: 10) {
-                        Text(dateFmt.string(from: buy.date)).fontWeight(.bold)
-                        Text(buy.ticker).foregroundColor(.blue).fontWeight(.semibold)
-                        Text(buy.amount.formatted(.currency(code: "EUR").precision(.fractionLength(2)))).foregroundColor(.primary)
-                            .blur(radius: privacyMode ? 4 : 0)
-                    }
-                    .font(.caption)
-                    .padding(.horizontal, 8).padding(.vertical, 4)
-                    .background(Color(NSColor.windowBackgroundColor)).cornerRadius(6)
-                    .transition(.opacity)
-                }
-            }
+                if !isExpanded { Button(action: { expandedChart = .buysOverTime }) { Image(systemName: "plus.magnifyingglass").foregroundColor(.secondary) }.buttonStyle(.plain) }
+            }.padding(.bottom, 4)
+            
             if buys.isEmpty {
                 emptyState("No buy transactions yet.")
             } else {
@@ -862,7 +889,6 @@ struct TxBuysOverTimeChart: View {
                         .foregroundStyle(Color.blue.opacity(0.7))
                         .cornerRadius(2)
                     }
-                    // Trendline
                     ForEach(trendPoints.indices, id: \.self) { i in
                         LineMark(
                             x: .value("Date", trendPoints[i].date, unit: .day),
@@ -873,28 +899,36 @@ struct TxBuysOverTimeChart: View {
                         .lineStyle(StrokeStyle(lineWidth: 1.5))
                         .interpolationMethod(.linear)
                     }
+                    
+                    if let d = hoveredDate, let buy = buys.min(by: { abs($0.date.timeIntervalSince(d)) < abs($1.date.timeIntervalSince(d)) }) {
+                        RuleMark(x: .value("Date", buy.date, unit: .day))
+                            .foregroundStyle(.secondary.opacity(0.5)).lineStyle(StrokeStyle(lineWidth: 1, dash: [4]))
+                            .annotation(position: .top) {
+                                VStack(alignment: .leading) {
+                                    Text(dateFmt.string(from: buy.date)).font(.caption.bold())
+                                    Divider()
+                                    Text("\(buy.ticker)").font(.caption2.bold()).foregroundColor(.blue)
+                                    Text("\(buy.amount.formatted(.currency(code: "EUR").precision(.fractionLength(0))))").font(.caption2)
+                                }.padding(8).background(Color(NSColor.windowBackgroundColor).opacity(0.95)).cornerRadius(8).shadow(radius: 4)
+                            }
+                    }
                 }
                 .chartYAxis {
                     AxisMarks(position: .leading) { v in
                         AxisGridLine(); AxisTick()
-                        AxisValueLabel {
-                            if let d = v.as(Double.self) {
-                                Text(d.formatted(.currency(code: "EUR").precision(.fractionLength(0)))).font(.system(size: 10))
-                            }
-                        }
+                        AxisValueLabel { if let d = v.as(Double.self) { Text(d.formatted(.currency(code: "EUR").precision(.fractionLength(0)))).font(.system(size: 10)) } }
                     }
                 }
                 .chartXAxis {
                     AxisMarks(values: .automatic(desiredCount: 6)) { v in
-                        AxisValueLabel {
-                            if let d = v.as(Date.self) { Text(dateFmt.string(from: d)).font(.system(size: 9)) }
-                        }
+                        AxisValueLabel { if let d = v.as(Date.self) { Text(dateFmt.string(from: d)).font(.system(size: 9)) } }
                     }
                 }
+                .chartXSelection(value: $hoveredDate)
             }
             BlueChipWatermark()
         }
-        .chartFrame()
+        .padding().frame(minHeight: isExpanded ? 500 : 360, maxHeight: isExpanded ? .infinity : 360).background(Color(NSColor.controlBackgroundColor)).cornerRadius(12).shadow(color: Color.black.opacity(0.05), radius: 2, x: 0, y: 1)
     }
 }
 
@@ -905,6 +939,8 @@ struct TxBuysOverTimeChart: View {
 struct TxTaxBreakdownChart: View {
     @ObservedObject var viewModel: PortfolioViewModel
     @Binding var privacyMode: Bool
+    var isExpanded: Bool = false
+    @Binding var expandedChart: TxChartZoomType?
 
     struct TaxSlice: Identifiable {
         let id = UUID()
@@ -925,12 +961,23 @@ struct TxTaxBreakdownChart: View {
     }
 
     var grandTotal: Double { slices.reduce(0) { $0 + $1.amount } }
+    @State private var selectedAngleValue: Double? = nil
+
+    func getSelectedSlice(for angle: Double) -> TaxSlice? {
+        var cum = 0.0
+        for slice in slices {
+            cum += slice.amount
+            if angle <= cum { return slice }
+        }
+        return slices.last
+    }
 
     var body: some View {
         VStack(alignment: .leading, spacing: 8) {
             HStack {
-                Text("Fees & Taxes Breakdown").font(.headline).foregroundColor(.secondary)
+                if !isExpanded { Text("Fees & Taxes Breakdown").font(.headline).foregroundColor(.secondary) }
                 Spacer()
+                if !isExpanded { Button(action: { expandedChart = .taxBreakdown }) { Image(systemName: "plus.magnifyingglass").foregroundColor(.secondary) }.buttonStyle(.plain) }
             }
             if slices.isEmpty {
                 emptyState("No fees/taxes recorded yet.")
@@ -946,13 +993,25 @@ struct TxTaxBreakdownChart: View {
                         .foregroundStyle(slice.color)
                         .cornerRadius(4)
                     }
-                    .frame(width: 180, height: 180)
-                    .overlay {
-                        VStack(spacing: 2) {
-                            Text("Total").font(.caption).foregroundColor(.secondary)
-                            Text(grandTotal.formatted(.currency(code: "EUR").precision(.fractionLength(2))))
-                                .font(.system(size: 13, weight: .bold))
-                                .blur(radius: privacyMode ? 4 : 0)
+                    .frame(width: isExpanded ? 300 : 180, height: isExpanded ? 300 : 180)
+                    .chartAngleSelection(value: $selectedAngleValue)
+                    .chartBackground { proxy in
+                        GeometryReader { geometry in
+                            if let s = selectedAngleValue, let slice = getSelectedSlice(for: s) {
+                                VStack(spacing: 2) {
+                                    Text(slice.name).font(.caption).foregroundColor(.secondary)
+                                    Text(slice.amount.formatted(.currency(code: "EUR").precision(.fractionLength(2))))
+                                        .font(.system(size: 13, weight: .bold))
+                                        .blur(radius: privacyMode ? 4 : 0)
+                                }.position(x: geometry.frame(in: .local).midX, y: geometry.frame(in: .local).midY)
+                            } else {
+                                VStack(spacing: 2) {
+                                    Text("Total").font(.caption).foregroundColor(.secondary)
+                                    Text(grandTotal.formatted(.currency(code: "EUR").precision(.fractionLength(2))))
+                                        .font(.system(size: 13, weight: .bold))
+                                        .blur(radius: privacyMode ? 4 : 0)
+                                }.position(x: geometry.frame(in: .local).midX, y: geometry.frame(in: .local).midY)
+                            }
                         }
                     }
 
@@ -979,9 +1038,43 @@ struct TxTaxBreakdownChart: View {
                     Spacer()
                 }
             }
+            Spacer()
             BlueChipWatermark()
         }
-        .chartFrame()
+        .padding().frame(minHeight: isExpanded ? 500 : 360, maxHeight: isExpanded ? .infinity : 360).background(Color(NSColor.controlBackgroundColor)).cornerRadius(12).shadow(color: Color.black.opacity(0.05), radius: 2, x: 0, y: 1)
+    }
+}
+
+// =========================================================================
+// MARK: - FULL SCREEN ZOOM VIEW
+// =========================================================================
+
+struct TransactionsFullScreenChartView: View {
+    @Environment(\.dismiss) var dismiss
+    let zoomType: TxChartZoomType
+    @ObservedObject var viewModel: PortfolioViewModel
+    @Binding var privacyMode: Bool
+
+    var body: some View {
+        VStack(spacing: 20) {
+            HStack {
+                Text("Analysis Detail").font(.title).fontWeight(.bold)
+                Spacer()
+                Button(action: { dismiss() }) { Image(systemName: "xmark.circle.fill").font(.title).foregroundColor(.secondary) }.buttonStyle(.plain)
+            }
+            
+            switch zoomType {
+            case .annualCount:
+                TxAnnualCountChart(viewModel: viewModel, isExpanded: true, expandedChart: .constant(nil))
+            case .typeSummary:
+                TxTotalByTypeChart(viewModel: viewModel, privacyMode: $privacyMode, isExpanded: true, expandedChart: .constant(nil))
+            case .buysOverTime:
+                TxBuysOverTimeChart(viewModel: viewModel, privacyMode: $privacyMode, isExpanded: true, expandedChart: .constant(nil))
+            case .taxBreakdown:
+                TxTaxBreakdownChart(viewModel: viewModel, privacyMode: $privacyMode, isExpanded: true, expandedChart: .constant(nil))
+            }
+            
+        }.padding(30).frame(minWidth: 900, minHeight: 700)
     }
 }
 
@@ -994,17 +1087,6 @@ func emptyState(_ text: String) -> some View {
     Spacer()
     Text(text).foregroundColor(.secondary).frame(maxWidth: .infinity, alignment: .center)
     Spacer()
-}
-
-extension View {
-    func chartFrame() -> some View {
-        self
-            .padding()
-            .frame(minHeight: 300, maxHeight: 300)
-            .background(Color(NSColor.controlBackgroundColor))
-            .cornerRadius(12)
-            .shadow(color: Color.black.opacity(0.05), radius: 2, x: 0, y: 1)
-    }
 }
 
 // =========================================================================
