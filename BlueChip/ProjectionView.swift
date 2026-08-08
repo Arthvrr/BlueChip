@@ -303,7 +303,7 @@ struct CapitalProjectionChart: View {
     @Binding var privacyMode: Bool
     var isExpanded: Bool = false
     @Binding var expandedChart: ProjectionChartZoomType?
-    @State private var hoveredYear: Int? = nil
+    @State private var hoveredYear: String? = nil // <-- Corrigé en String?
 
     var body: some View {
         let isPrivate = privacyMode
@@ -335,8 +335,9 @@ struct CapitalProjectionChart: View {
                 .lineStyle(StrokeStyle(lineWidth: 3))
                 .interpolationMethod(.monotone)
                 
-                if let hYear = hoveredYear, String(item.calendarYear) == String(hYear) {
-                    RuleMark(x: .value("Year", String(hYear)))
+                // <-- Correction du survol ici
+                if let hYear = hoveredYear, String(item.calendarYear) == hYear {
+                    RuleMark(x: .value("Year", hYear))
                         .foregroundStyle(.secondary.opacity(0.5))
                         .lineStyle(StrokeStyle(lineWidth: 1, dash: [4]))
                         .annotation(position: .top) {
@@ -391,7 +392,7 @@ struct DividendProjectionChart: View {
     @Binding var privacyMode: Bool
     var isExpanded: Bool = false
     @Binding var expandedChart: ProjectionChartZoomType?
-    @State private var hoveredYear: Int? = nil
+    @State private var hoveredYear: String? = nil // <-- Corrigé en String?
 
     var body: some View {
         let isPrivate = privacyMode
@@ -423,8 +424,9 @@ struct DividendProjectionChart: View {
                 .lineStyle(StrokeStyle(lineWidth: 2))
                 .interpolationMethod(.monotone)
                 
-                if let hYear = hoveredYear, String(item.calendarYear) == String(hYear) {
-                    RuleMark(x: .value("Year", String(hYear)))
+                // <-- Correction du survol ici
+                if let hYear = hoveredYear, String(item.calendarYear) == hYear {
+                    RuleMark(x: .value("Year", hYear))
                         .foregroundStyle(.secondary.opacity(0.5))
                         .lineStyle(StrokeStyle(lineWidth: 1, dash: [4]))
                         .annotation(position: .top) {
