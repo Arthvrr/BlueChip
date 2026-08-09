@@ -79,6 +79,8 @@ struct PortfolioSaveData: Codable {
     var transactions: [Transaction]?
     var transactionCustomColumns: [String]?
     var transactionGoalTarget: Double?
+    
+    var watchlistItems: [WatchlistItem]?
 }
 
 struct ExpectedMonthlyDividendSeries: Identifiable {

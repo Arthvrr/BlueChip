@@ -53,6 +53,8 @@ class PortfolioViewModel: ObservableObject {
     @Published var transactionCustomColumns: [String] = ["State Tax", "Broker Tax", "Other Taxes"] { didSet { saveData() } }
     @Published var transactionGoalTarget: Double = 50 { didSet { saveData() } }
     
+    @Published var watchlistItems: [WatchlistItem] = [] { didSet { saveData() } }
+    
     private let yahooService = YahooFinanceService()
     
     var positionsInvestedSum: Double { positions.reduce(0) { $0 + $1.investedAmountEUR } }
@@ -188,7 +190,7 @@ class PortfolioViewModel: ObservableObject {
     func deletePosition(id: UUID) { positions.removeAll { $0.id == id } }
     
     private var saveFileURL: URL { FileManager.default.urls(for: .documentDirectory, in: .userDomainMask)[0].appendingPathComponent("BlueChip_Data.json") }
-    
+        
     func saveData() {
         let dataToSave = PortfolioSaveData(
             positions: positions,
@@ -211,6 +213,8 @@ class PortfolioViewModel: ObservableObject {
             transactions: transactions,
             transactionCustomColumns: transactionCustomColumns,
             transactionGoalTarget: transactionGoalTarget,
+            
+            watchlistItems: watchlistItems
         )
         do { try JSONEncoder().encode(dataToSave).write(to: saveFileURL, options: [.atomic]) } catch {}
     }
@@ -237,6 +241,10 @@ class PortfolioViewModel: ObservableObject {
             if let savedTx = decoded.transactions { transactions = savedTx }
             if let savedCols = decoded.transactionCustomColumns { transactionCustomColumns = savedCols }
             if let savedTxGoal = decoded.transactionGoalTarget { transactionGoalTarget = savedTxGoal }
+            
+            // CORRECTION: C'est bien ICI qu'il faut charger la Watchlist !
+            if let savedWatchlist = decoded.watchlistItems { watchlistItems = savedWatchlist }
+            
         } catch { print("ℹ️ JSON File not found or read error.") }
     }
 }
