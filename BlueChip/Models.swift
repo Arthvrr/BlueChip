@@ -58,6 +58,39 @@ enum DividendGoalType: String, Codable, CaseIterable {
     case portfolioYield = "Portfolio Yield Goal (%)"
 }
 
+// MARK: - CALENDAR MODELS
+enum CalendarEventType: String, Codable, CaseIterable {
+    case earnings = "Earnings Call"
+    case dividend = "Dividend Payment"
+    case exDividend = "Ex-Dividend Date"
+    case stockSplit = "Stock Split"
+    case reverseSplit = "Reverse Split"
+    case freeShares = "Free Shares"
+    case ipo = "IPO"
+    case spinOff = "Spin-off"
+    
+    var color: Color {
+        switch self {
+        case .earnings: return .blue
+        case .dividend: return .green
+        case .exDividend: return .mint
+        case .stockSplit: return .purple
+        case .reverseSplit: return .red
+        case .freeShares: return .yellow
+        case .ipo: return .orange
+        case .spinOff: return .teal
+        }
+    }
+}
+
+struct CalendarEvent: Identifiable, Codable {
+    var id: UUID = UUID()
+    var date: Date
+    var type: CalendarEventType
+    var ticker: String
+    var note: String
+}
+
 struct PortfolioSaveData: Codable {
     var positions: [Position];
     var availableCash: Double;
@@ -81,6 +114,8 @@ struct PortfolioSaveData: Codable {
     var transactionGoalTarget: Double?
     
     var watchlistItems: [WatchlistItem]?
+    
+    var calendarEvents: [CalendarEvent]?
 }
 
 struct ExpectedMonthlyDividendSeries: Identifiable {
