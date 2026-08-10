@@ -191,6 +191,13 @@ class PortfolioViewModel: ObservableObject {
     }
     func deletePosition(id: UUID) { positions.removeAll { $0.id == id } }
     
+    func updateRevenueExposures(for positionId: UUID, exposures: [RevenueSegment]) {
+        if let idx = positions.firstIndex(where: { $0.id == positionId }) {
+            positions[idx].revenueExposures = exposures
+            saveData() // Sauvegarde instantanément dans le fichier JSON
+        }
+    }
+    
     private var saveFileURL: URL { FileManager.default.urls(for: .documentDirectory, in: .userDomainMask)[0].appendingPathComponent("BlueChip_Data.json") }
         
     func saveData() {
