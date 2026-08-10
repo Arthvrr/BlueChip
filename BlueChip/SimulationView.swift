@@ -89,7 +89,7 @@ struct SimulationView: View {
         return dict.map { ChartDataItem(name: $0.key, value: $0.value) }.sorted { $0.value > $1.value }
     }
     
-    // NOUVEAU : Répartition du Cash Investi
+    // Répartition du Cash Investi
     var cashAllocationData: [ChartDataItem] {
         var items: [ChartDataItem] = []
         let realDict = Dictionary(uniqueKeysWithValues: viewModel.positions.map { ($0.ticker, $0) })
@@ -119,7 +119,7 @@ struct SimulationView: View {
         ]
     }
 
-    // NOUVEAU : Générateur des différences interactives (Ligne par Ligne avec UNDO)
+    // Générateur des différences interactives (Ligne par Ligne avec UNDO)
     var simulationDiffs: [SimulationDiff] {
         var diffs = [SimulationDiff]()
         
@@ -143,7 +143,7 @@ struct SimulationView: View {
                     let qtyDiff = simPos.quantity - realPos.quantity
                     let text = abs(qtyDiff) > 0.001
                         ? (qtyDiff > 0 ? "Added \(qtyDiff.formatted()) shares of \(ticker)" : "Sold \((-qtyDiff).formatted()) shares of \(ticker)")
-                        : "Modified \(ticker) (PRU or Sector)"
+                        : "Modified \(ticker) (Avg Cost or Sector)"
                     
                     diffs.append(SimulationDiff(
                         text: text,
@@ -323,6 +323,10 @@ struct SimulationDashboardSection: View {
     }
 }
 
+// =========================================================================
+// MARK: - DIFF SUMMARY SECTION
+// =========================================================================
+
 struct SimulationDiffSection: View {
     let diffs: [SimulationDiff]
     
@@ -330,37 +334,42 @@ struct SimulationDiffSection: View {
         VStack(alignment: .leading, spacing: 12) {
             Text("Sandbox Actions Log (Line by Line)").font(.headline).foregroundColor(.secondary)
             
-            VStack(alignment: .leading, spacing: 8) {
-                ForEach(diffs) { diff in
-                    HStack(spacing: 12) {
-                        Image(systemName: diff.icon).foregroundColor(diff.color)
-                        Text(diff.text).font(.subheadline).fontWeight(.medium)
-                        
-                        Spacer()
-                        
-                        // Bouton Undo
-                        if let undoAction = diff.onUndo {
-                            Button(action: undoAction) {
-                                HStack(spacing: 4) {
-                                    Image(systemName: "arrow.uturn.backward")
-                                    Text("Undo")
-                                }
-                                .font(.caption).fontWeight(.bold)
-                                .foregroundColor(.red)
-                                .padding(.horizontal, 8)
-                                .padding(.vertical, 4)
-                                .background(Color.red.opacity(0.1))
-                                .cornerRadius(6)
-                            }.buttonStyle(.plain)
+            // 1. AJOUT DU SCROLLVIEW VERTICAL
+            ScrollView(.vertical, showsIndicators: true) {
+                VStack(alignment: .leading, spacing: 8) {
+                    ForEach(diffs) { diff in
+                        HStack(spacing: 12) {
+                            Image(systemName: diff.icon).foregroundColor(diff.color)
+                            Text(diff.text).font(.subheadline).fontWeight(.medium)
+                            
+                            Spacer()
+                            
+                            // Bouton Undo
+                            if let undoAction = diff.onUndo {
+                                Button(action: undoAction) {
+                                    HStack(spacing: 4) {
+                                        Image(systemName: "arrow.uturn.backward")
+                                        Text("Undo")
+                                    }
+                                    .font(.caption).fontWeight(.bold)
+                                    .foregroundColor(.red)
+                                    .padding(.horizontal, 8)
+                                    .padding(.vertical, 4)
+                                    .background(Color.red.opacity(0.1))
+                                    .cornerRadius(6)
+                                }.buttonStyle(.plain)
+                            }
                         }
+                        .padding(.horizontal, 12)
+                        .padding(.vertical, 8)
+                        .background(Color(NSColor.windowBackgroundColor))
+                        .cornerRadius(8)
+                        .overlay(RoundedRectangle(cornerRadius: 8).stroke(Color.gray.opacity(0.1), lineWidth: 1))
                     }
-                    .padding(.horizontal, 12)
-                    .padding(.vertical, 8)
-                    .background(Color(NSColor.windowBackgroundColor))
-                    .cornerRadius(8)
-                    .overlay(RoundedRectangle(cornerRadius: 8).stroke(Color.gray.opacity(0.1), lineWidth: 1))
                 }
             }
+            // 2. LIMITE DE HAUTEUR POUR ACTIVER LE SCROLL SI TROP D'ÉLÉMENTS
+            .frame(maxHeight: 250)
         }
         .padding()
         .background(Color(NSColor.controlBackgroundColor))
@@ -614,7 +623,7 @@ struct SimulatedAddEditSheet: View {
     @State private var ticker: String = ""
     @State private var inputMethod: InputMethod = .shares
     
-    // NOUVEAU: Variables optionnelles pour afficher le Placeholder au lieu de 0
+    // Variables optionnelles (Placeholders dynamiques)
     @State private var quantityInput: Double? = nil
     @State private var targetWeightInput: Double? = nil
     @State private var pru: Double? = nil
@@ -622,6 +631,10 @@ struct SimulatedAddEditSheet: View {
     @State private var dividendPerShare: Double? = nil
     @State private var brokerTax: Double? = nil
     @State private var countryTax: Double? = nil
+    
+    // Devises et Taux Dynamiques
+    @State private var currency: String = "EUR"
+    @State private var usdToEurRate: Double = 1.0
     
     @State private var sector: String = ""
     @State private var brokerTaxIsPercent: Bool = false
@@ -638,19 +651,24 @@ struct SimulatedAddEditSheet: View {
     var safeBrokerTax: Double { brokerTax ?? 0.0 }
     var safeCountryTax: Double { countryTax ?? 0.0 }
     
-    // Calculs dynamiques
+    // Calcul de la quantité exacte à acheter
     var calculatedQuantity: Double {
         if inputMethod == .shares { return safeQtyInput }
         else {
-            guard safePrice > 0 else { return 0 }
-            return (totalCapital * (safeWeightInput / 100.0)) / safePrice
+            let priceEUR = safePrice * (currency == "USD" ? usdToEurRate : 1.0)
+            guard priceEUR > 0 else { return 0 }
+            return (totalCapital * (safeWeightInput / 100.0)) / priceEUR
         }
     }
     
-    var baseCost: Double { calculatedQuantity * safePrice }
-    var calcBrokerTax: Double { brokerTaxIsPercent ? baseCost * (safeBrokerTax / 100.0) : safeBrokerTax }
-    var calcCountryTax: Double { countryTaxIsPercent ? baseCost * (safeCountryTax / 100.0) : safeCountryTax }
-    var totalTransactionCost: Double { baseCost + calcBrokerTax + calcCountryTax }
+    // Couts en devise d'origine et en Euros
+    var baseCostOriginal: Double { calculatedQuantity * safePrice }
+    var baseCostEUR: Double { baseCostOriginal * (currency == "USD" ? usdToEurRate : 1.0) }
+    
+    var calcBrokerTaxEUR: Double { brokerTaxIsPercent ? baseCostEUR * (safeBrokerTax / 100.0) : safeBrokerTax }
+    var calcCountryTaxEUR: Double { countryTaxIsPercent ? baseCostEUR * (safeCountryTax / 100.0) : safeCountryTax }
+    
+    var totalTransactionCostEUR: Double { baseCostEUR + calcBrokerTaxEUR + calcCountryTaxEUR }
     
     var body: some View {
         VStack(spacing: 0) {
@@ -682,11 +700,11 @@ struct SimulatedAddEditSheet: View {
                             .disabled(ticker.isEmpty || isFetching)
                         }
                         HStack(spacing: 16) {
-                            TextField("Current Price", value: $currentPrice, format: .number).textFieldStyle(.roundedBorder)
-                            TextField("Avg Cost / PRU", value: $pru, format: .number).textFieldStyle(.roundedBorder)
+                            TextField("Current Price (\(currency))", value: $currentPrice, format: .number).textFieldStyle(.roundedBorder)
+                            TextField("Avg Cost (\(currency))", value: $pru, format: .number).textFieldStyle(.roundedBorder)
                         }
                         HStack(spacing: 16) {
-                            TextField("Net Dividend / Share", value: $dividendPerShare, format: .number).textFieldStyle(.roundedBorder)
+                            TextField("Net Dividend / Share (\(currency))", value: $dividendPerShare, format: .number).textFieldStyle(.roundedBorder)
                             TextField("Sector", text: $sector).textFieldStyle(.roundedBorder)
                         }
                     }
@@ -735,16 +753,19 @@ struct SimulatedAddEditSheet: View {
                     }
                     
                     // CASH IMPACT SUMMARY
-                    GroupBox("Transaction Impact") {
+                    GroupBox("Transaction Impact (in EUR)") {
                         VStack(alignment: .leading, spacing: 6) {
-                            HStack { Text("Base Cost (Shares x Price):"); Spacer(); Text(baseCost.formatted(.currency(code: "EUR"))) }
-                            HStack { Text("Total Taxes:"); Spacer(); Text((calcBrokerTax + calcCountryTax).formatted(.currency(code: "EUR"))).foregroundColor(.red) }
+                            HStack { Text("Base Cost (Shares x Price):"); Spacer(); Text(baseCostEUR.formatted(.currency(code: "EUR"))) }
+                            if currency != "EUR" {
+                                HStack { Text("Base Cost in \(currency):"); Spacer(); Text(baseCostOriginal.formatted(.currency(code: currency))) }.font(.caption).foregroundColor(.secondary)
+                            }
+                            HStack { Text("Total Taxes:"); Spacer(); Text((calcBrokerTaxEUR + calcCountryTaxEUR).formatted(.currency(code: "EUR"))).foregroundColor(.red) }
                             Divider()
-                            HStack { Text("Total Deduction:"); Spacer(); Text(totalTransactionCost.formatted(.currency(code: "EUR"))).fontWeight(.bold) }
+                            HStack { Text("Total Deduction:"); Spacer(); Text(totalTransactionCostEUR.formatted(.currency(code: "EUR"))).fontWeight(.bold) }
                             
                             Toggle("Deduct total cost from Simulated Cash", isOn: $adjustCash).padding(.top, 8)
                             if adjustCash {
-                                Text("Remaining Cash will be: \((simulatedCash - totalTransactionCost).formatted(.currency(code: "EUR")))").font(.caption).foregroundColor(.secondary)
+                                Text("Remaining Cash will be: \((simulatedCash - totalTransactionCostEUR).formatted(.currency(code: "EUR")))").font(.caption).foregroundColor(.secondary)
                             }
                         }
                     }
@@ -768,6 +789,8 @@ struct SimulatedAddEditSheet: View {
                 currentPrice = pos.currentPrice
                 dividendPerShare = pos.annualDividendNet
                 sector = pos.sector
+                currency = pos.currency
+                usdToEurRate = pos.usdToEurRate
                 inputMethod = .shares
             }
         }
@@ -777,9 +800,13 @@ struct SimulatedAddEditSheet: View {
         isFetching = true
         Task {
             let service = YahooFinanceService()
+            let rate = await service.fetchUSDEURRate()
+            
             if let data = await service.fetchStockData(for: ticker) {
                 await MainActor.run {
                     currentPrice = data.price
+                    currency = data.currency
+                    usdToEurRate = rate
                     isFetching = false
                 }
             } else {
@@ -793,9 +820,9 @@ struct SimulatedAddEditSheet: View {
         
         if adjustCash {
             if isEditing, let oldPos = itemToEdit {
-                simulatedCash += (oldPos.quantity * oldPos.currentPrice)
+                simulatedCash += (oldPos.quantity * oldPos.currentPrice * (oldPos.currency == "USD" ? oldPos.usdToEurRate : 1.0))
             }
-            simulatedCash -= totalTransactionCost
+            simulatedCash -= totalTransactionCostEUR
         }
         
         let newPos = Position(
@@ -804,8 +831,8 @@ struct SimulatedAddEditSheet: View {
             quantity: calculatedQuantity,
             averageCost: pru ?? safePrice,
             currentPrice: safePrice,
-            currency: "EUR",
-            usdToEurRate: 1.0,
+            currency: currency,
+            usdToEurRate: usdToEurRate,
             annualDividendNet: dividendPerShare ?? 0.0,
             country: itemToEdit?.country ?? "",
             sector: sector,
