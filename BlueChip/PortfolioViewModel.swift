@@ -57,6 +57,8 @@ class PortfolioViewModel: ObservableObject {
     
     @Published var calendarEvents: [CalendarEvent] = [] { didSet { saveData() } }
     
+    @Published var fundamentalCriteria: [FundamentalCriterion] = [] { didSet { saveData() } }
+    
     private let yahooService = YahooFinanceService()
     
     var positionsInvestedSum: Double { positions.reduce(0) { $0 + $1.investedAmountEUR } }
@@ -198,6 +200,14 @@ class PortfolioViewModel: ObservableObject {
         }
     }
     
+    func updateFundamentalValue(for positionId: UUID, criterionId: UUID, value: Double) {
+        if let idx = positions.firstIndex(where: { $0.id == positionId }) {
+            if positions[idx].fundamentalValues == nil { positions[idx].fundamentalValues = [:] }
+            positions[idx].fundamentalValues?[criterionId.uuidString] = value
+            saveData()
+        }
+    }
+    
     private var saveFileURL: URL { FileManager.default.urls(for: .documentDirectory, in: .userDomainMask)[0].appendingPathComponent("BlueChip_Data.json") }
         
     func saveData() {
@@ -225,7 +235,9 @@ class PortfolioViewModel: ObservableObject {
             
             watchlistItems: watchlistItems,
 
-            calendarEvents: calendarEvents
+            calendarEvents: calendarEvents,
+            
+            fundamentalCriteria: fundamentalCriteria
         )
         do { try JSONEncoder().encode(dataToSave).write(to: saveFileURL, options: [.atomic]) } catch {}
     }
@@ -256,6 +268,8 @@ class PortfolioViewModel: ObservableObject {
             if let savedWatchlist = decoded.watchlistItems { watchlistItems = savedWatchlist }
             
             if let savedEvents = decoded.calendarEvents { calendarEvents = savedEvents }
+            
+            if let savedCriteria = decoded.fundamentalCriteria { fundamentalCriteria = savedCriteria }
             
         } catch { print("ℹ️ JSON File not found or read error.") }
     }

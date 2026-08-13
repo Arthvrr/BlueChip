@@ -25,8 +25,10 @@ struct Position: Identifiable, Codable {
     var dividendGrowth5Y: Double
     var revenueExposures: [RevenueSegment]?
     
-    init(id: UUID = UUID(), ticker: String, quantity: Double, averageCost: Double, currentPrice: Double, currency: String = "EUR", usdToEurRate: Double = 1.0, annualDividendNet: Double = 0.0, country: String = "", sector: String = "", marketCap: String = "", dividendMonths: Set<Int> = [], purchaseDate: Date = Date(), dividendGrowth5Y: Double, revenueExposures: [RevenueSegment]? = nil) {
-        self.id = id; self.ticker = ticker; self.quantity = quantity; self.averageCost = averageCost; self.currentPrice = currentPrice; self.currency = currency; self.usdToEurRate = usdToEurRate; self.annualDividendNet = annualDividendNet; self.country = country; self.sector = sector; self.marketCap = marketCap; self.dividendMonths = dividendMonths; self.purchaseDate = purchaseDate; self.dividendGrowth5Y = dividendGrowth5Y; self.revenueExposures = revenueExposures;
+    var fundamentalValues: [String: Double]?
+    
+    init(id: UUID = UUID(), ticker: String, quantity: Double, averageCost: Double, currentPrice: Double, currency: String = "EUR", usdToEurRate: Double = 1.0, annualDividendNet: Double = 0.0, country: String = "", sector: String = "", marketCap: String = "", dividendMonths: Set<Int> = [], purchaseDate: Date = Date(), dividendGrowth5Y: Double, revenueExposures: [RevenueSegment]? = nil, fundamentalValues: [String: Double]? = nil) {
+        self.id = id; self.ticker = ticker; self.quantity = quantity; self.averageCost = averageCost; self.currentPrice = currentPrice; self.currency = currency; self.usdToEurRate = usdToEurRate; self.annualDividendNet = annualDividendNet; self.country = country; self.sector = sector; self.marketCap = marketCap; self.dividendMonths = dividendMonths; self.purchaseDate = purchaseDate; self.dividendGrowth5Y = dividendGrowth5Y; self.revenueExposures = revenueExposures; self.fundamentalValues = fundamentalValues;
     }
     
     var investedAmountEUR: Double { quantity * averageCost * (currency == "USD" ? usdToEurRate : 1.0) }
@@ -117,6 +119,8 @@ struct PortfolioSaveData: Codable {
     var watchlistItems: [WatchlistItem]?
     
     var calendarEvents: [CalendarEvent]?
+    
+    var fundamentalCriteria: [FundamentalCriterion]?
 }
 
 struct ExpectedMonthlyDividendSeries: Identifiable {
@@ -251,4 +255,23 @@ struct RevenueSegment: Identifiable, Codable {
     var regionName: String
     var isUSA: Bool // Permet de classer facilement pour le graphique "USA vs Reste du Monde"
     var percentage: Double // De 0 à 100
+}
+
+// MARK: - FUNDAMENTALS MODELS
+
+enum CriterionType: String, Codable, CaseIterable {
+    case percentage = "Pourcentage (%)"
+    case number = "Nombre / Ratio"
+    case boolean = "Oui / Non"
+}
+
+struct FundamentalCriterion: Identifiable, Codable {
+    var id: UUID = UUID()
+    var name: String
+    var section: String // <-- NOUVEAU : C'est maintenant un String libre (texte) !
+    var weight: Double
+    var type: CriterionType
+    var isHigherBetter: Bool
+    var premiumThreshold: Double
+    var standardThreshold: Double
 }
