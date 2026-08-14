@@ -260,9 +260,19 @@ struct RevenueSegment: Identifiable, Codable {
 // MARK: - FUNDAMENTALS MODELS
 
 enum CriterionType: String, Codable, CaseIterable {
+    // On garde EXACTEMENT le texte d'origine pour que le fichier JSON arrive à se lire
     case percentage = "Pourcentage (%)"
     case number = "Nombre / Ratio"
     case boolean = "Oui / Non"
+    
+    // On crée une traduction dynamique pour l'affichage dans l'appli
+    var displayName: String {
+        switch self {
+        case .percentage: return "Percentage (%)"
+        case .number: return "Number / Ratio"
+        case .boolean: return "Yes / No"
+        }
+    }
 }
 
 struct FundamentalCriterion: Identifiable, Codable {
