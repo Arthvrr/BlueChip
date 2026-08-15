@@ -124,6 +124,9 @@ struct PortfolioSaveData: Codable {
     
     var wealthGoalTarget: Double?
     var manualWealthAssets: [WealthAsset]?
+    
+    var manualWealthLiabilities: [WealthLiability]?
+    var safeWithdrawalRate: Double?
 }
 
 struct ExpectedMonthlyDividendSeries: Identifiable {
@@ -301,4 +304,10 @@ struct WealthAsset: Identifiable, Codable, Equatable {
     // Propriétés calculées
     var variationEUR: Double { current - invested }
     var variationPercent: Double { invested > 0 ? (variationEUR / invested) : 0 }
+}
+
+struct WealthLiability: Identifiable, Codable, Equatable {
+    var id: UUID = UUID()
+    var name: String
+    var amount: Double
 }

@@ -62,27 +62,45 @@ class PortfolioViewModel: ObservableObject {
     @Published var wealthGoalTarget: Double = 50000.0 { didSet { saveData() } }
     @Published var manualWealthAssets: [WealthAsset] = [] { didSet { saveData() } }
     
+    @Published var manualWealthLiabilities: [WealthLiability] = [] { didSet { saveData() } }
+    @Published var safeWithdrawalRate: Double = 4.0 { didSet { saveData() } }
+        
+    // Champs pour le formulaire d'ajout de dette
+    @Published var newLiabilityName: String = ""
+    @Published var newLiabilityAmount: Double? = nil
+    
     // === CALCULS WEALTH ===
         
     // Génère la liste complète des actifs en fusionnant la Bourse + les manuels
     var allWealthAssets: [WealthAsset] {
-        let stocksAsset = WealthAsset(
-            name: "Brokerage Account", // Nom en anglais
-            invested: manuallyInvested, // Total investi de CompositionView
-            current: currentTotalCapital, // Total (Current + Cash)
-            isAutoFilled: true
-        )
+        let stocksAsset = WealthAsset(name: "Brokerage Account", invested: manuallyInvested, current: currentTotalCapital, isAutoFilled: true)
         return [stocksAsset] + manualWealthAssets
     }
     
-    var totalWealth: Double { allWealthAssets.reduce(0) { $0 + $1.current } }
+    // ASSETS & LIABILITIES
+    var totalAssets: Double { allWealthAssets.reduce(0) { $0 + $1.current } }
     var totalWealthInvested: Double { allWealthAssets.reduce(0) { $0 + $1.invested } }
-    var totalWealthVariationEUR: Double { totalWealth - totalWealthInvested }
+    var totalWealthVariationEUR: Double { totalAssets - totalWealthInvested }
     var totalWealthVariationPercent: Double { totalWealthInvested > 0 ? (totalWealthVariationEUR / totalWealthInvested) : 0 }
-    
-    var wealthStockWeight: Double { totalWealth > 0 ? (totalValue / totalWealth) : 0 }
+    var wealthStockWeight: Double { totalAssets > 0 ? (currentTotalCapital / totalAssets) : 0 }
     var bestWealthAsset: String { allWealthAssets.max(by: { $0.variationPercent < $1.variationPercent })?.name ?? "-" }
-    var wealthGoalProgress: Double { wealthGoalTarget > 0 ? (totalWealth / wealthGoalTarget) : 0 }
+    
+    var totalLiabilities: Double { manualWealthLiabilities.reduce(0) { $0 + $1.amount } }
+    var trueNetWorth: Double { totalAssets - totalLiabilities } // LE VRAI PATRIMOINE NET
+    var debtToAssetRatio: Double { totalAssets > 0 ? (totalLiabilities / totalAssets) : 0 }
+    
+    var wealthGoalProgress: Double { wealthGoalTarget > 0 ? (trueNetWorth / wealthGoalTarget) : 0 }
+    
+    // FIRE SIMULATOR
+    var fireAnnualIncome: Double { trueNetWorth * (safeWithdrawalRate / 100.0) }
+    var fireMonthlyIncome: Double { fireAnnualIncome / 12.0 }
+    
+    func addNewLiability() {
+        guard !newLiabilityName.isEmpty, let amount = newLiabilityAmount else { return }
+        manualWealthLiabilities.append(WealthLiability(name: newLiabilityName, amount: amount))
+        newLiabilityName = ""
+        newLiabilityAmount = nil
+    }
     
     private let yahooService = YahooFinanceService()
     
@@ -265,7 +283,9 @@ class PortfolioViewModel: ObservableObject {
             fundamentalCriteria: fundamentalCriteria,
             
             wealthGoalTarget: wealthGoalTarget,
-            manualWealthAssets: manualWealthAssets
+            manualWealthAssets: manualWealthAssets,
+            manualWealthLiabilities: manualWealthLiabilities,
+            safeWithdrawalRate: safeWithdrawalRate
         )
         do { try JSONEncoder().encode(dataToSave).write(to: saveFileURL, options: [.atomic]) } catch {}
     }
@@ -301,6 +321,8 @@ class PortfolioViewModel: ObservableObject {
             
             if let savedWealthGoal = decoded.wealthGoalTarget { wealthGoalTarget = savedWealthGoal }
             if let savedWealthAssets = decoded.manualWealthAssets { manualWealthAssets = savedWealthAssets }
+            if let savedLiabilities = decoded.manualWealthLiabilities { manualWealthLiabilities = savedLiabilities }
+            if let savedSWR = decoded.safeWithdrawalRate { safeWithdrawalRate = savedSWR }
             
         } catch { print("ℹ️ JSON File not found or read error.") }
     }
