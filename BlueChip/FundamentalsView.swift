@@ -30,7 +30,7 @@ struct ScoreEngine {
 }
 
 enum FundamentalsChartZoomType: String, Identifiable {
-    case totalScore, sectionScore, lineChart, polarChart
+    case totalScore, sectionScore, lineChart, polarChart, radarChart
     var id: String { self.rawValue }
 }
 
@@ -42,7 +42,8 @@ struct FundamentalsView: View {
     @ObservedObject var viewModel: PortfolioViewModel
     @Binding var privacyMode: Bool
     
-    @State private var showCriteriaManager: Bool = false
+    @State private var showAddCriterion: Bool = false
+    @State private var editingCriterion: FundamentalCriterion? = nil
     @State private var editingCell: (position: Position, criterion: FundamentalCriterion)? = nil
     @State private var chartToZoom: FundamentalsChartZoomType? = nil
     
@@ -79,13 +80,11 @@ struct FundamentalsView: View {
         return total
     }
     
-    // Calcul du score MAX possible pour une section donnée
     func getSectionMaxScore(section: String) -> Double {
         let crits = viewModel.fundamentalCriteria.filter { $0.section == section }
         return crits.reduce(0) { $0 + ($1.weight * 2.0) }
     }
     
-    // Calcul du pourcentage atteint par une action dans une section donnée
     func getStockSectionScorePct(pos: Position, section: String) -> Double {
         let crits = viewModel.fundamentalCriteria.filter { $0.section == section }
         var total = 0.0
@@ -107,8 +106,8 @@ struct FundamentalsView: View {
                 HStack {
                     Text("Stock Quality Screener").font(.title).fontWeight(.bold)
                     Spacer()
-                    Button(action: { showCriteriaManager = true }) {
-                        Label("Manage Criteria", systemImage: "tablecells.badge.ellipsis")
+                    Button(action: { showAddCriterion = true }) {
+                        Label("Add Criterion", systemImage: "plus")
                     }
                     .buttonStyle(.borderedProminent)
                 }
@@ -129,6 +128,9 @@ struct FundamentalsView: View {
                     getTotalScore: getTotalScore,
                     onCellTap: { pos, crit in
                         editingCell = (pos, crit)
+                    },
+                    onCriterionTap: { crit in
+                        editingCriterion = crit
                     }
                 )
                 
@@ -164,14 +166,18 @@ struct FundamentalsView: View {
                         viewModel: viewModel,
                         uniqueSections: Array(Set(viewModel.fundamentalCriteria.map { $0.section })).sorted(),
                         getStockSectionScorePct: getStockSectionScorePct,
-                        colorForTicker: colorForTicker
+                        colorForTicker: colorForTicker,
+                        expandedChart: $chartToZoom
                     )
                 }
             }
             .padding()
         }
-        .sheet(isPresented: $showCriteriaManager) {
-            CriteriaManagerSheet(viewModel: viewModel)
+        .sheet(isPresented: $showAddCriterion) {
+            CriterionFormSheet(viewModel: viewModel, criterionToEdit: nil)
+        }
+        .sheet(item: $editingCriterion) { crit in
+            CriterionFormSheet(viewModel: viewModel, criterionToEdit: crit)
         }
         .sheet(item: Binding<EditingCellWrapper?>(
             get: { editingCell != nil ? EditingCellWrapper(position: editingCell!.position, criterion: editingCell!.criterion) : nil },
@@ -261,7 +267,14 @@ struct FundamentalsDashboardSection: View {
             let maxScore = sectionMax[sec] ?? 1
             pctDict[sec] = score / maxScore
         }
-        return pctDict.sorted { $0.value > $1.value }
+        
+        // Tri déterministe stable (valeur décroissante, puis nom de section alphabétique en cas d'égalité)
+        return pctDict.sorted {
+            if abs($0.value - $1.value) > 0.0001 {
+                return $0.value > $1.value
+            }
+            return $0.key < $1.key
+        }
     }
 }
 
@@ -282,10 +295,14 @@ struct CriterionHeaderCell: View {
     let crit: FundamentalCriterion
     let width: CGFloat
     let bgColor: Color
+    let onEdit: () -> Void
+    
     var body: some View {
         Text(crit.name).font(.caption).fontWeight(.bold).frame(width: width, height: 30)
             .background(bgColor.opacity(0.5)).border(Color.gray.opacity(0.2), width: 0.5)
-            .help("Weight: \(crit.weight) | Premium: \(crit.premiumThreshold) | Standard: \(crit.standardThreshold)")
+            .help("Weight: \(crit.weight) | Premium: \(crit.premiumThreshold) | Standard: \(crit.standardThreshold) | Double-click to Edit")
+            .contentShape(Rectangle())
+            .onTapGesture(count: 2, perform: onEdit)
     }
 }
 
@@ -306,6 +323,7 @@ struct FundamentalsSpreadsheetSection: View {
     let colorForSection: (String) -> Color
     let getTotalScore: (Position) -> Double
     let onCellTap: (Position, FundamentalCriterion) -> Void
+    let onCriterionTap: (FundamentalCriterion) -> Void
     
     let rowHeight: CGFloat = 40
     let colWidthInfo: CGFloat = 85
@@ -318,7 +336,7 @@ struct FundamentalsSpreadsheetSection: View {
             if viewModel.fundamentalCriteria.isEmpty {
                 VStack(spacing: 12) {
                     Image(systemName: "tablecells.badge.ellipsis").font(.system(size: 40)).foregroundColor(.secondary.opacity(0.5))
-                    Text("No criteria defined. Click 'Manage Criteria' to build your screener.").foregroundColor(.secondary)
+                    Text("No criteria defined. Click 'Add Criterion' to build your screener.").foregroundColor(.secondary)
                 }
                 .frame(maxWidth: .infinity, minHeight: 250)
                 .background(Color(NSColor.controlBackgroundColor)).cornerRadius(12).overlay(RoundedRectangle(cornerRadius: 12).stroke(Color.gray.opacity(0.2), lineWidth: 1))
@@ -344,7 +362,9 @@ struct FundamentalsSpreadsheetSection: View {
                             
                             ForEach(groupedCriteria, id: \.section) { group in
                                 ForEach(group.criteria) { crit in
-                                    CriterionHeaderCell(crit: crit, width: colWidthCrit, bgColor: colorForSection(group.section))
+                                    CriterionHeaderCell(crit: crit, width: colWidthCrit, bgColor: colorForSection(group.section)) {
+                                        onCriterionTap(crit)
+                                    }
                                 }
                             }
                         }
@@ -355,7 +375,8 @@ struct FundamentalsSpreadsheetSection: View {
                                 InfoCell(text: pos.ticker, width: colWidthInfo, height: rowHeight)
                                 InfoCell(text: getTotalScore(pos).formatted(.number.precision(.fractionLength(1))), width: colWidthInfo, height: rowHeight)
                                 
-                                let weight = viewModel.totalValue > 0 ? (pos.currentValueEUR / viewModel.totalValue) : 0
+                                let totalStocksValue = viewModel.positions.reduce(0) { $0 + $1.currentValueEUR }
+                                let weight = totalStocksValue > 0 ? (pos.currentValueEUR / totalStocksValue) : 0
                                 InfoCell(text: weight.formatted(.percent.precision(.fractionLength(2))), width: colWidthInfo, isBold: false, height: rowHeight)
                                 
                                 ForEach(groupedCriteria, id: \.section) { group in
@@ -454,7 +475,6 @@ struct FundamentalsTotalScoreChart: View {
     }
 }
 
-// CORRECTION : Sous-vue dédiée pour l'annotation afin de soulager le compilateur SwiftUI
 struct FundamentalsLineChartTooltip: View {
     let section: String
     let positions: [Position]
@@ -517,18 +537,20 @@ struct FundamentalsLineChart: View {
                     ForEach(filteredPositions) { pos in
                         ForEach(uniqueSections, id: \.self) { section in
                             let pct = getStockSectionScorePct(pos, section)
+                            
+                            // LIGNES DROITES PARFAITEMENT DÉFINIES AVEC COULEURS PAR TICKER
                             LineMark(
                                 x: .value("Section", section),
                                 y: .value("Score (%)", pct)
                             )
-                            .foregroundStyle(colorForTicker(pos.ticker))
-                            .interpolationMethod(.catmullRom)
+                            .foregroundStyle(by: .value("Ticker", pos.ticker))
+                            .interpolationMethod(.linear)
                             
                             PointMark(
                                 x: .value("Section", section),
                                 y: .value("Score (%)", pct)
                             )
-                            .foregroundStyle(colorForTicker(pos.ticker))
+                            .foregroundStyle(by: .value("Ticker", pos.ticker))
                         }
                     }
                     
@@ -536,7 +558,6 @@ struct FundamentalsLineChart: View {
                         RuleMark(x: .value("Section", hSection))
                             .foregroundStyle(.secondary.opacity(0.5))
                             .annotation(position: .top, alignment: .center) {
-                                // Appel à notre Tooltip Extrait
                                 FundamentalsLineChartTooltip(
                                     section: hSection,
                                     positions: filteredPositions,
@@ -546,6 +567,9 @@ struct FundamentalsLineChart: View {
                             }
                     }
                 }
+                .chartForegroundStyleScale(mapping: { (ticker: String) -> Color in
+                    colorForTicker(ticker)
+                })
                 .chartYScale(domain: [0, 100])
                 .chartLegend(.hidden)
                 .chartXSelection(value: $hoveredSection)
@@ -570,13 +594,14 @@ struct FundamentalsPolarChart: View {
     @State private var hoveredAngle: Int? = nil
 
     var weightedSectionScores: [(section: String, score: Double)] {
-        let totalValue = viewModel.totalValue
-        guard totalValue > 0 else { return [] }
+        let totalStocksValue = viewModel.positions.reduce(0) { $0 + $1.currentValueEUR }
+        guard totalStocksValue > 0 else { return [] }
+        
         var results: [(String, Double)] = []
         for section in uniqueSections {
             var weightedScore = 0.0
             for pos in viewModel.positions {
-                let weight = pos.currentValueEUR / totalValue
+                let weight = pos.currentValueEUR / totalStocksValue
                 let scorePct = getStockSectionScorePct(pos, section)
                 weightedScore += (scorePct * weight)
             }
@@ -653,12 +678,13 @@ struct FundamentalsPolarChart: View {
     }
 }
 
-// CORRECTION : Le nouveau Radar affiche une signature par action, filtrable via sa légende interactive !
 struct FundamentalsRadarChart: View {
     @ObservedObject var viewModel: PortfolioViewModel
     let uniqueSections: [String]
     let getStockSectionScorePct: (Position, String) -> Double
     let colorForTicker: (String) -> Color
+    var isExpanded: Bool = false
+    @Binding var expandedChart: FundamentalsChartZoomType?
     
     @State private var hiddenTickers: Set<String> = []
     
@@ -669,8 +695,13 @@ struct FundamentalsRadarChart: View {
     var body: some View {
         VStack {
             HStack {
-                Text("Stock Radar Profiles").font(.headline).foregroundColor(.secondary)
+                if !isExpanded { Text("Stock Radar Profiles").font(.headline).foregroundColor(.secondary) }
                 Spacer()
+                if !isExpanded {
+                    Button(action: { expandedChart = .radarChart }) {
+                        Image(systemName: "plus.magnifyingglass").foregroundColor(.secondary)
+                    }.buttonStyle(.plain)
+                }
             }.padding(.bottom, 4)
             
             InteractiveLegendView(items: viewModel.positions.map { $0.ticker }, colorMap: colorForTicker, hiddenItems: $hiddenTickers)
@@ -681,17 +712,15 @@ struct FundamentalsRadarChart: View {
             } else {
                 GeometryReader { geo in
                     let center = CGPoint(x: geo.size.width / 2, y: geo.size.height / 2)
-                    let radius = min(geo.size.width, geo.size.height) / 2 - 30
+                    let radius = min(geo.size.width, geo.size.height) / 2 - 35
                     let dataCount = uniqueSections.count
                     
                     ZStack {
-                        // Dessin des toiles d'araignées (niveaux de base 0 à 100%)
                         ForEach(1...5, id: \.self) { i in
                             RadarPolygon(dataCount: dataCount, radius: radius * CGFloat(i) / 5)
                                 .stroke(Color.gray.opacity(0.2), lineWidth: 1)
                         }
                         
-                        // Dessin des axes et labels des sections
                         ForEach(0..<dataCount, id: \.self) { i in
                             let angle = CGFloat(i) * (2 * .pi / CGFloat(dataCount)) - .pi / 2
                             Path { p in
@@ -705,7 +734,6 @@ struct FundamentalsRadarChart: View {
                                 .position(x: center.x + (radius + 25) * cos(angle), y: center.y + (radius + 25) * sin(angle))
                         }
                         
-                        // Dessin des polygones de données pour CHAQUE action
                         ForEach(filteredPositions) { pos in
                             let values = uniqueSections.map { getStockSectionScorePct(pos, $0) / 100.0 }
                             RadarDataPolygon(values: values, radius: radius)
@@ -720,7 +748,7 @@ struct FundamentalsRadarChart: View {
             Spacer()
             BlueChipWatermark()
         }
-        .padding().frame(minHeight: 360, maxHeight: 360)
+        .padding().frame(minHeight: isExpanded ? 500 : 360, maxHeight: isExpanded ? .infinity : 360)
         .background(Color(NSColor.controlBackgroundColor)).cornerRadius(12).shadow(color: Color.black.opacity(0.05), radius: 2, x: 0, y: 1)
     }
 }
@@ -791,6 +819,8 @@ struct FundamentalsFullScreenChartView: View {
                 FundamentalsLineChart(viewModel: viewModel, uniqueSections: uniqueSections, getStockSectionScorePct: getStockSectionScorePct, colorForTicker: colorForTicker, isExpanded: true, expandedChart: .constant(nil))
             case .polarChart:
                 FundamentalsPolarChart(viewModel: viewModel, uniqueSections: uniqueSections, getStockSectionScorePct: getStockSectionScorePct, colorForSection: colorForSection, isExpanded: true, expandedChart: .constant(nil))
+            case .radarChart:
+                FundamentalsRadarChart(viewModel: viewModel, uniqueSections: uniqueSections, getStockSectionScorePct: getStockSectionScorePct, colorForTicker: colorForTicker, isExpanded: true, expandedChart: .constant(nil))
             }
         }.padding(30).frame(minWidth: 900, minHeight: 700)
     }
@@ -801,17 +831,19 @@ struct FundamentalsFullScreenChartView: View {
         case .sectionScore: return "Strengths & Weaknesses"
         case .lineChart: return "Stock Quality by Segment (%)"
         case .polarChart: return "Weighted Portfolio Scorecard"
+        case .radarChart: return "Stock Radar Profiles"
         }
     }
 }
 
 // =========================================================================
-// MARK: - SHEET : GÉRER LES CRITÈRES (AJOUT / SUPPRESSION)
+// MARK: - PANEL UNIQUE & MODERNE : AJOUT ET ÉDITION DE CRITÈRE
 // =========================================================================
 
-struct CriteriaManagerSheet: View {
+struct CriterionFormSheet: View {
     @Environment(\.dismiss) var dismiss
     @ObservedObject var viewModel: PortfolioViewModel
+    let criterionToEdit: FundamentalCriterion?
     
     @State private var name: String = ""
     @State private var sectionStr: String = ""
@@ -821,135 +853,189 @@ struct CriteriaManagerSheet: View {
     @State private var premiumThreshold: Double = 15.0
     @State private var standardThreshold: Double = 8.0
     
+    var isEditing: Bool { criterionToEdit != nil }
+    
     var uniqueSections: [String] {
         Array(Set(viewModel.fundamentalCriteria.map { $0.section })).sorted()
     }
     
     var body: some View {
         VStack(spacing: 0) {
+            // HEADER
             HStack {
-                Text("Manage Criteria").font(.title2).fontWeight(.bold)
+                Text(isEditing ? "Edit Criterion" : "Add New Criterion")
+                    .font(.title2).fontWeight(.bold)
                 Spacer()
-                Button(action: { dismiss() }) { Image(systemName: "xmark.circle.fill").font(.title2).foregroundColor(.secondary) }.buttonStyle(.plain)
-            }.padding()
+                Button(action: { dismiss() }) {
+                    Image(systemName: "xmark.circle.fill").font(.title2).foregroundColor(.secondary)
+                }.buttonStyle(.plain)
+            }
+            .padding(20)
+            
             Divider()
             
-            HStack(spacing: 0) {
-                // LISTE DES CRITÈRES EXISTANTS (Magnifique Sidebar style)
-                ScrollView {
-                    VStack(spacing: 16) {
-                        ForEach(uniqueSections, id: \.self) { sec in
-                            let crits = viewModel.fundamentalCriteria.filter { $0.section == sec }
-                            if !crits.isEmpty {
-                                VStack(alignment: .leading, spacing: 0) {
-                                    Text(sec)
-                                        .font(.caption.bold())
-                                        .foregroundColor(.secondary)
-                                        .padding(.horizontal, 12)
-                                        .padding(.vertical, 8)
-                                    
-                                    VStack(spacing: 0) {
-                                        ForEach(crits) { crit in
-                                            HStack {
-                                                VStack(alignment: .leading, spacing: 4) {
-                                                    Text(crit.name).font(.subheadline).fontWeight(.bold).foregroundColor(.primary)
-                                                    Text("Weight: \(crit.weight.formatted()) | Type: \(crit.type.displayName)")
-                                                        .font(.caption2).foregroundColor(.secondary)
-                                                }
-                                                Spacer()
-                                                Button(action: { viewModel.fundamentalCriteria.removeAll { $0.id == crit.id } }) {
-                                                    Image(systemName: "trash").foregroundColor(.red)
-                                                }.buttonStyle(.plain)
-                                            }
-                                            .padding(12)
-                                            
-                                            if crit.id != crits.last?.id { Divider().padding(.leading, 12) }
-                                        }
-                                    }
-                                    .background(Color(NSColor.windowBackgroundColor))
-                                    .cornerRadius(8)
-                                    .overlay(RoundedRectangle(cornerRadius: 8).stroke(Color.gray.opacity(0.1), lineWidth: 1))
-                                    .padding(.horizontal, 12)
-                                }
-                            }
-                        }
-                    }
-                    .padding(.vertical)
-                }
-                .frame(width: 320)
-                .background(Color(NSColor.controlBackgroundColor))
-                
-                Divider()
-                
-                // FORMULAIRE D'AJOUT
-                Form {
-                    Section(header: Text("Add New Criterion").font(.headline)) {
-                        TextField("Criterion Name (e.g. Net Margin)", text: $name)
+            ScrollView(.vertical, showsIndicators: true) {
+                VStack(spacing: 20) {
+                    
+                    // 1. CRITERION DEFINITION CARD
+                    VStack(alignment: .leading, spacing: 14) {
+                        Text("Criterion Definition").font(.headline).foregroundColor(.secondary)
                         
-                        VStack(alignment: .leading) {
-                            TextField("Section Category (e.g. GROWTH)", text: $sectionStr)
+                        VStack(alignment: .leading, spacing: 6) {
+                            Text("Criterion Name").font(.caption).fontWeight(.bold).foregroundColor(.secondary)
+                            TextField("e.g. Net Margin, Debt to Equity", text: $name)
+                                .textFieldStyle(.roundedBorder)
+                        }
+                        
+                        VStack(alignment: .leading, spacing: 6) {
+                            Text("Section Category").font(.caption).fontWeight(.bold).foregroundColor(.secondary)
+                            TextField("e.g. PROFITABILITY, GROWTH", text: $sectionStr)
+                                .textFieldStyle(.roundedBorder)
                                 .onChange(of: sectionStr) { sectionStr = sectionStr.uppercased() }
                             
                             if !uniqueSections.isEmpty {
                                 ScrollView(.horizontal, showsIndicators: false) {
-                                    HStack {
+                                    HStack(spacing: 6) {
                                         ForEach(uniqueSections, id: \.self) { sec in
                                             Button(action: { sectionStr = sec }) {
-                                                Text(sec).font(.caption).padding(4).background(Color.blue.opacity(0.1)).cornerRadius(4)
+                                                Text(sec)
+                                                    .font(.caption2)
+                                                    .fontWeight(.semibold)
+                                                    .padding(.horizontal, 8)
+                                                    .padding(.vertical, 4)
+                                                    .background(sectionStr == sec ? Color.blue.opacity(0.2) : Color(NSColor.windowBackgroundColor))
+                                                    .overlay(Capsule().stroke(sectionStr == sec ? Color.blue : Color.gray.opacity(0.3), lineWidth: 1))
+                                                    .cornerRadius(12)
                                             }.buttonStyle(.plain)
                                         }
                                     }
+                                    .padding(.top, 4)
                                 }
                             }
                         }
                         
-                        Picker("Data Type", selection: $type) {
-                            ForEach(CriterionType.allCases, id: \.self) { t in
-                                Text(t.displayName).tag(t)
+                        HStack(spacing: 16) {
+                            VStack(alignment: .leading, spacing: 6) {
+                                Text("Data Type").font(.caption).fontWeight(.bold).foregroundColor(.secondary)
+                                Picker("", selection: $type) {
+                                    ForEach(CriterionType.allCases, id: \.self) { t in
+                                        Text(t.displayName).tag(t)
+                                    }
+                                }
+                                .labelsHidden()
+                            }
+                            
+                            VStack(alignment: .leading, spacing: 6) {
+                                Text("Weight (Multiplier)").font(.caption).fontWeight(.bold).foregroundColor(.secondary)
+                                TextField("1", value: $weight, format: .number)
+                                    .textFieldStyle(.roundedBorder)
                             }
                         }
-                        TextField("Weight (Points multiplier)", value: $weight, format: .number)
                     }
+                    .padding()
+                    .background(Color(NSColor.controlBackgroundColor))
+                    .cornerRadius(12)
+                    .overlay(RoundedRectangle(cornerRadius: 12).stroke(Color.gray.opacity(0.15), lineWidth: 1))
                     
-                    Section(header: Text("Scoring Rules").font(.headline)) {
+                    // 2. SCORING RULES CARD
+                    VStack(alignment: .leading, spacing: 14) {
+                        Text("Scoring Rules").font(.headline).foregroundColor(.secondary)
+                        
                         if type == .boolean {
-                            Text("Boolean criteria always award 2x weight if 'Yes', and 0 if 'No'.").font(.caption).foregroundColor(.secondary)
-                        } else {
-                            Toggle("Higher value is better? (Uncheck if lower is better)", isOn: $isHigherBetter)
-                            
                             HStack {
-                                VStack(alignment: .leading) {
-                                    Text("Premium Threshold").font(.caption)
-                                    TextField("e.g. 20", value: $premiumThreshold, format: .number).textFieldStyle(.roundedBorder)
+                                Image(systemName: "info.circle.fill").foregroundColor(.blue)
+                                Text("Boolean criteria award \(Int(2 * weight)) pts for 'Yes' and 0 pts for 'No'.")
+                                    .font(.subheadline)
+                            }
+                            .padding(.vertical, 4)
+                        } else {
+                            Toggle("Higher value is better? (Uncheck if lower value is better)", isOn: $isHigherBetter)
+                                .font(.subheadline)
+                            
+                            HStack(spacing: 16) {
+                                VStack(alignment: .leading, spacing: 6) {
+                                    Text("Premium Threshold").font(.caption).fontWeight(.bold).foregroundColor(.secondary)
+                                    TextField("e.g. 20", value: $premiumThreshold, format: .number)
+                                        .textFieldStyle(.roundedBorder)
                                 }
-                                VStack(alignment: .leading) {
-                                    Text("Standard Threshold").font(.caption)
-                                    TextField("e.g. 10", value: $standardThreshold, format: .number).textFieldStyle(.roundedBorder)
+                                
+                                VStack(alignment: .leading, spacing: 6) {
+                                    Text("Standard Threshold").font(.caption).fontWeight(.bold).foregroundColor(.secondary)
+                                    TextField("e.g. 10", value: $standardThreshold, format: .number)
+                                        .textFieldStyle(.roundedBorder)
                                 }
                             }
+                            
                             let premPts = (2 * weight).formatted(.number.precision(.fractionLength(0...2)))
                             let stdPts = (1 * weight).formatted(.number.precision(.fractionLength(0...2)))
-                            Text("Premium awards \(premPts) pts. Standard awards \(stdPts) pts.")
+                            Text("• Premium threshold awards **\(premPts) pts**.\n• Standard threshold awards **\(stdPts) pts**.")
                                 .font(.caption).foregroundColor(.blue)
                         }
                     }
-                    
-                    Button("Add Criterion") {
+                    .padding()
+                    .background(Color(NSColor.controlBackgroundColor))
+                    .cornerRadius(12)
+                    .overlay(RoundedRectangle(cornerRadius: 12).stroke(Color.gray.opacity(0.15), lineWidth: 1))
+                }
+                .padding(20)
+            }
+            
+            Divider()
+            
+            // ACTIONS BOTTOM BAR
+            HStack {
+                if isEditing {
+                    Button(role: .destructive, action: {
+                        if let crit = criterionToEdit {
+                            viewModel.fundamentalCriteria.removeAll { $0.id == crit.id }
+                        }
+                        dismiss()
+                    }) {
+                        Label("Delete Criterion", systemImage: "trash")
+                    }
+                }
+                
+                Spacer()
+                
+                Button("Cancel") { dismiss() }
+                    .keyboardShortcut(.cancelAction)
+                
+                Button(isEditing ? "Save Changes" : "Add Criterion") {
+                    if isEditing, let crit = criterionToEdit, let idx = viewModel.fundamentalCriteria.firstIndex(where: { $0.id == crit.id }) {
+                        viewModel.fundamentalCriteria[idx].name = name
+                        viewModel.fundamentalCriteria[idx].section = sectionStr.isEmpty ? "UNCATEGORIZED" : sectionStr
+                        viewModel.fundamentalCriteria[idx].weight = weight
+                        viewModel.fundamentalCriteria[idx].type = type
+                        viewModel.fundamentalCriteria[idx].isHigherBetter = isHigherBetter
+                        viewModel.fundamentalCriteria[idx].premiumThreshold = premiumThreshold
+                        viewModel.fundamentalCriteria[idx].standardThreshold = standardThreshold
+                    } else {
                         let newCrit = FundamentalCriterion(
                             id: UUID(), name: name, section: sectionStr.isEmpty ? "UNCATEGORIZED" : sectionStr, weight: weight, type: type,
                             isHigherBetter: isHigherBetter, premiumThreshold: premiumThreshold, standardThreshold: standardThreshold
                         )
                         viewModel.fundamentalCriteria.append(newCrit)
-                        name = ""
                     }
-                    .buttonStyle(.borderedProminent)
-                    .disabled(name.isEmpty || sectionStr.isEmpty)
-                    .padding(.top, 10)
+                    dismiss()
                 }
-                .padding()
+                .keyboardShortcut(.defaultAction)
+                .buttonStyle(.borderedProminent)
+                .disabled(name.isEmpty || sectionStr.isEmpty)
+            }
+            .padding(20)
+        }
+        .frame(width: 560, height: 600)
+        .onAppear {
+            if let crit = criterionToEdit {
+                name = crit.name
+                sectionStr = crit.section
+                weight = crit.weight
+                type = crit.type
+                isHigherBetter = crit.isHigherBetter
+                premiumThreshold = crit.premiumThreshold
+                standardThreshold = crit.standardThreshold
             }
         }
-        .frame(width: 800, height: 600)
     }
 }
 
