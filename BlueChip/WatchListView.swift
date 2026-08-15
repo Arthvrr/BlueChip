@@ -19,18 +19,22 @@ struct WatchlistItem: Identifiable, Codable {
     var currency: String = "EUR"
     var note: String = ""
     
+    // NOUVEAU : Sauvegarde des critères fondamentaux pour la Watchlist
     var fundamentalValues: [String: Double]?
     
+    // Calcul du Fair Price : ((GF + TipRanks) / 2) * (1 - Margin of Safety)
     func fairPrice(marginOfSafety: Double) -> Double {
         let avgValuation = (guruFocusPrice + tipRanksPrice) / 2.0
         return avgValuation * (1.0 - (marginOfSafety / 100.0))
     }
     
+    // Potentiel de hausse vers le Prix Cible (%)
     var targetUpsidePercent: Double {
         guard currentPrice > 0 else { return 0 }
         return (targetPrice - currentPrice) / currentPrice
     }
     
+    // Potentiel de hausse vers le Fair Price (%)
     func fairPriceUpsidePercent(marginOfSafety: Double) -> Double {
         guard currentPrice > 0 else { return 0 }
         let fp = fairPrice(marginOfSafety: marginOfSafety)
@@ -38,6 +42,7 @@ struct WatchlistItem: Identifiable, Codable {
     }
 }
 
+// Zoom Enum
 enum WatchListChartZoomType: String, Identifiable {
     case priceComparison, peComparison, pegComparison, potentialUpside, labScore, labRadar
     var id: String { self.rawValue }
@@ -58,8 +63,8 @@ struct WatchListView: View {
     @State private var chartToZoom: WatchListChartZoomType? = nil
     @State private var isRefreshingPrices: Bool = false
     
-    // NOUVEAU : On gère l'état de l'action sélectionnée dans le labo globalement
-    // pour pouvoir la transmettre à la vue plein écran (Zoom).
+    // État global pour savoir quelle action est analysée dans le labo
+    // (Permet au Zoom Plein Écran de retrouver la bonne action)
     @State private var labSelectedItemID: UUID? = nil
 
     var filteredItems: [WatchlistItem] {
@@ -78,7 +83,7 @@ struct WatchListView: View {
                     privacyMode: $privacyMode
                 )
                 
-                // 2. PANNEAU DE CONTRÔLE
+                // 2. PANNEAU DE CONTRÔLE (Slider Marge de Sécurité & Actions)
                 WatchListControlsSection(
                     marginOfSafety: $marginOfSafety,
                     searchText: $searchText,
@@ -87,13 +92,13 @@ struct WatchListView: View {
                     onRefresh: { refreshPrices() }
                 )
                 
-                // 3. TABLEAU DES ENTREPRISES SUIVIES (SANS COLONNE ACTIONS, ÉDITION AU DOUBLE-CLIC)
+                // 3. TABLEAU DES ENTREPRISES SUIVIES
                 WatchListTableSection(
-                    viewModel: viewModel,
                     items: filteredItems,
                     marginOfSafety: marginOfSafety,
                     privacyMode: $privacyMode,
-                    onEdit: { editingItem = $0 }
+                    onEdit: { editingItem = $0 },
+                    onDelete: { id in viewModel.watchlistItems.removeAll { $0.id == id } }
                 )
                 
                 // 4. LES 4 GRAPHIQUES ANALYTIQUES
@@ -104,7 +109,7 @@ struct WatchListView: View {
                     chartToZoom: $chartToZoom
                 )
                 
-                // 5. LE LABORATOIRE DE QUALITÉ FONDAMENTALE (PLEINE LARGEUR)
+                // 5. LE LABORATOIRE DE QUALITÉ FONDAMENTALE
                 WatchlistQualityLabSection(
                     viewModel: viewModel,
                     selectedItemID: $labSelectedItemID,
@@ -114,12 +119,12 @@ struct WatchListView: View {
             .padding()
         }
         .sheet(isPresented: $showAddSheet) {
-            AddEditWatchListItemView(viewModel: viewModel, item: nil) { newItem in
+            AddEditWatchListItemView(item: nil) { newItem in
                 viewModel.watchlistItems.append(newItem)
             }
         }
         .sheet(item: $editingItem) { item in
-            AddEditWatchListItemView(viewModel: viewModel, item: item) { updatedItem in
+            AddEditWatchListItemView(item: item) { updatedItem in
                 if let idx = viewModel.watchlistItems.firstIndex(where: { $0.id == item.id }) {
                     viewModel.watchlistItems[idx] = updatedItem
                 }
@@ -132,7 +137,7 @@ struct WatchListView: View {
                 marginOfSafety: marginOfSafety,
                 privacyMode: $privacyMode,
                 viewModel: viewModel,
-                labSelectedItemID: labSelectedItemID
+                labSelectedItemID: $labSelectedItemID // Permet au Zoom de fonctionner
             )
         }
     }
@@ -245,41 +250,25 @@ struct WatchListControlsSection: View {
 }
 
 // =========================================================================
-// MARK: - TABLEAU DES ACTIONS (SANS ACTIONS COLONNE - DOUBLE CLIC)
+// MARK: - TABLEAU DES ACTIONS
 // =========================================================================
 
 struct WatchListTableSection: View {
-    @ObservedObject var viewModel: PortfolioViewModel
     let items: [WatchlistItem]
     let marginOfSafety: Double
     @Binding var privacyMode: Bool
     let onEdit: (WatchlistItem) -> Void
-    
-    func getQualityScore(for item: WatchlistItem) -> Double {
-        var total = 0.0
-        for crit in viewModel.fundamentalCriteria {
-            if let val = item.fundamentalValues?[crit.id.uuidString] {
-                total += ScoreEngine.getScoreStatus(value: val, criterion: crit).points
-            }
-        }
-        return total
-    }
+    let onDelete: (UUID) -> Void
     
     var body: some View {
         let isPrivate = privacyMode
         
         VStack(alignment: .leading, spacing: 8) {
-            HStack {
-                Text("Watchlist Valuation Table").font(.title2).fontWeight(.bold).foregroundColor(.secondary)
-                Spacer()
-                Text("(Double-click on any row to edit or delete)").font(.caption).foregroundColor(.secondary).italic()
-            }.padding(.bottom, 4)
+            Text("Watchlist Valuation Table").font(.title2).fontWeight(.bold).foregroundColor(.secondary).padding(.bottom, 4)
             
             VStack(spacing: 0) {
-                // Header (Sans la colonne "Actions")
                 HStack(spacing: 8) {
                     Text("Ticker").fontWeight(.bold).frame(width: 70, alignment: .leading)
-                    Text("Quality").fontWeight(.bold).frame(width: 60, alignment: .center)
                     Text("Current").fontWeight(.bold).frame(maxWidth: .infinity, alignment: .trailing)
                     Text("Target").fontWeight(.bold).frame(maxWidth: .infinity, alignment: .trailing)
                     Text("Fair Price").fontWeight(.bold).frame(maxWidth: .infinity, alignment: .trailing)
@@ -288,8 +277,8 @@ struct WatchListTableSection: View {
                     Text("PE 10Y").fontWeight(.bold).frame(maxWidth: .infinity, alignment: .trailing)
                     Text("PEG").fontWeight(.bold).frame(maxWidth: .infinity, alignment: .trailing)
                     Text("Upside").fontWeight(.bold).frame(maxWidth: .infinity, alignment: .trailing)
-                }
-                .font(.subheadline).foregroundColor(.secondary).padding(.horizontal, 16).padding(.vertical, 12).background(Color(NSColor.windowBackgroundColor))
+                    Text("Actions").fontWeight(.bold).frame(width: 60, alignment: .center)
+                }.font(.subheadline).foregroundColor(.secondary).padding(.horizontal, 16).padding(.vertical, 12).background(Color(NSColor.windowBackgroundColor))
                 
                 Divider()
                 
@@ -302,15 +291,12 @@ struct WatchListTableSection: View {
                                 let fairP = item.fairPrice(marginOfSafety: marginOfSafety)
                                 let upside = item.fairPriceUpsidePercent(marginOfSafety: marginOfSafety)
                                 let isUndervalued = item.currentPrice < fairP
-                                let qualityScore = getQualityScore(for: item)
                                 
                                 HStack(spacing: 8) {
                                     VStack(alignment: .leading, spacing: 2) {
                                         Text(item.ticker).fontWeight(.bold)
                                         if !item.note.isEmpty { Text(item.note).font(.caption2).foregroundColor(.secondary).lineLimit(1) }
                                     }.frame(width: 70, alignment: .leading)
-                                    
-                                    Text(qualityScore.formatted(.number.precision(.fractionLength(1)))).fontWeight(.bold).foregroundColor(.blue).frame(width: 60, alignment: .center)
                                     
                                     Text(item.currentPrice.formatted(.currency(code: item.currency).precision(.fractionLength(2)))).fontWeight(.semibold).blur(radius: isPrivate ? 6 : 0).frame(maxWidth: .infinity, alignment: .trailing)
                                     Text(item.targetPrice.formatted(.currency(code: item.currency).precision(.fractionLength(2)))).foregroundColor(.purple).blur(radius: isPrivate ? 6 : 0).frame(maxWidth: .infinity, alignment: .trailing)
@@ -320,13 +306,12 @@ struct WatchListTableSection: View {
                                     Text(item.historicalPE10Y.formatted(.number.precision(.fractionLength(1)))).foregroundColor(.secondary).frame(maxWidth: .infinity, alignment: .trailing)
                                     Text(item.peg.formatted(.number.precision(.fractionLength(2)))).fontWeight(.semibold).foregroundColor(item.peg <= 1.0 ? .green : (item.peg > 2.0 ? .orange : .primary)).frame(maxWidth: .infinity, alignment: .trailing)
                                     Text(upside.formatted(.percent.precision(.fractionLength(1)).sign(strategy: .always()))).fontWeight(.bold).padding(.horizontal, 6).padding(.vertical, 2).background((upside >= 0 ? Color.green : Color.red).opacity(0.15)).foregroundColor(upside >= 0 ? .green : .red).cornerRadius(4).blur(radius: isPrivate ? 6 : 0).frame(maxWidth: .infinity, alignment: .trailing)
-                                }
-                                .padding(.horizontal, 16)
-                                .padding(.vertical, 8)
-                                .contentShape(Rectangle()) // Rend toute la ligne cliquable
-                                .onTapGesture(count: 2) {
-                                    onEdit(item) // Ouvre l'éditeur au double clic
-                                }
+                                    
+                                    HStack(spacing: 8) {
+                                        Button(action: { onEdit(item) }) { Image(systemName: "pencil").foregroundColor(.secondary) }.buttonStyle(.plain)
+                                        Button(action: { onDelete(item.id) }) { Image(systemName: "trash").foregroundColor(.red.opacity(0.7)) }.buttonStyle(.plain)
+                                    }.frame(width: 60, alignment: .center)
+                                }.padding(.horizontal, 16).padding(.vertical, 8)
                                 Divider()
                             }
                         }
@@ -364,6 +349,7 @@ struct WatchListChartsSection: View {
 }
 
 struct PriceSeriesItem: Identifiable { let id = UUID(); let ticker: String; let type: String; let price: Double }
+
 struct WatchListPriceComparisonChart: View {
     let items: [WatchlistItem]; let marginOfSafety: Double; @Binding var privacyMode: Bool; var isExpanded: Bool = false; @Binding var expandedChart: WatchListChartZoomType?
     @State private var hiddenSeries: Set<String> = []; @State private var hoveredTicker: String? = nil
@@ -422,6 +408,7 @@ struct WatchListPEGChart: View {
 }
 
 struct UpsideSeriesItem: Identifiable { let id = UUID(); let ticker: String; let type: String; let upside: Double }
+
 struct WatchListUpsideChart: View {
     let items: [WatchlistItem]; let marginOfSafety: Double; @Binding var privacyMode: Bool; var isExpanded: Bool = false; @Binding var expandedChart: WatchListChartZoomType?
     @State private var hiddenSeries: Set<String> = []; @State private var hoveredTicker: String? = nil
@@ -443,7 +430,7 @@ struct WatchListUpsideChart: View {
 }
 
 // =========================================================================
-// MARK: - 5. LE LABORATOIRE DE QUALITÉ FONDAMENTALE (PLEINE LARGEUR)
+// MARK: - 5. LE LABORATOIRE DE QUALITÉ FONDAMENTALE (IN-PAGE)
 // =========================================================================
 
 struct WatchlistQualityLabSection: View {
@@ -525,7 +512,7 @@ struct WatchlistQualityLabSection: View {
     }
 }
 
-// --- SOUS-VUE : FORMULAIRE DE CRITÈRES (PLEINE LARGEUR VIA LAZYVGRID) ---
+// --- SOUS-VUE : FORMULAIRE DE CRITÈRES ---
 struct WatchlistLabForm: View {
     @ObservedObject var viewModel: PortfolioViewModel
     let itemIndex: Int
@@ -544,47 +531,48 @@ struct WatchlistLabForm: View {
             viewModel.watchlistItems[itemIndex].fundamentalValues = [:]
         }
         viewModel.watchlistItems[itemIndex].fundamentalValues?[crit.id.uuidString] = value
-        // viewModel.saveData() est géré par la logique globale
+        // L'update déclenchera SwiftUI automatiquement car viewModel est Observé
     }
     
-    // Grille adaptative : les colonnes font minimum 260px et s'étendent pour remplir l'espace
-    let columns = [GridItem(.adaptive(minimum: 260), spacing: 16)]
-    
     var body: some View {
-        LazyVGrid(columns: columns, alignment: .leading, spacing: 16) {
-            ForEach(groupedCriteria, id: \.section) { group in
-                GroupBox(group.section) {
-                    VStack(alignment: .leading, spacing: 10) {
-                        ForEach(group.criteria) { crit in
-                            HStack {
-                                Text(crit.name)
-                                    .font(.subheadline)
-                                    .frame(maxWidth: .infinity, alignment: .leading)
-                                
-                                if crit.type == .boolean {
-                                    Toggle("", isOn: Binding<Bool>(
-                                        get: { getVal(for: crit) == 1.0 },
-                                        set: { setVal(for: crit, value: $0 ? 1.0 : 0.0) }
-                                    )).labelsHidden()
-                                } else {
-                                    TextField("0", value: Binding<Double>(
-                                        get: { getVal(for: crit) },
-                                        set: { setVal(for: crit, value: $0) }
-                                    ), format: .number)
-                                    .textFieldStyle(.roundedBorder)
-                                    .frame(width: 65)
+        ScrollView(.vertical, showsIndicators: true) {
+            VStack(alignment: .leading, spacing: 16) {
+                ForEach(groupedCriteria, id: \.section) { group in
+                    GroupBox(group.section) {
+                        VStack(alignment: .leading, spacing: 10) {
+                            ForEach(group.criteria) { crit in
+                                HStack {
+                                    Text(crit.name)
+                                        .font(.subheadline)
+                                        .frame(maxWidth: .infinity, alignment: .leading)
                                     
-                                    if crit.type == .percentage {
-                                        Text("%").font(.caption).foregroundColor(.secondary)
+                                    if crit.type == .boolean {
+                                        Toggle("", isOn: Binding<Bool>(
+                                            get: { getVal(for: crit) == 1.0 },
+                                            set: { setVal(for: crit, value: $0 ? 1.0 : 0.0) }
+                                        )).labelsHidden()
+                                    } else {
+                                        TextField("0", value: Binding<Double>(
+                                            get: { getVal(for: crit) },
+                                            set: { setVal(for: crit, value: $0) }
+                                        ), format: .number)
+                                        .textFieldStyle(.roundedBorder)
+                                        .frame(width: 80)
+                                        
+                                        if crit.type == .percentage {
+                                            Text("%").font(.caption).foregroundColor(.secondary)
+                                        }
                                     }
                                 }
                             }
                         }
+                        .padding(.vertical, 4)
                     }
-                    .padding(.vertical, 4)
                 }
             }
+            .padding(.trailing, 8)
         }
+        .frame(maxHeight: 500)
     }
 }
 
@@ -684,32 +672,56 @@ struct WatchlistLabScoreChart: View {
             BlueChipWatermark()
         }
         .padding()
+        // CORRECTION ICI : Hauteur globale passée à 360 pour s'aligner parfaitement avec le radar
         .frame(minHeight: isExpanded ? 500 : 360, maxHeight: isExpanded ? .infinity : 360)
         .background(Color(NSColor.windowBackgroundColor))
         .cornerRadius(12)
     }
 }
 
-// --- SOUS-VUE : GRAPHIQUE RADAR (AVEC ZOOM) ---
+// --- SOUS-VUE : GRAPHIQUE RADAR (AVEC ZOOM ET LÉGENDE INTERACTIVE) ---
 struct WatchlistLabRadarChart: View {
     @ObservedObject var viewModel: PortfolioViewModel
     let itemIndex: Int
     var isExpanded: Bool = false
     @Binding var expandedChart: WatchListChartZoomType?
     
+    @State private var hiddenTickers: Set<String> = []
+    
+    var analyzedTicker: String { viewModel.watchlistItems[itemIndex].ticker }
+    
+    var allTickers: [String] {
+        var list = viewModel.positions.map { $0.ticker }
+        if !list.contains(analyzedTicker) { list.append(analyzedTicker) }
+        return list.sorted()
+    }
+    
+    func colorForTicker(_ ticker: String) -> Color {
+        if ticker == analyzedTicker { return .purple }
+        return viewModel.color(for: ticker)
+    }
+    
     var uniqueSections: [String] {
         Array(Set(viewModel.fundamentalCriteria.map { $0.section })).sorted()
     }
     
-    func getStockSectionScorePct(section: String) -> Double {
+    func getScorePct(for ticker: String, section: String) -> Double {
         let crits = viewModel.fundamentalCriteria.filter { $0.section == section }
         let maxScore = crits.reduce(0) { $0 + ($1.weight * 2.0) }
         guard maxScore > 0 else { return 0 }
         
         var total = 0.0
-        for crit in crits {
-            if let val = viewModel.watchlistItems[itemIndex].fundamentalValues?[crit.id.uuidString] {
-                total += ScoreEngine.getScoreStatus(value: val, criterion: crit).points
+        if ticker == analyzedTicker {
+            for crit in crits {
+                if let val = viewModel.watchlistItems[itemIndex].fundamentalValues?[crit.id.uuidString] {
+                    total += ScoreEngine.getScoreStatus(value: val, criterion: crit).points
+                }
+            }
+        } else if let pos = viewModel.positions.first(where: { $0.ticker == ticker }) {
+            for crit in crits {
+                if let val = pos.fundamentalValues?[crit.id.uuidString] {
+                    total += ScoreEngine.getScoreStatus(value: val, criterion: crit).points
+                }
             }
         }
         return total / maxScore
@@ -718,7 +730,7 @@ struct WatchlistLabRadarChart: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 8) {
             HStack {
-                if !isExpanded { Text("Stock Radar Profile").font(.headline).foregroundColor(.secondary) }
+                if !isExpanded { Text("Stock Radar Profiles").font(.headline).foregroundColor(.secondary) }
                 Spacer()
                 if !isExpanded {
                     Button(action: { expandedChart = .labRadar }) {
@@ -728,9 +740,12 @@ struct WatchlistLabRadarChart: View {
             }
             .padding(.bottom, 4)
             
+            InteractiveLegendView(items: allTickers, colorMap: colorForTicker, hiddenItems: $hiddenTickers)
+                .padding(.bottom, 8)
+            
             GeometryReader { geo in
                 let center = CGPoint(x: geo.size.width / 2, y: geo.size.height / 2)
-                let radius = min(geo.size.width, geo.size.height) / 2 - 25
+                let radius = max(0, min(geo.size.width, geo.size.height) / 2 - 25)
                 let dataCount = uniqueSections.count
                 
                 if dataCount > 0 {
@@ -755,12 +770,16 @@ struct WatchlistLabRadarChart: View {
                                 .position(x: center.x + (radius + 20) * cos(angle), y: center.y + (radius + 20) * sin(angle))
                         }
                         
-                        // Forme des données
-                        let values = uniqueSections.map { getStockSectionScorePct(section: $0) }
-                        WL_RadarDataPolygon(values: values, radius: radius)
-                            .fill(Color.purple.opacity(0.3))
-                        WL_RadarDataPolygon(values: values, radius: radius)
-                            .stroke(Color.purple, lineWidth: 2)
+                        // Formes des données
+                        ForEach(allTickers.filter { !hiddenTickers.contains($0) }, id: \.self) { ticker in
+                            let values = uniqueSections.map { getScorePct(for: ticker, section: $0) }
+                            let color = colorForTicker(ticker)
+                            
+                            WL_RadarDataPolygon(values: values, radius: radius)
+                                .fill(color.opacity(ticker == analyzedTicker ? 0.3 : 0.05))
+                            WL_RadarDataPolygon(values: values, radius: radius)
+                                .stroke(color, lineWidth: ticker == analyzedTicker ? 3 : 1.5)
+                        }
                     }
                 } else {
                     Text("No sections")
@@ -768,11 +787,14 @@ struct WatchlistLabRadarChart: View {
                         .position(x: center.x, y: center.y)
                 }
             }
+            // CORRECTION ICI : Remplacement par maxHeight: .infinity pour corriger le crash "Invalid frame dimension"
+            .frame(maxHeight: .infinity)
             
             Spacer()
             BlueChipWatermark()
         }
         .padding()
+        // Hauteur globale 360 pour s'aligner parfaitement avec le graphique de Score
         .frame(minHeight: isExpanded ? 500 : 360, maxHeight: isExpanded ? .infinity : 360)
         .background(Color(NSColor.windowBackgroundColor))
         .cornerRadius(12)
@@ -820,7 +842,6 @@ struct WL_RadarDataPolygon: Shape {
 
 struct AddEditWatchListItemView: View {
     @Environment(\.dismiss) var dismiss
-    @ObservedObject var viewModel: PortfolioViewModel
     let item: WatchlistItem?
     let onSave: (WatchlistItem) -> Void
 
@@ -854,24 +875,7 @@ struct AddEditWatchListItemView: View {
             }
 
             Divider()
-            
-            // ACTION BUTTONS (AVEC BOUTON DELETE)
-            HStack {
-                if isEditing {
-                    Button(role: .destructive, action: {
-                        if let it = item {
-                            viewModel.watchlistItems.removeAll { $0.id == it.id }
-                        }
-                        dismiss()
-                    }) {
-                        Label("Delete", systemImage: "trash")
-                    }
-                }
-                Spacer()
-                Button("Cancel") { dismiss() }.keyboardShortcut(.cancelAction)
-                Button("Save") { save() }.keyboardShortcut(.defaultAction).buttonStyle(.borderedProminent)
-            }.padding()
-            
+            HStack { Button("Cancel") { dismiss() }.keyboardShortcut(.cancelAction); Spacer(); Button("Save") { save() }.keyboardShortcut(.defaultAction).buttonStyle(.borderedProminent) }.padding()
         }.frame(width: 480, height: 560).onAppear { populate() }
     }
 
@@ -903,9 +907,8 @@ struct WatchListFullScreenChartView: View {
     let marginOfSafety: Double
     @Binding var privacyMode: Bool
     
-    // Ajouts pour le zoom du Labo
     @ObservedObject var viewModel: PortfolioViewModel
-    let labSelectedItemID: UUID?
+    @Binding var labSelectedItemID: UUID?
 
     var body: some View {
         VStack(spacing: 20) {
@@ -927,10 +930,14 @@ struct WatchListFullScreenChartView: View {
             case .labScore:
                 if let id = labSelectedItemID, let idx = items.firstIndex(where: { $0.id == id }) {
                     WatchlistLabScoreChart(viewModel: viewModel, itemIndex: idx, isExpanded: true, expandedChart: .constant(nil))
+                } else {
+                    Text("No stock selected").foregroundColor(.secondary)
                 }
             case .labRadar:
                 if let id = labSelectedItemID, let idx = items.firstIndex(where: { $0.id == id }) {
                     WatchlistLabRadarChart(viewModel: viewModel, itemIndex: idx, isExpanded: true, expandedChart: .constant(nil))
+                } else {
+                    Text("No stock selected").foregroundColor(.secondary)
                 }
             }
         }.padding(30).frame(minWidth: 900, minHeight: 700)

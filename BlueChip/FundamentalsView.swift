@@ -712,7 +712,7 @@ struct FundamentalsPolarChart: View {
                 .chartBackground { proxy in
                     GeometryReader { geo in
                         let center = CGPoint(x: geo.frame(in: .local).midX, y: geo.frame(in: .local).midY)
-                        let radius = min(geo.size.width, geo.size.height) / 2
+                        let radius = max (0, min(geo.size.width, geo.size.height) / 2 - 30)
                         
                         ForEach(1...5, id: \.self) { i in
                             Circle()
@@ -787,7 +787,7 @@ struct FundamentalsRadarChart: View {
             } else {
                 GeometryReader { geo in
                     let center = CGPoint(x: geo.size.width / 2, y: geo.size.height / 2)
-                    let radius = min(geo.size.width, geo.size.height) / 2 - 35
+                    let radius = max (0, min(geo.size.width, geo.size.height) / 2 - 30)
                     let dataCount = uniqueSections.count
                     
                     ZStack {
