@@ -33,6 +33,7 @@ struct ContentView: View {
                 case .simulation: SimulationView(viewModel: viewModel, privacyMode: $privacyMode)
                 case .exposure: ExposureView(viewModel: viewModel, privacyMode: $privacyMode)
                 case .fundamentals: FundamentalsView(viewModel: viewModel, privacyMode: $privacyMode)
+                case .wealth: WealthView(viewModel: viewModel, privacyMode: $privacyMode)
                 
                 default: VStack(spacing: 20) { Image(systemName: "hammer.fill").font(.system(size: 50)).foregroundColor(.secondary); Text("\(selectedTab.rawValue) view is under construction.").font(.title).foregroundColor(.secondary) }.frame(maxWidth: .infinity, maxHeight: .infinity)
                 }

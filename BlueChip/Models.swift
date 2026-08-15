@@ -121,6 +121,9 @@ struct PortfolioSaveData: Codable {
     var calendarEvents: [CalendarEvent]?
     
     var fundamentalCriteria: [FundamentalCriterion]?
+    
+    var wealthGoalTarget: Double?
+    var manualWealthAssets: [WealthAsset]?
 }
 
 struct ExpectedMonthlyDividendSeries: Identifiable {
@@ -284,4 +287,18 @@ struct FundamentalCriterion: Identifiable, Codable {
     var isHigherBetter: Bool
     var premiumThreshold: Double
     var standardThreshold: Double
+}
+
+// MARK: - WEALTH MODELS
+
+struct WealthAsset: Identifiable, Codable, Equatable {
+    var id: UUID = UUID()
+    var name: String
+    var invested: Double
+    var current: Double
+    var isAutoFilled: Bool // Indique si la donnée provient du portefeuille boursier (lecture seule)
+    
+    // Propriétés calculées
+    var variationEUR: Double { current - invested }
+    var variationPercent: Double { invested > 0 ? (variationEUR / invested) : 0 }
 }

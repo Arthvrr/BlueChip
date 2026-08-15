@@ -59,6 +59,31 @@ class PortfolioViewModel: ObservableObject {
     
     @Published var fundamentalCriteria: [FundamentalCriterion] = [] { didSet { saveData() } }
     
+    @Published var wealthGoalTarget: Double = 50000.0 { didSet { saveData() } }
+    @Published var manualWealthAssets: [WealthAsset] = [] { didSet { saveData() } }
+    
+    // === CALCULS WEALTH ===
+        
+    // Génère la liste complète des actifs en fusionnant la Bourse + les manuels
+    var allWealthAssets: [WealthAsset] {
+        let stocksAsset = WealthAsset(
+            name: "Brokerage Account", // Nom en anglais
+            invested: manuallyInvested, // Total investi de CompositionView
+            current: currentTotalCapital, // Total (Current + Cash)
+            isAutoFilled: true
+        )
+        return [stocksAsset] + manualWealthAssets
+    }
+    
+    var totalWealth: Double { allWealthAssets.reduce(0) { $0 + $1.current } }
+    var totalWealthInvested: Double { allWealthAssets.reduce(0) { $0 + $1.invested } }
+    var totalWealthVariationEUR: Double { totalWealth - totalWealthInvested }
+    var totalWealthVariationPercent: Double { totalWealthInvested > 0 ? (totalWealthVariationEUR / totalWealthInvested) : 0 }
+    
+    var wealthStockWeight: Double { totalWealth > 0 ? (totalValue / totalWealth) : 0 }
+    var bestWealthAsset: String { allWealthAssets.max(by: { $0.variationPercent < $1.variationPercent })?.name ?? "-" }
+    var wealthGoalProgress: Double { wealthGoalTarget > 0 ? (totalWealth / wealthGoalTarget) : 0 }
+    
     private let yahooService = YahooFinanceService()
     
     var positionsInvestedSum: Double { positions.reduce(0) { $0 + $1.investedAmountEUR } }
@@ -237,7 +262,10 @@ class PortfolioViewModel: ObservableObject {
 
             calendarEvents: calendarEvents,
             
-            fundamentalCriteria: fundamentalCriteria
+            fundamentalCriteria: fundamentalCriteria,
+            
+            wealthGoalTarget: wealthGoalTarget,
+            manualWealthAssets: manualWealthAssets
         )
         do { try JSONEncoder().encode(dataToSave).write(to: saveFileURL, options: [.atomic]) } catch {}
     }
@@ -270,6 +298,9 @@ class PortfolioViewModel: ObservableObject {
             if let savedEvents = decoded.calendarEvents { calendarEvents = savedEvents }
             
             if let savedCriteria = decoded.fundamentalCriteria { fundamentalCriteria = savedCriteria }
+            
+            if let savedWealthGoal = decoded.wealthGoalTarget { wealthGoalTarget = savedWealthGoal }
+            if let savedWealthAssets = decoded.manualWealthAssets { manualWealthAssets = savedWealthAssets }
             
         } catch { print("ℹ️ JSON File not found or read error.") }
     }
