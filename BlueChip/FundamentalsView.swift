@@ -323,7 +323,7 @@ struct WeightedAverageCell: View {
     
     var body: some View {
         Text(textToShow)
-            .font(.subheadline).fontWeight(.bold).foregroundColor(.blue)
+            .font(.subheadline).fontWeight(.bold).foregroundColor(.primary)
             .frame(width: width, height: height)
             .background(Color(NSColor.windowBackgroundColor))
             .border(Color.gray.opacity(0.2), width: 0.5)
