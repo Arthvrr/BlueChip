@@ -62,8 +62,7 @@ struct FundamentalsView: View {
     }
     
     func colorForTicker(_ ticker: String) -> Color {
-        let idx = abs(ticker.hashValue) % positionColors.count
-        return positionColors[idx]
+        return viewModel.color(for: ticker)
     }
     
     var maxPossibleScore: Double {
@@ -268,11 +267,8 @@ struct FundamentalsDashboardSection: View {
             pctDict[sec] = score / maxScore
         }
         
-        // Tri déterministe stable (valeur décroissante, puis nom de section alphabétique en cas d'égalité)
         return pctDict.sorted {
-            if abs($0.value - $1.value) > 0.0001 {
-                return $0.value > $1.value
-            }
+            if abs($0.value - $1.value) > 0.0001 { return $0.value > $1.value }
             return $0.key < $1.key
         }
     }
@@ -314,6 +310,45 @@ struct InfoCell: View {
     var body: some View {
         Text(text).font(.subheadline).fontWeight(isBold ? .bold : .regular).frame(width: width, height: height)
             .background(Color(NSColor.windowBackgroundColor)).border(Color.gray.opacity(0.2), width: 0.5)
+    }
+}
+
+// CORRECTION : Extraction de la cellule de moyenne pour soulager le compilateur
+struct WeightedAverageCell: View {
+    let crit: FundamentalCriterion
+    let positions: [Position]
+    let totalValue: Double
+    let width: CGFloat
+    let height: CGFloat
+    
+    var body: some View {
+        Text(textToShow)
+            .font(.subheadline).fontWeight(.bold).foregroundColor(.blue)
+            .frame(width: width, height: height)
+            .background(Color(NSColor.windowBackgroundColor))
+            .border(Color.gray.opacity(0.2), width: 0.5)
+    }
+    
+    var textToShow: String {
+        if crit.type == .boolean {
+            return "-"
+        } else {
+            let weightedVal = positions.reduce(0.0) { sum, pos in
+                let w = totalValue > 0 ? pos.currentValueEUR / totalValue : 0
+                let v = pos.fundamentalValues?[crit.id.uuidString] ?? 0.0
+                return sum + (v * w)
+            }
+            return formatValue(weightedVal, type: crit.type)
+        }
+    }
+    
+    func formatValue(_ value: Double?, type: CriterionType) -> String {
+        guard let v = value else { return "-" }
+        switch type {
+        case .boolean: return v == 1.0 ? "Yes" : "No"
+        case .percentage: return (v / 100.0).formatted(.percent.precision(.fractionLength(2)))
+        case .number: return v.formatted(.number.precision(.fractionLength(2)))
+        }
     }
 }
 
@@ -394,6 +429,47 @@ struct FundamentalsSpreadsheetSection: View {
                                 }
                             }
                         }
+                        
+                        Divider()
+                        
+                        // LIGNE : MOYENNE PONDÉRÉE DU PORTEFEUILLE
+                        HStack(spacing: 0) {
+                            Text("WEIGHTED AVG")
+                                .font(.caption).fontWeight(.bold).foregroundColor(.primary)
+                                .frame(width: colWidthInfo, height: rowHeight)
+                                .background(Color(NSColor.windowBackgroundColor))
+                                .border(Color.gray.opacity(0.2), width: 0.5)
+                            
+                            let totalVal = viewModel.positions.reduce(0) { $0 + $1.currentValueEUR }
+                            let weightedScore = viewModel.positions.reduce(0) { sum, pos in
+                                let w = totalVal > 0 ? pos.currentValueEUR / totalVal : 0
+                                return sum + (getTotalScore(pos) * w)
+                            }
+                            Text(weightedScore.formatted(.number.precision(.fractionLength(1))))
+                                .font(.subheadline).fontWeight(.bold).foregroundColor(.primary)
+                                .frame(width: colWidthInfo, height: rowHeight)
+                                .background(Color(NSColor.windowBackgroundColor))
+                                .border(Color.gray.opacity(0.2), width: 0.5)
+                            
+                            Text("100%")
+                                .font(.subheadline).fontWeight(.bold).foregroundColor(.primary)
+                                .frame(width: colWidthInfo, height: rowHeight)
+                                .background(Color(NSColor.windowBackgroundColor))
+                                .border(Color.gray.opacity(0.2), width: 0.5)
+                            
+                            // Cellules de Moyenne par Critère extraites pour alléger le compilateur
+                            ForEach(groupedCriteria, id: \.section) { group in
+                                ForEach(group.criteria) { crit in
+                                    WeightedAverageCell(
+                                        crit: crit,
+                                        positions: viewModel.positions,
+                                        totalValue: totalVal,
+                                        width: colWidthCrit,
+                                        height: rowHeight
+                                    )
+                                }
+                            }
+                        }
                     }
                 }
                 .background(Color(NSColor.controlBackgroundColor)).cornerRadius(8).overlay(RoundedRectangle(cornerRadius: 8).stroke(Color.gray.opacity(0.2), lineWidth: 1)).frame(maxHeight: 450)
@@ -449,7 +525,7 @@ struct FundamentalsTotalScoreChart: View {
                 Chart(viewModel.positions.sorted(by: { getTotalScore($0) > getTotalScore($1) })) { pos in
                     let score = getTotalScore(pos)
                     BarMark(x: .value("Ticker", pos.ticker), y: .value("Score", score))
-                        .foregroundStyle(Color.blue.gradient).cornerRadius(4)
+                        .foregroundStyle(viewModel.color(for: pos.ticker).gradient).cornerRadius(4)
                     
                     if let hTicker = hoveredTicker, pos.ticker == hTicker {
                         RuleMark(x: .value("Ticker", hTicker))
@@ -538,19 +614,18 @@ struct FundamentalsLineChart: View {
                         ForEach(uniqueSections, id: \.self) { section in
                             let pct = getStockSectionScorePct(pos, section)
                             
-                            // LIGNES DROITES PARFAITEMENT DÉFINIES AVEC COULEURS PAR TICKER
                             LineMark(
                                 x: .value("Section", section),
                                 y: .value("Score (%)", pct)
                             )
-                            .foregroundStyle(by: .value("Ticker", pos.ticker))
+                            .foregroundStyle(colorForTicker(pos.ticker))
                             .interpolationMethod(.linear)
                             
                             PointMark(
                                 x: .value("Section", section),
                                 y: .value("Score (%)", pct)
                             )
-                            .foregroundStyle(by: .value("Ticker", pos.ticker))
+                            .foregroundStyle(colorForTicker(pos.ticker))
                         }
                     }
                     
