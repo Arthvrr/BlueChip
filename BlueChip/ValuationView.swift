@@ -2,10 +2,10 @@ import SwiftUI
 import Charts
 
 // =========================================================================
-// MARK: - EXTENSION POUR LES CALCULS DE VALORISATION
+// MARK: - EXTENSION FOR VALUATION CALCULATIONS
 // =========================================================================
 extension Position {
-    // Helpers pour gérer les optionnels de manière transparente
+    // Helpers to safely unwrap optionals
     var valTargetPrice: Double { targetPrice ?? 0.0 }
     var valGuruFocusPrice: Double { guruFocusPrice ?? 0.0 }
     var valTipRanksPrice: Double { tipRanksPrice ?? 0.0 }
@@ -14,7 +14,7 @@ extension Position {
     var valHistoricalPE10Y: Double { historicalPE10Y ?? 0.0 }
     var valPeg: Double { peg ?? 0.0 }
     
-    // Calcul du Fair Price avec marge de sécurité
+    // Fair Price calculation with Margin of Safety
     func fairPrice(marginOfSafety: Double) -> Double {
         let avgValuation = (valGuruFocusPrice + valTipRanksPrice) / 2.0
         return avgValuation * (1.0 - (marginOfSafety / 100.0))
@@ -32,11 +32,17 @@ extension Position {
         guard valCurrentPE > 0 else { return 0 }
         return (valHistoricalPE10Y - valCurrentPE) / valCurrentPE
     }
+    
+    // Implied Growth from PEG (Used for Scatter Plot)
+    var impliedGrowth: Double {
+        guard valPeg > 0 else { return 0 }
+        return valCurrentPE / valPeg
+    }
 }
 
-// Zoom Enum pour les graphiques
+// Zoom Enum for Charts
 enum ValuationChartZoomType: String, Identifiable {
-    case priceComparison, peComparison
+    case priceComparison, peBullet, pegScatter, valuationHeatmap
     var id: String { self.rawValue }
 }
 
@@ -81,7 +87,7 @@ struct ValuationView: View {
                     onEdit: { pos in editingPosition = pos }
                 )
                 
-                // 5. CHARTS (PRICES & PE)
+                // 5. CHARTS (4x GRAPHS)
                 ValuationChartsSection(
                     viewModel: viewModel,
                     marginOfSafety: marginOfSafety,
@@ -168,15 +174,12 @@ struct ValuationDashboardSection: View {
 
     var body: some View {
         VStack(spacing: 16) {
-            // Row 1
             HStack(spacing: 16) {
                 DashboardCard(title: "Valuated Stocks", value: "\(valuatedStocks.count) / \(viewModel.positions.count)", titleIcon: nil, privacyMode: .constant(false))
                 DashboardCard(title: "Undervalued (Fair Price)", value: "\(undervaluedCount)", titleIcon: nil, privacyMode: .constant(false))
                 DashboardCard(title: "Avg. Fair Price Upside", value: avgFairPriceUpside.formatted(.percent.precision(.fractionLength(1)).sign(strategy: .always())), titleIcon: nil, privacyMode: .constant(false))
                 DashboardCard(title: "Avg. Historical PE Upside", value: avgPEUpside.formatted(.percent.precision(.fractionLength(1)).sign(strategy: .always())), titleIcon: nil, privacyMode: .constant(false))
             }
-            
-            // Row 2
             HStack(spacing: 16) {
                 DashboardCard(title: "Avg. Current PE", value: avgCurrentPE > 0 ? avgCurrentPE.formatted(.number.precision(.fractionLength(1))) + "x" : "-", titleIcon: nil, privacyMode: .constant(false))
                 DashboardCard(title: "Avg. Forward PE", value: avgForwardPE > 0 ? avgForwardPE.formatted(.number.precision(.fractionLength(1))) + "x" : "-", titleIcon: nil, privacyMode: .constant(false))
@@ -234,7 +237,6 @@ struct ValuationPriceTableSection: View {
             }.padding(.bottom, 4)
             
             VStack(spacing: 0) {
-                // Header
                 HStack(spacing: 8) {
                     Text("Ticker").fontWeight(.bold).frame(width: 70, alignment: .leading)
                     Text("Current Price").fontWeight(.bold).frame(maxWidth: .infinity, alignment: .trailing)
@@ -260,15 +262,10 @@ struct ValuationPriceTableSection: View {
                                 
                                 HStack(spacing: 8) {
                                     Text(pos.ticker).fontWeight(.bold).frame(width: 70, alignment: .leading)
-                                    
                                     Text(pos.currentPrice.formatted(.currency(code: pos.currency).precision(.fractionLength(2)))).fontWeight(.semibold).blur(radius: isPrivate ? 6 : 0).frame(maxWidth: .infinity, alignment: .trailing)
-                                    
                                     Text(pos.valTargetPrice > 0 ? pos.valTargetPrice.formatted(.currency(code: pos.currency).precision(.fractionLength(2))) : "-").foregroundColor(.purple).blur(radius: isPrivate ? 6 : 0).frame(maxWidth: .infinity, alignment: .trailing)
-                                    
                                     Text(pos.valGuruFocusPrice > 0 ? pos.valGuruFocusPrice.formatted(.currency(code: pos.currency).precision(.fractionLength(2))) : "-").foregroundColor(.secondary).blur(radius: isPrivate ? 6 : 0).frame(maxWidth: .infinity, alignment: .trailing)
-                                    
                                     Text(pos.valTipRanksPrice > 0 ? pos.valTipRanksPrice.formatted(.currency(code: pos.currency).precision(.fractionLength(2))) : "-").foregroundColor(.secondary).blur(radius: isPrivate ? 6 : 0).frame(maxWidth: .infinity, alignment: .trailing)
-                                    
                                     Text(fairP > 0 ? fairP.formatted(.currency(code: pos.currency).precision(.fractionLength(2))) : "-").fontWeight(.bold).foregroundColor(isUndervalued ? .green : .primary).blur(radius: isPrivate ? 6 : 0).frame(maxWidth: .infinity, alignment: .trailing)
                                     
                                     if fairP > 0 {
@@ -307,7 +304,6 @@ struct ValuationPETableSection: View {
             }.padding(.bottom, 4)
             
             VStack(spacing: 0) {
-                // Header
                 HStack(spacing: 8) {
                     Text("Ticker").fontWeight(.bold).frame(width: 70, alignment: .leading)
                     Text("Current PE").fontWeight(.bold).frame(maxWidth: .infinity, alignment: .trailing)
@@ -330,19 +326,12 @@ struct ValuationPETableSection: View {
                                 
                                 HStack(spacing: 8) {
                                     Text(pos.ticker).fontWeight(.bold).frame(width: 70, alignment: .leading)
-                                    
-                                    Text(pos.valCurrentPE > 0 ? pos.valCurrentPE.formatted(.number.precision(.fractionLength(1))) : "-")
-                                        .foregroundColor((pos.valCurrentPE < pos.valHistoricalPE10Y && pos.valHistoricalPE10Y > 0) ? .green : .primary).frame(maxWidth: .infinity, alignment: .trailing)
-                                        
-                                    Text(pos.valForwardPE > 0 ? pos.valForwardPE.formatted(.number.precision(.fractionLength(1))) : "-")
-                                        .foregroundColor((pos.valForwardPE < pos.valCurrentPE && pos.valCurrentPE > 0) ? .teal : .primary).frame(maxWidth: .infinity, alignment: .trailing)
-                                    
-                                    Text(pos.valHistoricalPE10Y > 0 ? pos.valHistoricalPE10Y.formatted(.number.precision(.fractionLength(1))) : "-")
-                                        .foregroundColor(.secondary).frame(maxWidth: .infinity, alignment: .trailing)
+                                    Text(pos.valCurrentPE > 0 ? pos.valCurrentPE.formatted(.number.precision(.fractionLength(1))) : "-").foregroundColor((pos.valCurrentPE < pos.valHistoricalPE10Y && pos.valHistoricalPE10Y > 0) ? .green : .primary).frame(maxWidth: .infinity, alignment: .trailing)
+                                    Text(pos.valForwardPE > 0 ? pos.valForwardPE.formatted(.number.precision(.fractionLength(1))) : "-").foregroundColor((pos.valForwardPE < pos.valCurrentPE && pos.valCurrentPE > 0) ? .teal : .primary).frame(maxWidth: .infinity, alignment: .trailing)
+                                    Text(pos.valHistoricalPE10Y > 0 ? pos.valHistoricalPE10Y.formatted(.number.precision(.fractionLength(1))) : "-").foregroundColor(.secondary).frame(maxWidth: .infinity, alignment: .trailing)
                                     
                                     if pos.valPeg > 0 {
-                                        Text(pos.valPeg.formatted(.number.precision(.fractionLength(2))))
-                                            .fontWeight(.semibold).foregroundColor(pos.valPeg <= 1.0 ? .green : (pos.valPeg > 2.0 ? .orange : .primary)).frame(maxWidth: .infinity, alignment: .trailing)
+                                        Text(pos.valPeg.formatted(.number.precision(.fractionLength(2)))).fontWeight(.semibold).foregroundColor(pos.valPeg <= 1.0 ? .green : (pos.valPeg > 2.0 ? .orange : .primary)).frame(maxWidth: .infinity, alignment: .trailing)
                                     } else {
                                         Text("-").frame(maxWidth: .infinity, alignment: .trailing)
                                     }
@@ -366,7 +355,7 @@ struct ValuationPETableSection: View {
 }
 
 // =========================================================================
-// MARK: - 5. CHARTS SECTION
+// MARK: - 5. CHARTS SECTION (2x2 GRID)
 // =========================================================================
 
 struct ValuationChartsSection: View {
@@ -381,13 +370,17 @@ struct ValuationChartsSection: View {
             
             HStack(spacing: 20) {
                 ValuationPriceComparisonChart(viewModel: viewModel, marginOfSafety: marginOfSafety, privacyMode: $privacyMode, expandedChart: $chartToZoom)
-                ValuationPEComparisonChart(viewModel: viewModel, privacyMode: $privacyMode, expandedChart: $chartToZoom)
+                ValuationPEBulletChart(viewModel: viewModel, privacyMode: $privacyMode, expandedChart: $chartToZoom)
+            }
+            HStack(spacing: 20) {
+                ValuationPEGScatterChart(viewModel: viewModel, privacyMode: $privacyMode, expandedChart: $chartToZoom)
+                ValuationDiscountHeatmap(viewModel: viewModel, marginOfSafety: marginOfSafety, expandedChart: $chartToZoom)
             }
         }
     }
 }
 
-// --- CHART 1: PRICES COMPARISON ---
+// --- CHART 1: PRICE COMPARISON (Current vs GF vs TipRanks) ---
 
 struct ValPriceSeriesItem: Identifiable { let id = UUID(); let ticker: String; let type: String; let price: Double }
 
@@ -405,20 +398,15 @@ struct ValuationPriceComparisonChart: View {
         var result: [ValPriceSeriesItem] = []
         for pos in viewModel.positions {
             result.append(ValPriceSeriesItem(ticker: pos.ticker, type: "Current Price", price: pos.currentPrice))
-            if pos.valTargetPrice > 0 { result.append(ValPriceSeriesItem(ticker: pos.ticker, type: "Target Price", price: pos.valTargetPrice)) }
-            if pos.fairPrice(marginOfSafety: marginOfSafety) > 0 { result.append(ValPriceSeriesItem(ticker: pos.ticker, type: "Fair Price", price: pos.fairPrice(marginOfSafety: marginOfSafety))) }
+            if pos.valGuruFocusPrice > 0 { result.append(ValPriceSeriesItem(ticker: pos.ticker, type: "GuruFocus", price: pos.valGuruFocusPrice)) }
+            if pos.valTipRanksPrice > 0 { result.append(ValPriceSeriesItem(ticker: pos.ticker, type: "TipRanks", price: pos.valTipRanksPrice)) }
         }
         return result
     }
     
-    let allTypes = ["Current Price", "Target Price", "Fair Price"]
+    let allTypes = ["Current Price", "GuruFocus", "TipRanks"]
     func color(for type: String) -> Color {
-        switch type {
-        case "Current Price": return .blue
-        case "Target Price": return .purple
-        case "Fair Price": return .green
-        default: return .primary
-        }
+        switch type { case "Current Price": return .blue; case "GuruFocus": return .gray; case "TipRanks": return .teal; default: return .primary }
     }
 
     var body: some View {
@@ -426,11 +414,9 @@ struct ValuationPriceComparisonChart: View {
         
         VStack(alignment: .leading, spacing: 8) {
             HStack {
-                if !isExpanded { Text("Valuation & Target Prices Comparison").font(.headline).foregroundColor(.secondary) }
+                if !isExpanded { Text("Price vs Analyst Consensus").font(.headline).foregroundColor(.secondary) }
                 Spacer()
-                if !isExpanded {
-                    Button(action: { expandedChart = .priceComparison }) { Image(systemName: "plus.magnifyingglass").foregroundColor(.secondary) }.buttonStyle(.plain)
-                }
+                if !isExpanded { Button(action: { expandedChart = .priceComparison }) { Image(systemName: "plus.magnifyingglass").foregroundColor(.secondary) }.buttonStyle(.plain) }
             }.padding(.bottom, 4)
             
             InteractiveLegendView(items: allTypes, colorMap: color, hiddenItems: $hiddenSeries).padding(.bottom, 4)
@@ -439,116 +425,271 @@ struct ValuationPriceComparisonChart: View {
                 Spacer(); Text("No data").foregroundColor(.secondary).frame(maxWidth: .infinity, alignment: .center); Spacer()
             } else {
                 Chart(filteredSeries) { item in
-                    BarMark(
-                        x: .value("Ticker", item.ticker),
-                        y: .value("Price", item.price)
-                    )
-                    .foregroundStyle(color(for: item.type))
-                    .position(by: .value("Type", item.type))
-                    .cornerRadius(4)
+                    BarMark(x: .value("Ticker", item.ticker), y: .value("Price", item.price))
+                        .foregroundStyle(color(for: item.type)).position(by: .value("Type", item.type)).cornerRadius(4)
                     
                     if let hTicker = hoveredTicker, item.ticker == hTicker {
-                        RuleMark(x: .value("Ticker", hTicker))
-                            .foregroundStyle(.secondary.opacity(0.3))
-                            .lineStyle(StrokeStyle(lineWidth: 1, dash: [4]))
+                        RuleMark(x: .value("Ticker", hTicker)).foregroundStyle(.secondary.opacity(0.3)).lineStyle(StrokeStyle(lineWidth: 1, dash: [4]))
                     }
                 }
-                .chartLegend(.hidden)
-                .chartXSelection(value: $hoveredTicker)
+                .chartLegend(.hidden).chartXSelection(value: $hoveredTicker)
                 .chartYAxis { AxisMarks(position: .leading) { value in AxisGridLine(); AxisTick(); if let val = value.as(Double.self) { AxisValueLabel(val.formatted(.currency(code: "EUR").notation(.compactName))) } } }
             }
-            
-            HStack { Text("Hover over bars for comparison").font(.caption2).foregroundColor(.secondary); Spacer(); BlueChipWatermark() }
+            HStack { Text("Hover to compare metrics").font(.caption2).foregroundColor(.secondary); Spacer(); BlueChipWatermark() }
         }.padding().frame(minHeight: isExpanded ? 500 : 360, maxHeight: isExpanded ? .infinity : 360).background(Color(NSColor.controlBackgroundColor)).cornerRadius(12).shadow(color: Color.black.opacity(0.05), radius: 2, x: 0, y: 1)
     }
 }
 
-// --- CHART 2: PE COMPARISON ---
+// --- CHART 2: PE BULLET CHART (Historical Range Gauge) ---
 
-struct ValuationPEComparisonChart: View {
+struct ValuationPEBulletChart: View {
     @ObservedObject var viewModel: PortfolioViewModel
     @Binding var privacyMode: Bool
     var isExpanded: Bool = false
     @Binding var expandedChart: ValuationChartZoomType?
     
-    @State private var hiddenSeries: Set<String> = []
     @State private var hoveredTicker: String? = nil
-
-    struct ValPESeriesItem: Identifiable { let id = UUID(); let ticker: String; let type: String; let pe: Double }
     
-    var seriesData: [ValPESeriesItem] {
-        var result: [ValPESeriesItem] = []
-        for pos in viewModel.positions {
-            if pos.valCurrentPE > 0 { result.append(ValPESeriesItem(ticker: pos.ticker, type: "Current PE", pe: pos.valCurrentPE)) }
-            if pos.valForwardPE > 0 { result.append(ValPESeriesItem(ticker: pos.ticker, type: "Forward PE", pe: pos.valForwardPE)) }
-            if pos.valHistoricalPE10Y > 0 { result.append(ValPESeriesItem(ticker: pos.ticker, type: "10Y Avg PE", pe: pos.valHistoricalPE10Y)) }
-        }
-        return result
-    }
-
-    let legendTypes = ["Current PE", "Forward PE", "10Y Avg PE"]
-    func color(for type: String) -> Color {
-        switch type {
-        case "Current PE": return .orange
-        case "Forward PE": return .teal
-        case "10Y Avg PE": return .indigo
-        default: return .gray
-        }
+    var validPositions: [Position] { viewModel.positions.filter { $0.valCurrentPE > 0 } }
+    var maxPE: Double {
+        let maxC = validPositions.map(\.valCurrentPE).max() ?? 0
+        let maxH = validPositions.map(\.valHistoricalPE10Y).max() ?? 0
+        return max(maxC, maxH) * 1.2
     }
 
     var body: some View {
-        let filtered = seriesData.filter { !hiddenSeries.contains($0.type) }
-        
         VStack(alignment: .leading, spacing: 8) {
             HStack {
-                if !isExpanded { Text("PE Valuation (Current vs Fwd vs 10Y)").font(.headline).foregroundColor(.secondary) }
+                if !isExpanded { Text("Historical PE Valuation Gauge").font(.headline).foregroundColor(.secondary) }
                 Spacer()
-                if !isExpanded {
-                    Button(action: { expandedChart = .peComparison }) { Image(systemName: "plus.magnifyingglass").foregroundColor(.secondary) }.buttonStyle(.plain)
-                }
+                if !isExpanded { Button(action: { expandedChart = .peBullet }) { Image(systemName: "plus.magnifyingglass").foregroundColor(.secondary) }.buttonStyle(.plain) }
             }.padding(.bottom, 4)
             
-            InteractiveLegendView(items: legendTypes, colorMap: color, hiddenItems: $hiddenSeries).padding(.bottom, 4)
+            HStack(spacing: 16) {
+                HStack(spacing: 4) { Rectangle().fill(Color.blue).frame(width: 10, height: 10); Text("Current PE").font(.caption) }
+                HStack(spacing: 4) { Rectangle().fill(Color.primary).frame(width: 2, height: 12); Text("10Y Avg PE").font(.caption) }
+                HStack(spacing: 4) { Circle().fill(Color.teal).frame(width: 8, height: 8); Text("Forward PE").font(.caption) }
+            }.padding(.bottom, 8)
             
-            if viewModel.positions.isEmpty {
-                Spacer(); Text("No data").foregroundColor(.secondary).frame(maxWidth: .infinity, alignment: .center); Spacer()
+            if validPositions.isEmpty {
+                Spacer(); Text("No PE data").foregroundColor(.secondary).frame(maxWidth: .infinity, alignment: .center); Spacer()
             } else {
-                Chart {
-                    ForEach(filtered) { item in
-                        LineMark(
-                            x: .value("Ticker", item.ticker),
-                            y: .value("PE", item.pe)
-                        )
-                        .foregroundStyle(color(for: item.type))
-                        .interpolationMethod(.linear)
-                        
-                        PointMark(
-                            x: .value("Ticker", item.ticker),
-                            y: .value("PE", item.pe)
-                        )
-                        .foregroundStyle(color(for: item.type))
-                        .symbolSize(hoveredTicker == item.ticker ? 100 : 40)
+                Chart(validPositions) { pos in
+                    // Background Gauge
+                    // Background Gauge (Forcé de démarrer à 0)
+                    BarMark(
+                        xStart: .value("Zero", 0),
+                        xEnd: .value("PE Range", maxPE),
+                        y: .value("Ticker", pos.ticker)
+                    )
+                    .foregroundStyle(Color.gray.opacity(0.1))
+                    
+                    // Current PE Bar (Forcé de démarrer à 0)
+                    BarMark(
+                        xStart: .value("Zero", 0),
+                        xEnd: .value("Current PE", pos.valCurrentPE),
+                        y: .value("Ticker", pos.ticker),
+                        height: .fixed(12)
+                    )
+                    .foregroundStyle(Color.blue)
+                    
+                    // 10Y Avg Marker
+                    if pos.valHistoricalPE10Y > 0 {
+                        RectangleMark(x: .value("PE", pos.valHistoricalPE10Y), y: .value("Ticker", pos.ticker), width: .fixed(3), height: .fixed(24))
+                            .foregroundStyle(Color.primary)
                     }
                     
-                    if let hTicker = hoveredTicker, let pos = viewModel.positions.first(where: { $0.ticker == hTicker }) {
-                        RuleMark(x: .value("Ticker", hTicker))
-                            .foregroundStyle(.secondary.opacity(0.4))
+                    // Forward PE Dot
+                    if pos.valForwardPE > 0 {
+                        PointMark(x: .value("PE", pos.valForwardPE), y: .value("Ticker", pos.ticker))
+                            .foregroundStyle(Color.teal).symbol(.circle).symbolSize(80)
+                    }
+                    
+                    if let hTicker = hoveredTicker, pos.ticker == hTicker {
+                        RuleMark(y: .value("Ticker", hTicker)).foregroundStyle(.secondary.opacity(0.2))
                             .annotation(position: .top) {
                                 VStack(alignment: .leading, spacing: 2) {
                                     Text(pos.ticker).font(.caption.bold())
-                                    Text("Current PE: \(pos.valCurrentPE.formatted())x").font(.caption2).foregroundColor(.orange)
-                                    Text("Forward PE: \(pos.valForwardPE.formatted())x").font(.caption2).foregroundColor(.teal)
-                                    Text("10Y Avg PE: \(pos.valHistoricalPE10Y.formatted())x").font(.caption2).foregroundColor(.indigo)
-                                }
-                                .padding(6).background(Color(NSColor.windowBackgroundColor)).cornerRadius(6).shadow(radius: 3)
+                                    Text("Current: \(pos.valCurrentPE.formatted())x").font(.caption2).foregroundColor(.blue)
+                                    Text("10Y Avg: \(pos.valHistoricalPE10Y.formatted())x").font(.caption2).foregroundColor(.primary)
+                                    Text("Forward: \(pos.valForwardPE.formatted())x").font(.caption2).foregroundColor(.teal)
+                                }.padding(6).background(Color(NSColor.windowBackgroundColor).opacity(0.95)).cornerRadius(6).shadow(radius: 3)
                             }
                     }
                 }
-                .chartLegend(.hidden)
-                .chartXSelection(value: $hoveredTicker)
+                .chartLegend(.hidden).chartYSelection(value: $hoveredTicker)
             }
             
-            HStack { Text("Forward PE < Current PE indicates expected growth").font(.caption2).foregroundColor(.secondary); Spacer(); BlueChipWatermark() }
+            HStack { Text("Current PE beyond the black line = Overvalued historically").font(.caption2).foregroundColor(.secondary); Spacer(); BlueChipWatermark() }
+        }.padding().frame(minHeight: isExpanded ? 500 : 360, maxHeight: isExpanded ? .infinity : 360).background(Color(NSColor.controlBackgroundColor)).cornerRadius(12).shadow(color: Color.black.opacity(0.05), radius: 2, x: 0, y: 1)
+    }
+}
+
+// --- CHART 3: PEG SCATTER PLOT ---
+
+struct ValuationPEGScatterChart: View {
+    @ObservedObject var viewModel: PortfolioViewModel
+    @Binding var privacyMode: Bool
+    var isExpanded: Bool = false
+    @Binding var expandedChart: ValuationChartZoomType?
+    
+    @State private var hoveredGrowth: Double? = nil
+    
+    var validPositions: [Position] { viewModel.positions.filter { $0.valCurrentPE > 0 && $0.valPeg > 0 } }
+    
+    var maxVal: Double {
+        let maxPE = validPositions.map(\.valCurrentPE).max() ?? 20
+        let maxG = validPositions.map(\.impliedGrowth).max() ?? 20
+        return max(maxPE, maxG) * 1.1
+    }
+    
+    var hoveredItem: Position? {
+        guard let g = hoveredGrowth else { return nil }
+        return validPositions.min(by: { abs($0.impliedGrowth - g) < abs($1.impliedGrowth - g) })
+    }
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            HStack {
+                if !isExpanded { Text("PEG Ratio Matrix (Price vs Growth)").font(.headline).foregroundColor(.secondary) }
+                Spacer()
+                if !isExpanded { Button(action: { expandedChart = .pegScatter }) { Image(systemName: "plus.magnifyingglass").foregroundColor(.secondary) }.buttonStyle(.plain) }
+            }.padding(.bottom, 4)
+            
+            if validPositions.isEmpty {
+                Spacer(); Text("No PEG data").foregroundColor(.secondary).frame(maxWidth: .infinity, alignment: .center); Spacer()
+            } else {
+                Chart {
+                    // Y = X Line (PEG = 1 boundary)
+                    LineMark(x: .value("Growth", 0), y: .value("PE", 0)).foregroundStyle(Color.green).lineStyle(StrokeStyle(lineWidth: 1.5, dash: [5]))
+                    LineMark(x: .value("Growth", maxVal), y: .value("PE", maxVal)).foregroundStyle(Color.green).lineStyle(StrokeStyle(lineWidth: 1.5, dash: [5]))
+                        .annotation(position: .bottom, alignment: .trailing) { Text("PEG = 1.0").font(.caption2).foregroundColor(.green) }
+                    
+                    // Scatter Points
+                    ForEach(validPositions) { pos in
+                        PointMark(
+                            x: .value("Expected Growth", pos.impliedGrowth),
+                            y: .value("Current PE", pos.valCurrentPE)
+                        )
+                        .foregroundStyle(pos.valPeg <= 1.0 ? Color.green : (pos.valPeg > 2.0 ? Color.red : Color.blue))
+                        .symbolSize(100)
+                        .annotation(position: .top, alignment: .center) {
+                            if hoveredItem?.id == pos.id {
+                                VStack(spacing: 2) {
+                                    Text(pos.ticker).font(.caption.bold())
+                                    Text("PEG: \(pos.valPeg.formatted(.number.precision(.fractionLength(2))))").font(.caption2)
+                                }.padding(4).background(Color(NSColor.windowBackgroundColor).opacity(0.9)).cornerRadius(4)
+                            } else if isExpanded {
+                                Text(pos.ticker).font(.system(size: 8)).foregroundColor(.secondary)
+                            }
+                        }
+                    }
+                }
+                .chartXScale(domain: [0, maxVal]).chartYScale(domain: [0, maxVal])
+                .chartXAxis { AxisMarks { value in AxisGridLine(); AxisTick(); if let v = value.as(Double.self) { AxisValueLabel("\(v.formatted(.number.precision(.fractionLength(0))))%") } } }
+                .chartYAxis { AxisMarks { value in AxisGridLine(); AxisTick(); if let v = value.as(Double.self) { AxisValueLabel("\(v.formatted(.number.precision(.fractionLength(0))))x") } } }
+                .chartXSelection(value: $hoveredGrowth)
+            }
+            
+            HStack { Text("Below the green line = Undervalued (PEG < 1)").font(.caption2).foregroundColor(.secondary); Spacer(); BlueChipWatermark() }
+        }.padding().frame(minHeight: isExpanded ? 500 : 360, maxHeight: isExpanded ? .infinity : 360).background(Color(NSColor.controlBackgroundColor)).cornerRadius(12).shadow(color: Color.black.opacity(0.05), radius: 2, x: 0, y: 1)
+    }
+}
+
+// --- CHART 4: VALUATION HEATMAP (Fair Price Discount) ---
+
+struct ValTreemapNode: Identifiable { let id = UUID(); let position: Position; let rect: CGRect }
+
+struct ValHeatmapNodeView: View {
+    let node: ValTreemapNode
+    let marginOfSafety: Double
+    @Binding var hoveredTicker: String?
+    
+    func color(for upside: Double) -> Color {
+        if upside == 0 { return Color.gray.opacity(0.4) }
+        let intensity = min(max(abs(upside) / 0.5, 0.3), 1.0) // Cap intensity
+        return upside > 0 ? Color.green.opacity(intensity) : Color.red.opacity(intensity)
+    }
+    var isHovered: Bool { hoveredTicker == node.position.ticker }
+    
+    var body: some View {
+        let upside = node.position.fairPriceUpside(marginOfSafety: marginOfSafety)
+        
+        ZStack {
+            Rectangle().fill(color(for: upside)).border(Color(NSColor.windowBackgroundColor), width: 1.5)
+            VStack(spacing: 4) {
+                Text(node.position.ticker).font(.system(size: node.rect.width > 45 && node.rect.height > 35 ? 14 : 8, weight: .bold)).foregroundColor(.white).lineLimit(1)
+                if node.rect.width > 60 && node.rect.height > 50 {
+                    Text(upside.formatted(.percent.precision(.fractionLength(1)))).font(.caption).foregroundColor(.white.opacity(0.9)).lineLimit(1)
+                }
+            }
+            if isHovered {
+                VStack {
+                    Text(node.position.ticker).font(.caption.bold())
+                    Text("Fair Price: \(node.position.fairPrice(marginOfSafety: marginOfSafety).formatted(.currency(code: "EUR")))").font(.caption2)
+                    Text("Upside: \(upside.formatted(.percent.precision(.fractionLength(1)).sign(strategy: .always())))").font(.caption2)
+                }.padding(6).background(Color(NSColor.windowBackgroundColor).opacity(0.95)).cornerRadius(6).shadow(radius: 4).zIndex(10)
+            }
+        }.frame(width: node.rect.width, height: node.rect.height).offset(x: node.rect.minX, y: node.rect.minY).scaleEffect(isHovered ? 1.02 : 1.0).zIndex(isHovered ? 1 : 0).onContinuousHover { phase in
+            switch phase { case .active(_): hoveredTicker = node.position.ticker; case .ended: hoveredTicker = nil }
+        }
+    }
+}
+
+struct ValuationDiscountHeatmap: View {
+    @ObservedObject var viewModel: PortfolioViewModel
+    let marginOfSafety: Double
+    var isExpanded: Bool = false
+    @Binding var expandedChart: ValuationChartZoomType?
+    
+    @State private var hoveredTicker: String? = nil
+    
+    var validPositions: [Position] { viewModel.positions.filter { $0.fairPrice(marginOfSafety: marginOfSafety) > 0 } }
+    var totalValue: Double { validPositions.reduce(0) { $0 + $1.currentValueEUR } }
+    var sortedPositions: [Position] { validPositions.sorted { $0.currentValueEUR > $1.currentValueEUR } }
+    
+    func layoutNodes(in rect: CGRect) -> [ValTreemapNode] {
+        var nodes: [ValTreemapNode] = []
+        var currentRect = rect
+        var remainingWeight = totalValue
+        
+        for item in sortedPositions {
+            guard remainingWeight > 0 else { continue }
+            let fraction = item.currentValueEUR / remainingWeight
+            if currentRect.width > currentRect.height {
+                let w = currentRect.width * CGFloat(fraction)
+                nodes.append(ValTreemapNode(position: item, rect: CGRect(x: currentRect.minX, y: currentRect.minY, width: w, height: currentRect.height)))
+                currentRect = CGRect(x: currentRect.minX + w, y: currentRect.minY, width: currentRect.width - w, height: currentRect.height)
+            } else {
+                let h = currentRect.height * CGFloat(fraction)
+                nodes.append(ValTreemapNode(position: item, rect: CGRect(x: currentRect.minX, y: currentRect.minY, width: currentRect.width, height: h)))
+                currentRect = CGRect(x: currentRect.minX, y: currentRect.minY + h, width: currentRect.width, height: currentRect.height - h)
+            }
+            remainingWeight -= item.currentValueEUR
+        }
+        return nodes
+    }
+    
+    var body: some View {
+        VStack {
+            HStack {
+                if !isExpanded { Text("Portfolio Discount Heatmap").font(.headline).foregroundColor(.secondary) }
+                Spacer()
+                if !isExpanded { Button(action: { expandedChart = .valuationHeatmap }) { Image(systemName: "plus.magnifyingglass").foregroundColor(.secondary) }.buttonStyle(.plain) }
+            }.padding(.bottom, 8)
+            
+            if validPositions.isEmpty {
+                Spacer(); Text("No fair price data").foregroundColor(.secondary); Spacer()
+            } else {
+                GeometryReader { geo in
+                    ZStack(alignment: .topLeading) {
+                        ForEach(layoutNodes(in: CGRect(origin: .zero, size: geo.size))) { node in
+                            ValHeatmapNodeView(node: node, marginOfSafety: marginOfSafety, hoveredTicker: $hoveredTicker)
+                        }
+                    }
+                }
+            }
+            HStack { Text("Size = Portfolio Weight | Color = Fair Price Upside").font(.caption2).foregroundColor(.secondary); Spacer(); BlueChipWatermark() }.padding(.top, 4)
         }.padding().frame(minHeight: isExpanded ? 500 : 360, maxHeight: isExpanded ? .infinity : 360).background(Color(NSColor.controlBackgroundColor)).cornerRadius(12).shadow(color: Color.black.opacity(0.05), radius: 2, x: 0, y: 1)
     }
 }
@@ -653,10 +794,10 @@ struct ValuationFullScreenChartView: View {
             }
             
             switch zoomType {
-            case .priceComparison:
-                ValuationPriceComparisonChart(viewModel: viewModel, marginOfSafety: marginOfSafety, privacyMode: $privacyMode, isExpanded: true, expandedChart: .constant(nil))
-            case .peComparison:
-                ValuationPEComparisonChart(viewModel: viewModel, privacyMode: $privacyMode, isExpanded: true, expandedChart: .constant(nil))
+            case .priceComparison: ValuationPriceComparisonChart(viewModel: viewModel, marginOfSafety: marginOfSafety, privacyMode: $privacyMode, isExpanded: true, expandedChart: .constant(nil))
+            case .peBullet: ValuationPEBulletChart(viewModel: viewModel, privacyMode: $privacyMode, isExpanded: true, expandedChart: .constant(nil))
+            case .pegScatter: ValuationPEGScatterChart(viewModel: viewModel, privacyMode: $privacyMode, isExpanded: true, expandedChart: .constant(nil))
+            case .valuationHeatmap: ValuationDiscountHeatmap(viewModel: viewModel, marginOfSafety: marginOfSafety, isExpanded: true, expandedChart: .constant(nil))
             }
         }.padding(30).frame(minWidth: 900, minHeight: 700)
     }
@@ -664,7 +805,9 @@ struct ValuationFullScreenChartView: View {
     var titleForZoom: String {
         switch zoomType {
         case .priceComparison: return "Valuation & Target Prices Comparison"
-        case .peComparison: return "PE Valuation (Current vs Fwd vs 10Y)"
+        case .peBullet: return "Historical PE Valuation Gauge"
+        case .pegScatter: return "PEG Ratio Matrix (Price vs Growth)"
+        case .valuationHeatmap: return "Portfolio Discount Heatmap"
         }
     }
 }
