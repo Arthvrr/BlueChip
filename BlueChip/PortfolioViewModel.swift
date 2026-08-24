@@ -154,8 +154,25 @@ class PortfolioViewModel: ObservableObject {
         let total = totalValue; guard total > 0 else { return [] }; return positions.map { ScatterItem(ticker: $0.ticker, weight: $0.currentValueEUR / total, roi: $0.roiPercent) }
     }
     var valueSourceDonutData: [ValueSourceItem] {
-        let invested = positionsInvestedSum; let pvLatente = totalROIValue; var items: [ValueSourceItem] = []; items.append(ValueSourceItem(category: "Total Invested", value: invested))
-        if pvLatente > 0 { items.append(ValueSourceItem(category: "Unrealized P/L", value: pvLatente)) }; return items
+        let invested = manuallyInvested // <-- On utilise ta case d'investissement manuel
+        let pvLatente = totalValue - manuallyInvested // <-- Nouveau calcul de la plus-value latente
+        
+        var items: [ValueSourceItem] = []
+        items.append(ValueSourceItem(category: "Total Invested", value: invested))
+        if pvLatente > 0 {
+            items.append(ValueSourceItem(category: "Unrealized P/L", value: pvLatente))
+        }
+        return items
+    }
+    
+    var capitalStatusData: [ChartDataItem] {
+        let inProfit = positions.filter { $0.roiValue >= 0 }.reduce(0) { $0 + $1.currentValueEUR }
+        let underwater = positions.filter { $0.roiValue < 0 }.reduce(0) { $0 + $1.currentValueEUR }
+        
+        var items: [ChartDataItem] = []
+        if inProfit > 0 { items.append(ChartDataItem(name: "In-Profit", value: inProfit)) }
+        if underwater > 0 { items.append(ChartDataItem(name: "Underwater", value: underwater)) }
+        return items
     }
     
     init() {

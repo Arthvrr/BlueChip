@@ -1,14 +1,27 @@
 import SwiftUI
 import Charts
 
-enum ChartZoomType: Identifiable { case positions, countries, sectors, marketCaps, priceCompare, roiCombo, scatter, valueSource, heatmap, dailyRoi; var id: Int { self.hashValue } }
+enum ChartZoomType: Identifiable {
+    case positions, countries, sectors, marketCaps, priceCompare, roiCombo, scatter, capitalStatus, heatmap, dailyRoi, currencies, correlation
+    var id: Int { self.hashValue }
+}
 
 struct ModernDonutChart: View {
-    let data: [ChartDataItem]; let title: String; let zoomType: ChartZoomType; let palette: [Color]; var isExpanded: Bool = false
+    let data: [ChartDataItem]
+    let title: String
+    let zoomType: ChartZoomType
+    let palette: [Color]
+    var isExpanded: Bool = false
     @Binding var expandedChart: ChartZoomType?
-    @State private var selectedAngleValue: Double? = nil; @State private var hiddenItems: Set<String> = []
     
-    func color(for name: String) -> Color { if let idx = data.firstIndex(where: { $0.name == name }) { return palette[idx % palette.count] }; return .gray }
+    @State private var selectedAngleValue: Double? = nil
+    @State private var hiddenItems: Set<String> = []
+    
+    func color(for name: String) -> Color {
+        if let idx = data.firstIndex(where: { $0.name == name }) { return palette[idx % palette.count] }
+        return .gray
+    }
+    
     var filteredData: [ChartDataItem] { data.filter { !hiddenItems.contains($0.name) } }
     
     var body: some View {
@@ -38,8 +51,13 @@ struct ModernDonutChart: View {
 
 struct PRUPriceChart: View {
     @ObservedObject var viewModel: PortfolioViewModel
-    let data: [PriceCompareItem]; var isExpanded: Bool = false; @Binding var expandedChart: ChartZoomType?
-    @State private var hiddenCategories: Set<String> = []; @State private var hiddenTickers: Set<String> = []; @State private var hoveredTicker: String? = nil
+    let data: [PriceCompareItem]
+    var isExpanded: Bool = false
+    @Binding var expandedChart: ChartZoomType?
+    
+    @State private var hiddenCategories: Set<String> = []
+    @State private var hiddenTickers: Set<String> = []
+    @State private var hoveredTicker: String? = nil
     
     var uniqueTickers: [String] { Array(Set(data.map { $0.ticker })).sorted() }
     var filteredData: [PriceCompareItem] { data.filter { !hiddenCategories.contains($0.category) && !hiddenTickers.contains($0.ticker) } }
@@ -76,8 +94,13 @@ struct PRUPriceChart: View {
 
 struct ROIComboChart: View {
     @ObservedObject var viewModel: PortfolioViewModel
-    let positions: [Position]; var isExpanded: Bool = false; @Binding var expandedChart: ChartZoomType?
-    @State private var hiddenTickers: Set<String> = []; @State private var hiddenMetrics: Set<String> = []; @State private var hoveredTicker: String? = nil
+    let positions: [Position]
+    var isExpanded: Bool = false
+    @Binding var expandedChart: ChartZoomType?
+    
+    @State private var hiddenTickers: Set<String> = []
+    @State private var hiddenMetrics: Set<String> = []
+    @State private var hoveredTicker: String? = nil
     
     var uniqueTickers: [String] { positions.map { $0.ticker }.sorted() }
     var filteredPositions: [Position] { positions.filter { !hiddenTickers.contains($0.ticker) } }
@@ -122,8 +145,12 @@ struct ROIComboChart: View {
 
 struct ModernScatterPlotChart: View {
     @ObservedObject var viewModel: PortfolioViewModel
-    let data: [ScatterItem]; var isExpanded: Bool = false; @Binding var expandedChart: ChartZoomType?
-    @State private var hiddenTickers: Set<String> = []; @State private var hoveredWeight: Double? = nil
+    let data: [ScatterItem]
+    var isExpanded: Bool = false
+    @Binding var expandedChart: ChartZoomType?
+    
+    @State private var hiddenTickers: Set<String> = []
+    @State private var hoveredWeight: Double? = nil
     
     var uniqueTickers: [String] { data.map { $0.ticker }.sorted() }
     var filteredData: [ScatterItem] { data.filter { !hiddenTickers.contains($0.ticker) } }
@@ -161,32 +188,36 @@ struct ModernScatterPlotChart: View {
     }
 }
 
-struct ModernValueSourceChart: View {
-    let data: [ValueSourceItem]; var isExpanded: Bool = false; @Binding var expandedChart: ChartZoomType?
-    @State private var selectedAngleValue: Double? = nil; @State private var hiddenItems: Set<String> = []
+struct CapitalStatusChart: View {
+    let data: [ChartDataItem]
+    var isExpanded: Bool = false
+    @Binding var expandedChart: ChartZoomType?
     
-    func color(for name: String) -> Color { name == "Total Invested" ? .blue : .green }
-    var filteredData: [ValueSourceItem] { data.filter { !hiddenItems.contains($0.category) } }
+    @State private var selectedAngleValue: Double? = nil
+    @State private var hiddenItems: Set<String> = []
+    
+    func color(for name: String) -> Color { name == "In-Profit" ? .green : .red }
+    var filteredData: [ChartDataItem] { data.filter { !hiddenItems.contains($0.name) } }
     
     var body: some View {
         VStack {
             HStack {
-                if !isExpanded { Text("Source of Total Stock Value").font(.headline).foregroundColor(.secondary) }
+                if !isExpanded { Text("Capital Status (Profit vs Underwater)").font(.headline).foregroundColor(.secondary) }
                 Spacer()
-                if !isExpanded { Button(action: { expandedChart = .valueSource }) { Image(systemName: "plus.magnifyingglass").foregroundColor(.secondary) }.buttonStyle(.plain) }
+                if !isExpanded { Button(action: { expandedChart = .capitalStatus }) { Image(systemName: "plus.magnifyingglass").foregroundColor(.secondary) }.buttonStyle(.plain) }
             }.padding(.bottom, 4)
-            InteractiveLegendView(items: data.map { $0.category }, colorMap: color, hiddenItems: $hiddenItems).padding(.bottom, 8)
+            InteractiveLegendView(items: data.map { $0.name }, colorMap: color, hiddenItems: $hiddenItems).padding(.bottom, 8)
             if filteredData.isEmpty { Spacer(); Text("No data").foregroundColor(.secondary); Spacer() } else {
                 Chart(filteredData) { item in
-                    SectorMark(angle: .value("Value", item.value), innerRadius: .ratio(0.65), angularInset: 1.5).foregroundStyle(color(for: item.category)).cornerRadius(4)
+                    SectorMark(angle: .value("Value", item.value), innerRadius: .ratio(0.65), angularInset: 1.5).foregroundStyle(color(for: item.name)).cornerRadius(4)
                 }.chartLegend(.hidden).chartAngleSelection(value: $selectedAngleValue).chartBackground { proxy in
                     GeometryReader { geometry in
                         if let value = selectedAngleValue {
                             let item = findItem(for: value)
-                            VStack { Text(item.category).font(.headline).foregroundColor(.secondary).lineLimit(1).minimumScaleFactor(0.5); Text(item.value.formatted(.currency(code: "EUR").precision(.fractionLength(0)))).font(.title3).fontWeight(.bold) }.position(x: geometry.frame(in: .local).midX, y: geometry.frame(in: .local).midY)
+                            VStack { Text(item.name).font(.headline).foregroundColor(color(for: item.name)); Text(item.value.formatted(.currency(code: "EUR").precision(.fractionLength(0)))).font(.title3).fontWeight(.bold) }.position(x: geometry.frame(in: .local).midX, y: geometry.frame(in: .local).midY)
                         } else {
                             let total = filteredData.reduce(0) { $0 + $1.value }
-                            VStack { Text("Stock Value").font(.subheadline).foregroundColor(.secondary); Text(total.formatted(.currency(code: "EUR").precision(.fractionLength(0)))).font(.title2).fontWeight(.bold) }.position(x: geometry.frame(in: .local).midX, y: geometry.frame(in: .local).midY)
+                            VStack { Text("Invested Capital").font(.subheadline).foregroundColor(.secondary); Text(total.formatted(.currency(code: "EUR").precision(.fractionLength(0)))).font(.title2).fontWeight(.bold) }.position(x: geometry.frame(in: .local).midX, y: geometry.frame(in: .local).midY)
                         }
                     }
                 }.animation(.easeInOut(duration: 0.2), value: selectedAngleValue)
@@ -194,7 +225,7 @@ struct ModernValueSourceChart: View {
             BlueChipWatermark()
         }.padding().frame(minHeight: 360, maxHeight: isExpanded ? .infinity : 360).background(Color(NSColor.controlBackgroundColor)).cornerRadius(12).shadow(color: Color.black.opacity(0.05), radius: 2, x: 0, y: 1)
     }
-    func findItem(for value: Double) -> ValueSourceItem { var cum = 0.0; for item in filteredData { cum += item.value; if value <= cum { return item } }; return filteredData.last! }
+    func findItem(for value: Double) -> ChartDataItem { var cum = 0.0; for item in filteredData { cum += item.value; if value <= cum { return item } }; return filteredData.last! }
 }
 
 struct HeatmapNodeView: View {
@@ -229,7 +260,10 @@ struct HeatmapNodeView: View {
 }
 
 struct PerformanceHeatmap: View {
-    let positions: [Position]; var isExpanded: Bool = false; @Binding var expandedChart: ChartZoomType?
+    let positions: [Position]
+    var isExpanded: Bool = false
+    @Binding var expandedChart: ChartZoomType?
+    
     @State private var hoveredTicker: String? = nil
     
     var totalValue: Double { positions.reduce(0) { $0 + $1.currentValueEUR } }
@@ -271,8 +305,12 @@ struct PerformanceHeatmap: View {
 
 struct DailyROIChart: View {
     @ObservedObject var viewModel: PortfolioViewModel
-    let positions: [Position]; var isExpanded: Bool = false; @Binding var expandedChart: ChartZoomType?
-    @State private var hiddenTickers: Set<String> = []; @State private var hoveredTicker: String? = nil
+    let positions: [Position]
+    var isExpanded: Bool = false
+    @Binding var expandedChart: ChartZoomType?
+    
+    @State private var hiddenTickers: Set<String> = []
+    @State private var hoveredTicker: String? = nil
     
     var uniqueTickers: [String] { positions.map { $0.ticker }.sorted() }
     var filteredPositions: [Position] { positions.filter { !hiddenTickers.contains($0.ticker) } }
@@ -300,8 +338,108 @@ struct DailyROIChart: View {
     }
 }
 
+// --- NOUVEAU GRAPHIQUE : CORRELATION MATRIX (SIMULÉE) ---
+struct CorrelationItem: Identifiable {
+    let id = UUID()
+    let t1: String
+    let t2: String
+    let correlation: Double
+}
+
+struct CorrelationMatrixChart: View {
+    @ObservedObject var viewModel: PortfolioViewModel
+    var isExpanded: Bool = false
+    @Binding var expandedChart: ChartZoomType?
+    
+    @State private var hoveredItem: CorrelationItem? = nil
+    
+    var correlationData: [CorrelationItem] {
+        var data: [CorrelationItem] = []
+        let positions = viewModel.positions.sorted { $0.ticker < $1.ticker }
+        for p1 in positions {
+            for p2 in positions {
+                var corr: Double = 0.0
+                if p1.ticker == p2.ticker {
+                    corr = 1.0
+                } else {
+                    // Calcul d'une corrélation simulée et déterministe basée sur les secteurs et la capitalisation
+                    if p1.sector == p2.sector && !p1.sector.isEmpty { corr += 0.5 }
+                    if p1.country == p2.country && !p1.country.isEmpty { corr += 0.2 }
+                    
+                    // CORRECTION ICI : Combinaison sécurisée (XOR) des hash pour éviter l'overflow
+                    let hash1 = UInt(bitPattern: p1.ticker.hashValue)
+                    let hash2 = UInt(bitPattern: p2.ticker.hashValue)
+                    let hashMod = Double((hash1 ^ hash2) % 100) / 100.0
+                    
+                    corr += (hashMod * 0.3 - 0.15) // Bruit stable entre -0.15 et +0.15
+                    corr = min(max(corr, -0.5), 0.95) // Cap entre -0.5 et 0.95 pour le réalisme
+                }
+                data.append(CorrelationItem(t1: p1.ticker, t2: p2.ticker, correlation: corr))
+            }
+        }
+        return data
+    }
+    
+    func color(for value: Double) -> Color {
+        if value >= 0 {
+            return Color.green.opacity(max(0.1, value))
+        } else {
+            return Color.red.opacity(max(0.1, abs(value)))
+        }
+    }
+    
+    var body: some View {
+        VStack {
+            HStack {
+                if !isExpanded { Text("Estimated Asset Correlation").font(.headline).foregroundColor(.secondary) }
+                Spacer()
+                if !isExpanded { Button(action: { expandedChart = .correlation }) { Image(systemName: "plus.magnifyingglass").foregroundColor(.secondary) }.buttonStyle(.plain) }
+            }.padding(.bottom, 8)
+            
+            if viewModel.positions.isEmpty {
+                Spacer(); Text("No data").foregroundColor(.secondary); Spacer()
+            } else {
+                Chart(correlationData) { item in
+                    RectangleMark(
+                        x: .value("T1", item.t1),
+                        y: .value("T2", item.t2)
+                    )
+                    .foregroundStyle(color(for: item.correlation))
+                    .annotation(position: .overlay) {
+                        if isExpanded || viewModel.positions.count <= 6 {
+                            Text(item.correlation.formatted(.number.precision(.fractionLength(2))))
+                                .font(.system(size: isExpanded ? 10 : 8))
+                                .foregroundColor(item.correlation > 0.5 ? .white : .primary)
+                        }
+                    }
+                }
+                .chartXAxis { AxisMarks { value in AxisValueLabel(centered: true) } }
+                .chartYAxis { AxisMarks { value in AxisValueLabel(centered: true) } }
+            }
+            HStack { Text("Dark green = High correlation | Red = Inverse correlation").font(.caption2).foregroundColor(.secondary); Spacer(); BlueChipWatermark() }.padding(.top, 4)
+        }.padding().frame(minHeight: 360, maxHeight: isExpanded ? .infinity : 360).background(Color(NSColor.controlBackgroundColor)).cornerRadius(12).shadow(color: Color.black.opacity(0.05), radius: 2, x: 0, y: 1)
+    }
+}
+
+// =========================================================================
+// MARK: - FULL SCREEN ZOOM MODAL
+// =========================================================================
+
 struct FullScreenChartView: View {
-    @Environment(\.dismiss) var dismiss; let zoomType: ChartZoomType; @ObservedObject var viewModel: PortfolioViewModel
+    @Environment(\.dismiss) var dismiss
+    let zoomType: ChartZoomType
+    @ObservedObject var viewModel: PortfolioViewModel
+    
+    var allocationByCurrency: [ChartDataItem] {
+        var dict: [String: Double] = [:]
+        for pos in viewModel.positions {
+            let cur = pos.currency.isEmpty ? "EUR" : pos.currency.uppercased()
+            dict[cur, default: 0] += pos.currentValueEUR
+        }
+        if viewModel.availableCash > 0 { dict["EUR", default: 0] += viewModel.availableCash }
+        return dict.map { ChartDataItem(name: $0.key, value: $0.value) }.sorted { $0.value > $1.value }
+    }
+    
     var body: some View {
         VStack(spacing: 20) {
             HStack { Text(titleForZoom).font(.title).fontWeight(.bold); Spacer(); Button(action: { dismiss() }) { Image(systemName: "xmark.circle.fill").font(.title).foregroundColor(.secondary) }.buttonStyle(.plain) }
@@ -313,30 +451,59 @@ struct FullScreenChartView: View {
             case .priceCompare: PRUPriceChart(viewModel: viewModel, data: viewModel.priceComparisonData, isExpanded: true, expandedChart: .constant(nil))
             case .roiCombo: ROIComboChart(viewModel: viewModel, positions: viewModel.positions, isExpanded: true, expandedChart: .constant(nil))
             case .scatter: ModernScatterPlotChart(viewModel: viewModel, data: viewModel.scatterData, isExpanded: true, expandedChart: .constant(nil))
-            case .valueSource: ModernValueSourceChart(data: viewModel.valueSourceDonutData, isExpanded: true, expandedChart: .constant(nil))
+            case .capitalStatus: CapitalStatusChart(data: viewModel.capitalStatusData, isExpanded: true, expandedChart: .constant(nil))
             case .heatmap: PerformanceHeatmap(positions: viewModel.positions, isExpanded: true, expandedChart: .constant(nil))
             case .dailyRoi: DailyROIChart(viewModel: viewModel, positions: viewModel.positions, isExpanded: true, expandedChart: .constant(nil))
+            case .currencies: ModernDonutChart(data: allocationByCurrency, title: "Currency Exposure", zoomType: zoomType, palette: [.blue, .green, .orange, .purple, .teal], isExpanded: true, expandedChart: .constant(nil))
+            case .correlation: CorrelationMatrixChart(viewModel: viewModel, isExpanded: true, expandedChart: .constant(nil))
             }
         }.padding(30).frame(minWidth: 900, minHeight: 700)
     }
     var titleForZoom: String {
         switch zoomType {
-        case .positions: return "Weight by Position"; case .countries: return "Geographic Exposure"; case .sectors: return "Sector Allocation"; case .marketCaps: return "Market Cap Allocation"
-        case .priceCompare: return "Avg Cost vs Current Price"; case .roiCombo: return "Return on Investment (P/L)"; case .scatter: return "Portfolio Weight vs Unrealized Performance"
-        case .valueSource: return "Source of Total Stock Value"; case .heatmap: return "Performance Heatmap"; case .dailyRoi: return "Daily P/L by Holding Period"
+        case .positions: return "Weight by Position"
+        case .countries: return "Geographic Exposure"
+        case .sectors: return "Sector Allocation"
+        case .marketCaps: return "Market Cap Allocation"
+        case .priceCompare: return "Avg Cost vs Current Price"
+        case .roiCombo: return "Return on Investment (P/L)"
+        case .scatter: return "Portfolio Weight vs Unrealized Performance"
+        case .capitalStatus: return "Capital Status (Profit vs Underwater)"
+        case .heatmap: return "Performance Heatmap"
+        case .dailyRoi: return "Daily P/L by Holding Period"
+        case .currencies: return "Currency Exposure"
+        case .correlation: return "Estimated Asset Correlation"
         }
     }
 }
+
+// =========================================================================
+// MARK: - MAIN COMPOSITION TAB VIEW
+// =========================================================================
 
 struct CompositionTabView: View {
     @ObservedObject var viewModel: PortfolioViewModel
     @Binding var privacyMode: Bool
     
     @State private var selection: Set<Position.ID> = []
-    @State private var showCashSheet = false; @State private var showInvestedSheet = false
-    @State private var showGoalSheet = false; @State private var positionToEdit: Position? = nil; @State private var chartToZoom: ChartZoomType? = nil
+    @State private var showCashSheet = false
+    @State private var showInvestedSheet = false
+    @State private var showGoalSheet = false
+    @State private var positionToEdit: Position? = nil
+    @State private var chartToZoom: ChartZoomType? = nil
     
     let tableFrameHeight: CGFloat = 340
+    
+    // Calcul de l'allocation par devise pour le nouveau graphique
+    var allocationByCurrency: [ChartDataItem] {
+        var dict: [String: Double] = [:]
+        for pos in viewModel.positions {
+            let cur = pos.currency.isEmpty ? "EUR" : pos.currency.uppercased()
+            dict[cur, default: 0] += pos.currentValueEUR
+        }
+        if viewModel.availableCash > 0 { dict["EUR", default: 0] += viewModel.availableCash }
+        return dict.map { ChartDataItem(name: $0.key, value: $0.value) }.sorted { $0.value > $1.value }
+    }
     
     var body: some View {
         ScrollView(.vertical) {
@@ -356,7 +523,8 @@ struct CompositionTabView: View {
                             Text(viewModel.totalROIPercent.formatted(.percent.precision(.fractionLength(2)).sign(strategy: .always()))).font(.caption).padding(.horizontal, 6).padding(.vertical, 2).background(getColor(for: viewModel.totalROIValue).opacity(0.1)).foregroundColor(getColor(for: viewModel.totalROIValue)).cornerRadius(4).blur(radius: privacyMode ? 8 : 0)
                         }.padding().frame(maxWidth: .infinity, alignment: .leading).frame(height: 110).background(Color(NSColor.controlBackgroundColor)).cornerRadius(10).shadow(color: Color.black.opacity(0.05), radius: 2, x: 0, y: 1)
                         
-                        DashboardCard(title: "Positions", value: "\(viewModel.positionCount)", privacyMode: .constant(false))
+                        // CORRECTION DU MODE PRIVÉ : Ajout de $privacyMode au lieu de .constant(false)
+                        DashboardCard(title: "Positions", value: "\(viewModel.positionCount)", privacyMode: $privacyMode)
                         DashboardCard(title: "Annual Dividends", value: viewModel.totalDividends.formatted(.currency(code: "EUR")), privacyMode: $privacyMode)
                         DashboardCard(title: "Total Yield", value: viewModel.portfolioYield.formatted(.percent.precision(.fractionLength(2))), privacyMode: $privacyMode)
                     }
@@ -371,12 +539,14 @@ struct CompositionTabView: View {
                             HStack { Circle().fill(viewModel.color(for: position.ticker).opacity(0.8)).frame(width: 24, height: 24).overlay(Text(position.ticker.prefix(1)).font(.caption).fontWeight(.bold).foregroundColor(.white)); Text(position.ticker).font(.system(.body, design: .monospaced)).fontWeight(.bold) }
                             .contentShape(Rectangle()).onTapGesture(count: 2) { positionToEdit = position }.contextMenu { Button(role: .destructive) { viewModel.deletePosition(id: position.id) } label: { Label("Delete", systemImage: "trash") } }
                         }
-                        TableColumn("Qty", value: \.quantity) { pos in Text("\(pos.quantity, specifier: "%.2f")").frame(maxWidth: .infinity, alignment: .leading).contentShape(Rectangle()).onTapGesture(count: 2) { positionToEdit = pos } }
-                        TableColumn("Price", value: \.currentPrice) { pos in Text(pos.currentPrice, format: .currency(code: pos.currency)).frame(maxWidth: .infinity, alignment: .leading).contentShape(Rectangle()).onTapGesture(count: 2) { positionToEdit = pos } }
-                        TableColumn("Avg Cost", value: \.averageCost) { pos in Text(pos.averageCost, format: .currency(code: pos.currency)).foregroundColor(.secondary).frame(maxWidth: .infinity, alignment: .leading).contentShape(Rectangle()).onTapGesture(count: 2) { positionToEdit = pos } }
-                        TableColumn("Total Value", value: \.currentValueEUR) { pos in Text(pos.currentValueEUR, format: .currency(code: "EUR")).fontWeight(.medium).frame(maxWidth: .infinity, alignment: .leading).contentShape(Rectangle()).onTapGesture(count: 2) { positionToEdit = pos } }
-                        TableColumn("P/L €", value: \.roiValue) { pos in Text(pos.roiValue, format: .currency(code: "EUR").sign(strategy: .always())).foregroundColor(getColor(for: pos.roiValue)).fontWeight(.medium).frame(maxWidth: .infinity, alignment: .leading).contentShape(Rectangle()).onTapGesture(count: 2) { positionToEdit = pos } }
-                        TableColumn("P/L %", value: \.roiPercent) { pos in Text(pos.roiPercent, format: .percent.precision(.fractionLength(2)).sign(strategy: .always())).padding(.horizontal, 8).padding(.vertical, 2).background(getColor(for: pos.roiValue).opacity(0.1)).foregroundColor(getColor(for: pos.roiValue)).cornerRadius(4).frame(maxWidth: .infinity, alignment: .leading).contentShape(Rectangle()).onTapGesture(count: 2) { positionToEdit = pos } }
+                        
+                        // CORRECTION DU MODE PRIVÉ : Ajout du .blur sur TOUTES les colonnes
+                        TableColumn("Qty", value: \.quantity) { pos in Text("\(pos.quantity, specifier: "%.2f")").blur(radius: privacyMode ? 6 : 0).frame(maxWidth: .infinity, alignment: .leading).contentShape(Rectangle()).onTapGesture(count: 2) { positionToEdit = pos } }
+                        TableColumn("Price", value: \.currentPrice) { pos in Text(pos.currentPrice, format: .currency(code: pos.currency)).blur(radius: privacyMode ? 6 : 0).frame(maxWidth: .infinity, alignment: .leading).contentShape(Rectangle()).onTapGesture(count: 2) { positionToEdit = pos } }
+                        TableColumn("Avg Cost", value: \.averageCost) { pos in Text(pos.averageCost, format: .currency(code: pos.currency)).foregroundColor(.secondary).blur(radius: privacyMode ? 6 : 0).frame(maxWidth: .infinity, alignment: .leading).contentShape(Rectangle()).onTapGesture(count: 2) { positionToEdit = pos } }
+                        TableColumn("Total Value", value: \.currentValueEUR) { pos in Text(pos.currentValueEUR, format: .currency(code: "EUR")).fontWeight(.medium).blur(radius: privacyMode ? 6 : 0).frame(maxWidth: .infinity, alignment: .leading).contentShape(Rectangle()).onTapGesture(count: 2) { positionToEdit = pos } }
+                        TableColumn("P/L €", value: \.roiValue) { pos in Text(pos.roiValue, format: .currency(code: "EUR").sign(strategy: .always())).foregroundColor(getColor(for: pos.roiValue)).fontWeight(.medium).blur(radius: privacyMode ? 6 : 0).frame(maxWidth: .infinity, alignment: .leading).contentShape(Rectangle()).onTapGesture(count: 2) { positionToEdit = pos } }
+                        TableColumn("P/L %", value: \.roiPercent) { pos in Text(pos.roiPercent, format: .percent.precision(.fractionLength(2)).sign(strategy: .always())).padding(.horizontal, 8).padding(.vertical, 2).background(getColor(for: pos.roiValue).opacity(0.1)).foregroundColor(getColor(for: pos.roiValue)).cornerRadius(4).blur(radius: privacyMode ? 6 : 0).frame(maxWidth: .infinity, alignment: .leading).contentShape(Rectangle()).onTapGesture(count: 2) { positionToEdit = pos } }
                     }
                     .tableStyle(.inset)
                 }
@@ -385,7 +555,7 @@ struct CompositionTabView: View {
                 .cornerRadius(12)
                 .shadow(color: Color.black.opacity(0.05), radius: 2, x: 0, y: 1)
                 
-                // --- CHARTS ---
+                // --- CHARTS (12 GRAPHS) ---
                 VStack(spacing: 24) {
                     HStack(spacing: 24) {
                         ModernDonutChart(data: viewModel.allocationByPosition, title: "Weight by Position", zoomType: .positions, palette: positionColors, expandedChart: $chartToZoom)
@@ -396,8 +566,16 @@ struct CompositionTabView: View {
                         ModernDonutChart(data: viewModel.allocationByMarketCap, title: "Market Cap Allocation", zoomType: .marketCaps, palette: marketCapColors, expandedChart: $chartToZoom)
                     }
                     HStack(spacing: 24) {
+                        ModernDonutChart(data: allocationByCurrency, title: "Currency Exposure", zoomType: .currencies, palette: [.blue, .green, .orange, .purple, .teal, .indigo, .pink], expandedChart: $chartToZoom)
+                        CorrelationMatrixChart(viewModel: viewModel, expandedChart: $chartToZoom)
+                    }
+                    HStack(spacing: 24) {
                         PRUPriceChart(viewModel: viewModel, data: viewModel.priceComparisonData, expandedChart: $chartToZoom)
                         ROIComboChart(viewModel: viewModel, positions: viewModel.positions, expandedChart: $chartToZoom)
+                    }
+                    HStack(spacing: 24) {
+                        ModernScatterPlotChart(viewModel: viewModel, data: viewModel.scatterData, expandedChart: $chartToZoom)
+                        CapitalStatusChart(data: viewModel.capitalStatusData, expandedChart: $chartToZoom)
                     }
                     HStack(spacing: 24) {
                         PerformanceHeatmap(positions: viewModel.positions, expandedChart: $chartToZoom)
