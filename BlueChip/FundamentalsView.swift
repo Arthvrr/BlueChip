@@ -30,7 +30,7 @@ struct ScoreEngine {
 }
 
 enum FundamentalsChartZoomType: String, Identifiable {
-    case totalScore, sectionScore, lineChart, polarChart, radarChart
+    case totalScore, sectionScore, lineChart, polarChart, radarChart, qualityMatrix, scoreComposition
     var id: String { self.rawValue }
 }
 
@@ -59,6 +59,16 @@ struct FundamentalsView: View {
             return colors[idx % colors.count].opacity(0.2)
         }
         return .gray.opacity(0.2)
+    }
+    
+    // Version opaque pour les graphiques empilés
+    func solidColor(for section: String) -> Color {
+        let sortedSections = Array(Set(viewModel.fundamentalCriteria.map { $0.section })).sorted()
+        if let idx = sortedSections.firstIndex(of: section) {
+            let colors: [Color] = [.blue, .green, .purple, .orange, .pink, .teal, .mint, .indigo]
+            return colors[idx % colors.count]
+        }
+        return .gray
     }
     
     func colorForTicker(_ ticker: String) -> Color {
@@ -125,20 +135,38 @@ struct FundamentalsView: View {
                     groupedCriteria: groupedCriteria,
                     colorForSection: color,
                     getTotalScore: getTotalScore,
-                    onCellTap: { pos, crit in
-                        editingCell = (pos, crit)
-                    },
-                    onCriterionTap: { crit in
-                        editingCriterion = crit
-                    }
+                    privacyMode: $privacyMode,
+                    onCellTap: { pos, crit in editingCell = (pos, crit) },
+                    onCriterionTap: { crit in editingCriterion = crit }
                 )
                 
-                // 3. GRAPHIQUES DE FORCES ET FAIBLESSES (Ligne 1)
+                // 3. GRAPHIQUES (Ligne 1)
                 HStack(alignment: .top, spacing: 24) {
                     FundamentalsTotalScoreChart(
                         viewModel: viewModel,
                         maxPossibleScore: maxPossibleScore,
                         getTotalScore: getTotalScore,
+                        privacyMode: $privacyMode,
+                        expandedChart: $chartToZoom
+                    )
+                    
+                    FundamentalsScoreCompositionChart(
+                        viewModel: viewModel,
+                        uniqueSections: Array(Set(viewModel.fundamentalCriteria.map { $0.section })).sorted(),
+                        solidColorForSection: solidColor,
+                        privacyMode: $privacyMode,
+                        expandedChart: $chartToZoom
+                    )
+                }
+                
+                // 4. GRAPHIQUES (Ligne 2)
+                HStack(alignment: .top, spacing: 24) {
+                    FundamentalsQualityMatrixChart(
+                        viewModel: viewModel,
+                        maxPossibleScore: maxPossibleScore,
+                        getTotalScore: getTotalScore,
+                        colorForTicker: colorForTicker,
+                        privacyMode: $privacyMode,
                         expandedChart: $chartToZoom
                     )
                     
@@ -147,17 +175,19 @@ struct FundamentalsView: View {
                         uniqueSections: Array(Set(viewModel.fundamentalCriteria.map { $0.section })).sorted(),
                         getStockSectionScorePct: getStockSectionScorePct,
                         colorForTicker: colorForTicker,
+                        privacyMode: $privacyMode,
                         expandedChart: $chartToZoom
                     )
                 }
                 
-                // 4. GRAPHIQUES RADAR ET SCORECARD (Ligne 2)
+                // 5. GRAPHIQUES RADAR ET SCORECARD (Ligne 3)
                 HStack(alignment: .top, spacing: 24) {
                     FundamentalsPolarChart(
                         viewModel: viewModel,
                         uniqueSections: Array(Set(viewModel.fundamentalCriteria.map { $0.section })).sorted(),
                         getStockSectionScorePct: getStockSectionScorePct,
                         colorForSection: color,
+                        privacyMode: $privacyMode,
                         expandedChart: $chartToZoom
                     )
                     
@@ -166,6 +196,7 @@ struct FundamentalsView: View {
                         uniqueSections: Array(Set(viewModel.fundamentalCriteria.map { $0.section })).sorted(),
                         getStockSectionScorePct: getStockSectionScorePct,
                         colorForTicker: colorForTicker,
+                        privacyMode: $privacyMode,
                         expandedChart: $chartToZoom
                     )
                 }
@@ -195,9 +226,11 @@ struct FundamentalsView: View {
                 maxPossibleScore: maxPossibleScore,
                 getTotalScore: getTotalScore,
                 colorForSection: color,
+                solidColorForSection: solidColor,
                 uniqueSections: Array(Set(viewModel.fundamentalCriteria.map { $0.section })).sorted(),
                 getStockSectionScorePct: getStockSectionScorePct,
-                colorForTicker: colorForTicker
+                colorForTicker: colorForTicker,
+                privacyMode: $privacyMode
             )
         }
     }
@@ -230,17 +263,17 @@ struct FundamentalsDashboardSection: View {
             let bestScore = bestStock != nil ? getTotalScore(bestStock!) : 0
             
             HStack(spacing: 16) {
-                DashboardCard(title: "Tracked Criteria", value: "\(viewModel.fundamentalCriteria.count)", titleIcon: "checklist", privacyMode: .constant(false))
-                DashboardCard(title: "Stocks Analyzed", value: "\(trackedStocks.count) / \(viewModel.positions.count)", titleIcon: "magnifyingglass", privacyMode: .constant(false))
-                DashboardCard(title: "Avg Portfolio Quality", value: "\(avgScore.formatted(.number.precision(.fractionLength(1)))) / \(Int(maxPossibleScore))", titleIcon: "star.fill", privacyMode: .constant(false))
-                DashboardCard(title: "Avg Quality Score (%)", value: avgScorePct.formatted(.percent.precision(.fractionLength(1))), titleIcon: "percent", privacyMode: .constant(false))
+                DashboardCard(title: "Tracked Criteria", value: "\(viewModel.fundamentalCriteria.count)", titleIcon: "checklist", privacyMode: $privacyMode)
+                DashboardCard(title: "Stocks Analyzed", value: "\(trackedStocks.count) / \(viewModel.positions.count)", titleIcon: "magnifyingglass", privacyMode: $privacyMode)
+                DashboardCard(title: "Avg Portfolio Quality", value: "\(avgScore.formatted(.number.precision(.fractionLength(1)))) / \(Int(maxPossibleScore))", titleIcon: "star.fill", privacyMode: $privacyMode)
+                DashboardCard(title: "Avg Quality Score (%)", value: avgScorePct.formatted(.percent.precision(.fractionLength(1))), titleIcon: "percent", privacyMode: $privacyMode)
             }
             
             HStack(spacing: 16) {
-                DashboardCard(title: "Top Quality Stock", value: bestStock?.ticker ?? "-", titleIcon: "trophy.fill", privacyMode: .constant(false))
-                DashboardCard(title: "Top Stock Score", value: bestStock != nil ? "\(bestScore.formatted(.number.precision(.fractionLength(1))))" : "-", titleIcon: "crown.fill", privacyMode: .constant(false))
-                DashboardCard(title: "Strongest Section", value: getStrongestSection(), titleIcon: "arrow.up.right.circle.fill", privacyMode: .constant(false))
-                DashboardCard(title: "Weakest Section", value: getWeakestSection(), titleIcon: "arrow.down.right.circle.fill", privacyMode: .constant(false))
+                DashboardCard(title: "Top Quality Stock", value: bestStock?.ticker ?? "-", titleIcon: "trophy.fill", privacyMode: $privacyMode)
+                DashboardCard(title: "Top Stock Score", value: bestStock != nil ? "\(bestScore.formatted(.number.precision(.fractionLength(1))))" : "-", titleIcon: "crown.fill", privacyMode: $privacyMode)
+                DashboardCard(title: "Strongest Section", value: getStrongestSection(), titleIcon: "arrow.up.right.circle.fill", privacyMode: $privacyMode)
+                DashboardCard(title: "Weakest Section", value: getWeakestSection(), titleIcon: "arrow.down.right.circle.fill", privacyMode: $privacyMode)
             }
         }
     }
@@ -302,37 +335,26 @@ struct CriterionHeaderCell: View {
     }
 }
 
-struct InfoCell: View {
-    let text: String
-    let width: CGFloat
-    var isBold: Bool = true
-    let height: CGFloat
-    var body: some View {
-        Text(text).font(.subheadline).fontWeight(isBold ? .bold : .regular).frame(width: width, height: height)
-            .background(Color(NSColor.windowBackgroundColor)).border(Color.gray.opacity(0.2), width: 0.5)
-    }
-}
-
-// CORRECTION : Extraction de la cellule de moyenne pour soulager le compilateur
 struct WeightedAverageCell: View {
     let crit: FundamentalCriterion
     let positions: [Position]
     let totalValue: Double
     let width: CGFloat
     let height: CGFloat
+    @Binding var privacyMode: Bool
     
     var body: some View {
         Text(textToShow)
             .font(.subheadline).fontWeight(.bold).foregroundColor(.primary)
+            .blur(radius: privacyMode ? 6 : 0)
             .frame(width: width, height: height)
             .background(Color(NSColor.windowBackgroundColor))
             .border(Color.gray.opacity(0.2), width: 0.5)
     }
     
     var textToShow: String {
-        if crit.type == .boolean {
-            return "-"
-        } else {
+        if crit.type == .boolean { return "-" }
+        else {
             let weightedVal = positions.reduce(0.0) { sum, pos in
                 let w = totalValue > 0 ? pos.currentValueEUR / totalValue : 0
                 let v = pos.fundamentalValues?[crit.id.uuidString] ?? 0.0
@@ -357,6 +379,7 @@ struct FundamentalsSpreadsheetSection: View {
     let groupedCriteria: [(section: String, criteria: [FundamentalCriterion])]
     let colorForSection: (String) -> Color
     let getTotalScore: (Position) -> Double
+    @Binding var privacyMode: Bool
     let onCellTap: (Position, FundamentalCriterion) -> Void
     let onCriterionTap: (FundamentalCriterion) -> Void
     
@@ -407,12 +430,18 @@ struct FundamentalsSpreadsheetSection: View {
                         // LIGNES : ACTIONS
                         ForEach(viewModel.positions) { pos in
                             HStack(spacing: 0) {
-                                InfoCell(text: pos.ticker, width: colWidthInfo, height: rowHeight)
-                                InfoCell(text: getTotalScore(pos).formatted(.number.precision(.fractionLength(1))), width: colWidthInfo, height: rowHeight)
+                                Text(pos.ticker).font(.subheadline).fontWeight(.bold).frame(width: colWidthInfo, height: rowHeight)
+                                    .background(Color(NSColor.windowBackgroundColor)).border(Color.gray.opacity(0.2), width: 0.5)
+                                
+                                Text(getTotalScore(pos).formatted(.number.precision(.fractionLength(1))))
+                                    .font(.subheadline).fontWeight(.bold).blur(radius: privacyMode ? 6 : 0)
+                                    .frame(width: colWidthInfo, height: rowHeight).background(Color(NSColor.windowBackgroundColor)).border(Color.gray.opacity(0.2), width: 0.5)
                                 
                                 let totalStocksValue = viewModel.positions.reduce(0) { $0 + $1.currentValueEUR }
                                 let weight = totalStocksValue > 0 ? (pos.currentValueEUR / totalStocksValue) : 0
-                                InfoCell(text: weight.formatted(.percent.precision(.fractionLength(2))), width: colWidthInfo, isBold: false, height: rowHeight)
+                                Text(weight.formatted(.percent.precision(.fractionLength(2))))
+                                    .font(.subheadline).blur(radius: privacyMode ? 6 : 0)
+                                    .frame(width: colWidthInfo, height: rowHeight).background(Color(NSColor.windowBackgroundColor)).border(Color.gray.opacity(0.2), width: 0.5)
                                 
                                 ForEach(groupedCriteria, id: \.section) { group in
                                     ForEach(group.criteria) { crit in
@@ -422,6 +451,7 @@ struct FundamentalsSpreadsheetSection: View {
                                         Button(action: { onCellTap(pos, crit) }) {
                                             Text(formatValue(val, type: crit.type))
                                                 .font(.subheadline).fontWeight(.semibold).foregroundColor(statusColor(statusInfo.status))
+                                                .blur(radius: privacyMode ? 6 : 0)
                                                 .frame(width: colWidthCrit, height: rowHeight).background(Color(NSColor.controlBackgroundColor))
                                                 .border(Color.gray.opacity(0.2), width: 0.5).contentShape(Rectangle())
                                         }.buttonStyle(.plain)
@@ -447,6 +477,7 @@ struct FundamentalsSpreadsheetSection: View {
                             }
                             Text(weightedScore.formatted(.number.precision(.fractionLength(1))))
                                 .font(.subheadline).fontWeight(.bold).foregroundColor(.primary)
+                                .blur(radius: privacyMode ? 6 : 0)
                                 .frame(width: colWidthInfo, height: rowHeight)
                                 .background(Color(NSColor.windowBackgroundColor))
                                 .border(Color.gray.opacity(0.2), width: 0.5)
@@ -457,7 +488,6 @@ struct FundamentalsSpreadsheetSection: View {
                                 .background(Color(NSColor.windowBackgroundColor))
                                 .border(Color.gray.opacity(0.2), width: 0.5)
                             
-                            // Cellules de Moyenne par Critère extraites pour alléger le compilateur
                             ForEach(groupedCriteria, id: \.section) { group in
                                 ForEach(group.criteria) { crit in
                                     WeightedAverageCell(
@@ -465,7 +495,8 @@ struct FundamentalsSpreadsheetSection: View {
                                         positions: viewModel.positions,
                                         totalValue: totalVal,
                                         width: colWidthCrit,
-                                        height: rowHeight
+                                        height: rowHeight,
+                                        privacyMode: $privacyMode
                                     )
                                 }
                             }
@@ -504,12 +535,16 @@ struct FundamentalsTotalScoreChart: View {
     @ObservedObject var viewModel: PortfolioViewModel
     let maxPossibleScore: Double
     let getTotalScore: (Position) -> Double
+    @Binding var privacyMode: Bool
     var isExpanded: Bool = false
     @Binding var expandedChart: FundamentalsChartZoomType?
     
     @State private var hoveredTicker: String? = nil
+    @State private var hiddenTickers: Set<String> = [] // AJOUT DE LA LEGENDE INTERACTIVE
 
     var body: some View {
+        let filteredPositions = viewModel.positions.filter { !hiddenTickers.contains($0.ticker) }
+        
         VStack {
             HStack {
                 if !isExpanded { Text("Quality Score Comparison").font(.headline).foregroundColor(.secondary) }
@@ -517,12 +552,16 @@ struct FundamentalsTotalScoreChart: View {
                 if !isExpanded {
                     Button(action: { expandedChart = .totalScore }) { Image(systemName: "plus.magnifyingglass").foregroundColor(.secondary) }.buttonStyle(.plain)
                 }
-            }.padding(.bottom, 16)
+            }.padding(.bottom, 4)
             
-            if viewModel.fundamentalCriteria.isEmpty || viewModel.positions.isEmpty {
+            // AJOUT DE LA LÉGENDE INTERACTIVE
+            InteractiveLegendView(items: viewModel.positions.map { $0.ticker }, colorMap: { viewModel.color(for: $0) }, hiddenItems: $hiddenTickers)
+                .padding(.bottom, 8)
+            
+            if viewModel.fundamentalCriteria.isEmpty || filteredPositions.isEmpty {
                 Spacer(); Text("No data").foregroundColor(.secondary); Spacer()
             } else {
-                Chart(viewModel.positions.sorted(by: { getTotalScore($0) > getTotalScore($1) })) { pos in
+                Chart(filteredPositions.sorted(by: { getTotalScore($0) > getTotalScore($1) })) { pos in
                     let score = getTotalScore(pos)
                     BarMark(x: .value("Ticker", pos.ticker), y: .value("Score", score))
                         .foregroundStyle(viewModel.color(for: pos.ticker).gradient).cornerRadius(4)
@@ -533,7 +572,7 @@ struct FundamentalsTotalScoreChart: View {
                             .annotation(position: .top, alignment: .center) {
                                 VStack {
                                     Text(hTicker).font(.caption.bold())
-                                    Text("\(score.formatted(.number.precision(.fractionLength(1)))) pts").font(.caption2)
+                                    Text("\(score.formatted(.number.precision(.fractionLength(1)))) pts").font(.caption2).blur(radius: privacyMode ? 6 : 0)
                                 }.padding(6).background(Color(NSColor.windowBackgroundColor).opacity(0.95)).cornerRadius(6).shadow(radius: 4)
                             }
                     }
@@ -547,6 +586,136 @@ struct FundamentalsTotalScoreChart: View {
             BlueChipWatermark()
         }
         .padding().frame(minHeight: isExpanded ? 500 : 360, maxHeight: isExpanded ? .infinity : 360)
+        .background(Color(NSColor.controlBackgroundColor)).cornerRadius(12).shadow(color: Color.black.opacity(0.05), radius: 2, x: 0, y: 1)
+    }
+}
+
+struct FundamentalsScoreCompositionChart: View {
+    @ObservedObject var viewModel: PortfolioViewModel
+    let uniqueSections: [String]
+    let solidColorForSection: (String) -> Color
+    @Binding var privacyMode: Bool
+    var isExpanded: Bool = false
+    @Binding var expandedChart: FundamentalsChartZoomType?
+    
+    @State private var hoveredTicker: String? = nil
+    @State private var hiddenSections: Set<String> = []
+
+    func getPoints(pos: Position, section: String) -> Double {
+        let crits = viewModel.fundamentalCriteria.filter { $0.section == section }
+        var total = 0.0
+        for crit in crits {
+            if let val = pos.fundamentalValues?[crit.id.uuidString] {
+                total += ScoreEngine.getScoreStatus(value: val, criterion: crit).points
+            }
+        }
+        return total
+    }
+
+    var body: some View {
+        let activeSections = uniqueSections.filter { !hiddenSections.contains($0) }
+        
+        VStack {
+            HStack {
+                if !isExpanded { Text("Score Composition Profile").font(.headline).foregroundColor(.secondary) }
+                Spacer()
+                if !isExpanded { Button(action: { expandedChart = .scoreComposition }) { Image(systemName: "plus.magnifyingglass").foregroundColor(.secondary) }.buttonStyle(.plain) }
+            }.padding(.bottom, 4)
+            
+            InteractiveLegendView(items: uniqueSections, colorMap: solidColorForSection, hiddenItems: $hiddenSections).padding(.bottom, 8)
+            
+            if uniqueSections.isEmpty || viewModel.positions.isEmpty {
+                Spacer(); Text("No data").foregroundColor(.secondary); Spacer()
+            } else {
+                Chart {
+                    ForEach(viewModel.positions) { pos in
+                        ForEach(activeSections, id: \.self) { section in
+                            let points = getPoints(pos: pos, section: section)
+                            BarMark(
+                                x: .value("Ticker", pos.ticker),
+                                y: .value("Points", points)
+                            )
+                            .foregroundStyle(solidColorForSection(section))
+                        }
+                    }
+                    if let hTicker = hoveredTicker {
+                        RuleMark(x: .value("Ticker", hTicker)).foregroundStyle(.secondary.opacity(0.3))
+                            .annotation(position: .top, alignment: .center) {
+                                Text(hTicker).font(.caption.bold()).padding(6).background(Color(NSColor.windowBackgroundColor).opacity(0.95)).cornerRadius(6)
+                            }
+                    }
+                }
+                .chartLegend(.hidden)
+                .chartXSelection(value: $hoveredTicker)
+            }
+            Spacer()
+            BlueChipWatermark()
+        }.padding().frame(minHeight: isExpanded ? 500 : 360, maxHeight: isExpanded ? .infinity : 360)
+        .background(Color(NSColor.controlBackgroundColor)).cornerRadius(12).shadow(color: Color.black.opacity(0.05), radius: 2, x: 0, y: 1)
+    }
+}
+
+struct FundamentalsQualityMatrixChart: View {
+    @ObservedObject var viewModel: PortfolioViewModel
+    let maxPossibleScore: Double
+    let getTotalScore: (Position) -> Double
+    let colorForTicker: (String) -> Color
+    @Binding var privacyMode: Bool
+    var isExpanded: Bool = false
+    @Binding var expandedChart: FundamentalsChartZoomType?
+    
+    @State private var hoveredScore: Double? = nil
+    @State private var hiddenTickers: Set<String> = []
+    
+    var filteredPositions: [Position] { viewModel.positions.filter { !hiddenTickers.contains($0.ticker) } }
+    var totalValue: Double { viewModel.positions.reduce(0) { $0 + $1.currentValueEUR } }
+    
+    var hoveredItem: Position? {
+        guard let s = hoveredScore else { return nil }
+        return filteredPositions.min(by: { abs(getTotalScore($0) - s) < abs(getTotalScore($1) - s) })
+    }
+
+    var body: some View {
+        VStack {
+            HStack {
+                if !isExpanded { Text("Quality Matrix (Score vs Weight)").font(.headline).foregroundColor(.secondary) }
+                Spacer()
+                if !isExpanded { Button(action: { expandedChart = .qualityMatrix }) { Image(systemName: "plus.magnifyingglass").foregroundColor(.secondary) }.buttonStyle(.plain) }
+            }.padding(.bottom, 4)
+            
+            InteractiveLegendView(items: viewModel.positions.map { $0.ticker }, colorMap: colorForTicker, hiddenItems: $hiddenTickers).padding(.bottom, 8)
+            
+            if filteredPositions.isEmpty || maxPossibleScore == 0 {
+                Spacer(); Text("No data").foregroundColor(.secondary); Spacer()
+            } else {
+                Chart(filteredPositions) { pos in
+                    let score = getTotalScore(pos)
+                    let weight = totalValue > 0 ? (pos.currentValueEUR / totalValue) : 0
+                    
+                    PointMark(
+                        x: .value("Score", score),
+                        y: .value("Weight", weight)
+                    )
+                    .foregroundStyle(colorForTicker(pos.ticker))
+                    .symbolSize(100)
+                    .annotation(position: .top, alignment: .center) {
+                        if hoveredItem?.id == pos.id {
+                            VStack {
+                                Text(pos.ticker).font(.caption.bold())
+                                Text("\(score.formatted(.number.precision(.fractionLength(1)))) pts | \(weight.formatted(.percent.precision(.fractionLength(1))))").font(.caption2).blur(radius: privacyMode ? 6 : 0)
+                            }.padding(4).background(Color(NSColor.windowBackgroundColor).opacity(0.9)).cornerRadius(4)
+                        } else if isExpanded {
+                            Text(pos.ticker).font(.system(size: 8)).foregroundColor(.secondary)
+                        }
+                    }
+                }
+                .chartXScale(domain: [0, maxPossibleScore * 1.05])
+                .chartYAxis { AxisMarks { value in AxisGridLine(); AxisTick(); if let v = value.as(Double.self) { AxisValueLabel(v.formatted(.percent.precision(.fractionLength(0)))) } } }
+                .chartXSelection(value: $hoveredScore)
+                .chartLegend(.hidden)
+            }
+            HStack { Text("Top Right = High Weight + High Quality").font(.caption2).foregroundColor(.secondary); Spacer(); BlueChipWatermark() }
+        }.padding().frame(minHeight: isExpanded ? 500 : 360, maxHeight: isExpanded ? .infinity : 360)
         .background(Color(NSColor.controlBackgroundColor)).cornerRadius(12).shadow(color: Color.black.opacity(0.05), radius: 2, x: 0, y: 1)
     }
 }
@@ -583,6 +752,7 @@ struct FundamentalsLineChart: View {
     let uniqueSections: [String]
     let getStockSectionScorePct: (Position, String) -> Double
     let colorForTicker: (String) -> Color
+    @Binding var privacyMode: Bool
     var isExpanded: Bool = false
     @Binding var expandedChart: FundamentalsChartZoomType?
     
@@ -663,10 +833,12 @@ struct FundamentalsPolarChart: View {
     let uniqueSections: [String]
     let getStockSectionScorePct: (Position, String) -> Double
     let colorForSection: (String) -> Color
+    @Binding var privacyMode: Bool
     var isExpanded: Bool = false
     @Binding var expandedChart: FundamentalsChartZoomType?
     
     @State private var hoveredAngle: Int? = nil
+    @State private var hiddenSections: Set<String> = [] // AJOUT DE LA LEGENDE INTERACTIVE
 
     var weightedSectionScores: [(section: String, score: Double)] {
         let totalStocksValue = viewModel.positions.reduce(0) { $0 + $1.currentValueEUR }
@@ -686,6 +858,8 @@ struct FundamentalsPolarChart: View {
     }
 
     var body: some View {
+        let filteredScores = weightedSectionScores.filter { !hiddenSections.contains($0.section) }
+        
         VStack {
             HStack {
                 if !isExpanded { Text("Weighted Portfolio Scorecard").font(.headline).foregroundColor(.secondary) }
@@ -693,12 +867,16 @@ struct FundamentalsPolarChart: View {
                 if !isExpanded {
                     Button(action: { expandedChart = .polarChart }) { Image(systemName: "plus.magnifyingglass").foregroundColor(.secondary) }.buttonStyle(.plain)
                 }
-            }.padding(.bottom, 16)
+            }.padding(.bottom, 4)
             
-            if weightedSectionScores.isEmpty {
+            // AJOUT DE LA LÉGENDE INTERACTIVE
+            InteractiveLegendView(items: uniqueSections, colorMap: colorForSection, hiddenItems: $hiddenSections)
+                .padding(.bottom, 8)
+            
+            if filteredScores.isEmpty {
                 Spacer(); Text("No data").foregroundColor(.secondary); Spacer()
             } else {
-                Chart(Array(weightedSectionScores.enumerated()), id: \.element.section) { index, item in
+                Chart(Array(filteredScores.enumerated()), id: \.element.section) { index, item in
                     SectorMark(
                         angle: .value("Angle", 1),
                         innerRadius: .ratio(0.1),
@@ -721,28 +899,18 @@ struct FundamentalsPolarChart: View {
                                 .position(center)
                         }
                         
-                        if let angle = hoveredAngle, angle >= 0, angle < weightedSectionScores.count {
-                            let item = weightedSectionScores[angle]
+                        if let angle = hoveredAngle, angle >= 0, angle < filteredScores.count {
+                            let item = filteredScores[angle]
                             VStack {
                                 Text(item.section).font(.caption.bold())
                                 Text("Score: \(item.score.formatted(.number.precision(.fractionLength(1))))%")
-                                    .font(.caption2)
+                                    .font(.caption2).blur(radius: privacyMode ? 6 : 0)
                             }
                             .padding(8).background(Color(NSColor.windowBackgroundColor).opacity(0.95)).cornerRadius(8).shadow(radius: 4)
                             .position(x: center.x, y: center.y)
                         }
                     }
                 }
-                
-                HStack(spacing: 12) {
-                    ForEach(weightedSectionScores, id: \.section) { item in
-                        HStack(spacing: 4) {
-                            Circle().fill(colorForSection(item.section)).frame(width: 8, height: 8)
-                            Text(item.section).font(.caption2)
-                        }
-                    }
-                }
-                .padding(.top, 16)
             }
             
             Spacer()
@@ -758,6 +926,7 @@ struct FundamentalsRadarChart: View {
     let uniqueSections: [String]
     let getStockSectionScorePct: (Position, String) -> Double
     let colorForTicker: (String) -> Color
+    @Binding var privacyMode: Bool
     var isExpanded: Bool = false
     @Binding var expandedChart: FundamentalsChartZoomType?
     
@@ -873,9 +1042,11 @@ struct FundamentalsFullScreenChartView: View {
     let maxPossibleScore: Double
     let getTotalScore: (Position) -> Double
     let colorForSection: (String) -> Color
+    let solidColorForSection: (String) -> Color
     let uniqueSections: [String]
     let getStockSectionScorePct: (Position, String) -> Double
     let colorForTicker: (String) -> Color
+    @Binding var privacyMode: Bool
 
     var body: some View {
         VStack(spacing: 20) {
@@ -887,15 +1058,19 @@ struct FundamentalsFullScreenChartView: View {
             
             switch zoomType {
             case .totalScore:
-                FundamentalsTotalScoreChart(viewModel: viewModel, maxPossibleScore: maxPossibleScore, getTotalScore: getTotalScore, isExpanded: true, expandedChart: .constant(nil))
+                FundamentalsTotalScoreChart(viewModel: viewModel, maxPossibleScore: maxPossibleScore, getTotalScore: getTotalScore, privacyMode: $privacyMode, isExpanded: true, expandedChart: .constant(nil))
             case .sectionScore:
                 Text("Not used")
             case .lineChart:
-                FundamentalsLineChart(viewModel: viewModel, uniqueSections: uniqueSections, getStockSectionScorePct: getStockSectionScorePct, colorForTicker: colorForTicker, isExpanded: true, expandedChart: .constant(nil))
+                FundamentalsLineChart(viewModel: viewModel, uniqueSections: uniqueSections, getStockSectionScorePct: getStockSectionScorePct, colorForTicker: colorForTicker, privacyMode: $privacyMode, isExpanded: true, expandedChart: .constant(nil))
             case .polarChart:
-                FundamentalsPolarChart(viewModel: viewModel, uniqueSections: uniqueSections, getStockSectionScorePct: getStockSectionScorePct, colorForSection: colorForSection, isExpanded: true, expandedChart: .constant(nil))
+                FundamentalsPolarChart(viewModel: viewModel, uniqueSections: uniqueSections, getStockSectionScorePct: getStockSectionScorePct, colorForSection: colorForSection, privacyMode: $privacyMode, isExpanded: true, expandedChart: .constant(nil))
             case .radarChart:
-                FundamentalsRadarChart(viewModel: viewModel, uniqueSections: uniqueSections, getStockSectionScorePct: getStockSectionScorePct, colorForTicker: colorForTicker, isExpanded: true, expandedChart: .constant(nil))
+                FundamentalsRadarChart(viewModel: viewModel, uniqueSections: uniqueSections, getStockSectionScorePct: getStockSectionScorePct, colorForTicker: colorForTicker, privacyMode: $privacyMode, isExpanded: true, expandedChart: .constant(nil))
+            case .qualityMatrix:
+                FundamentalsQualityMatrixChart(viewModel: viewModel, maxPossibleScore: maxPossibleScore, getTotalScore: getTotalScore, colorForTicker: colorForTicker, privacyMode: $privacyMode, isExpanded: true, expandedChart: .constant(nil))
+            case .scoreComposition:
+                FundamentalsScoreCompositionChart(viewModel: viewModel, uniqueSections: uniqueSections, solidColorForSection: solidColorForSection, privacyMode: $privacyMode, isExpanded: true, expandedChart: .constant(nil))
             }
         }.padding(30).frame(minWidth: 900, minHeight: 700)
     }
@@ -907,6 +1082,8 @@ struct FundamentalsFullScreenChartView: View {
         case .lineChart: return "Stock Quality by Segment (%)"
         case .polarChart: return "Weighted Portfolio Scorecard"
         case .radarChart: return "Stock Radar Profiles"
+        case .qualityMatrix: return "Quality Matrix (Score vs Weight)"
+        case .scoreComposition: return "Score Composition Profile"
         }
     }
 }
@@ -936,7 +1113,6 @@ struct CriterionFormSheet: View {
     
     var body: some View {
         VStack(spacing: 0) {
-            // HEADER
             HStack {
                 Text(isEditing ? "Edit Criterion" : "Add New Criterion")
                     .font(.title2).fontWeight(.bold)
@@ -952,7 +1128,6 @@ struct CriterionFormSheet: View {
             ScrollView(.vertical, showsIndicators: true) {
                 VStack(spacing: 20) {
                     
-                    // 1. CRITERION DEFINITION CARD
                     VStack(alignment: .leading, spacing: 14) {
                         Text("Criterion Definition").font(.headline).foregroundColor(.secondary)
                         
@@ -1012,7 +1187,6 @@ struct CriterionFormSheet: View {
                     .cornerRadius(12)
                     .overlay(RoundedRectangle(cornerRadius: 12).stroke(Color.gray.opacity(0.15), lineWidth: 1))
                     
-                    // 2. SCORING RULES CARD
                     VStack(alignment: .leading, spacing: 14) {
                         Text("Scoring Rules").font(.headline).foregroundColor(.secondary)
                         
@@ -1057,7 +1231,6 @@ struct CriterionFormSheet: View {
             
             Divider()
             
-            // ACTIONS BOTTOM BAR
             HStack {
                 if isEditing {
                     Button(role: .destructive, action: {
