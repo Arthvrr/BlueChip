@@ -5,7 +5,8 @@ import Charts
 enum GrowthChartZoomType: String, Identifiable {
     case cashVsStocks, capitalVsGains, gainsProvenance
     case annualReturnsCombo, investedVsValue
-    case wealthWaterfall, momMultiple // NOUVEAUX GRAPHES
+    case wealthWaterfall, momMultiple
+    case tippingPoint, compoundingPie // NOUVEAUX GRAPHES
     var id: String { self.rawValue }
 }
 
@@ -37,11 +38,15 @@ struct GrowthView: View {
                 // 5. CHARTS: PERFORMANCE ANNUELLE
                 GrowthPerformanceChartsSection(viewModel: viewModel, privacyMode: $privacyMode, chartToZoom: $chartToZoom)
                 
-                // 6. CHARTS: ADVANCED GROWTH METRICS (NOUVEAU)
+                // 6. CHARTS: ADVANCED GROWTH METRICS
                 GrowthAdvancedMetricsSection(viewModel: viewModel, privacyMode: $privacyMode, chartToZoom: $chartToZoom)
+                
+                // 7. CHARTS: FIRE & COMPOUNDING METRICS (NOUVEAU)
+                GrowthFIREMetricsSection(viewModel: viewModel, privacyMode: $privacyMode, chartToZoom: $chartToZoom)
             }
             .padding()
         }
+        .background(Color(NSColor.windowBackgroundColor))
         .sheet(isPresented: $showGoalSheet) { EditGrowthGoalView(viewModel: viewModel) }
         .sheet(item: $chartToZoom) { type in GrowthFullScreenChartView(zoomType: type, viewModel: viewModel, privacyMode: $privacyMode) }
     }
@@ -352,9 +357,9 @@ struct GrowthCompositionChartsSection: View {
         VStack(alignment: .leading, spacing: 12) {
             Text("Portfolio Structure & Gains").font(.title2).fontWeight(.bold).foregroundColor(.secondary)
             HStack(spacing: 16) {
-                CashVsStocksChart(viewModel: viewModel, expandedChart: $chartToZoom)
-                CapitalVsGainsChart(viewModel: viewModel, expandedChart: $chartToZoom)
-                GainsProvenanceChart(viewModel: viewModel, expandedChart: $chartToZoom)
+                CashVsStocksChart(viewModel: viewModel, privacyMode: $privacyMode, expandedChart: $chartToZoom)
+                CapitalVsGainsChart(viewModel: viewModel, privacyMode: $privacyMode, expandedChart: $chartToZoom)
+                GainsProvenanceChart(viewModel: viewModel, privacyMode: $privacyMode, expandedChart: $chartToZoom)
             }
         }
     }
@@ -369,8 +374,8 @@ struct GrowthPerformanceChartsSection: View {
         VStack(alignment: .leading, spacing: 12) {
             Text("Annual Performance & Long Term Growth").font(.title2).fontWeight(.bold).foregroundColor(.secondary)
             HStack(spacing: 24) {
-                AnnualReturnsComboChart(viewModel: viewModel, expandedChart: $chartToZoom)
-                InvestedVsValueChart(viewModel: viewModel, expandedChart: $chartToZoom)
+                AnnualReturnsComboChart(viewModel: viewModel, privacyMode: $privacyMode, expandedChart: $chartToZoom)
+                InvestedVsValueChart(viewModel: viewModel, privacyMode: $privacyMode, expandedChart: $chartToZoom)
             }
         }
     }
@@ -385,8 +390,24 @@ struct GrowthAdvancedMetricsSection: View {
         VStack(alignment: .leading, spacing: 12) {
             Text("Advanced Wealth Metrics").font(.title2).fontWeight(.bold).foregroundColor(.secondary)
             HStack(spacing: 24) {
-                WealthWaterfallChart(viewModel: viewModel, expandedChart: $chartToZoom)
-                MoICMultipleChart(viewModel: viewModel, expandedChart: $chartToZoom)
+                WealthWaterfallChart(viewModel: viewModel, privacyMode: $privacyMode, expandedChart: $chartToZoom)
+                MoICMultipleChart(viewModel: viewModel, privacyMode: $privacyMode, expandedChart: $chartToZoom)
+            }
+        }
+    }
+}
+
+struct GrowthFIREMetricsSection: View {
+    @ObservedObject var viewModel: PortfolioViewModel
+    @Binding var privacyMode: Bool
+    @Binding var chartToZoom: GrowthChartZoomType?
+    
+    var body: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            Text("Compounding & Effort Analytics").font(.title2).fontWeight(.bold).foregroundColor(.secondary)
+            HStack(spacing: 24) {
+                TippingPointChart(viewModel: viewModel, privacyMode: $privacyMode, expandedChart: $chartToZoom)
+                CompoundingPieChart(viewModel: viewModel, privacyMode: $privacyMode, expandedChart: $chartToZoom)
             }
         }
     }
@@ -399,6 +420,7 @@ struct GrowthAdvancedMetricsSection: View {
 // CHART 1: Cash vs Stocks (Donut)
 struct CashVsStocksChart: View {
     @ObservedObject var viewModel: PortfolioViewModel
+    @Binding var privacyMode: Bool
     var isExpanded: Bool = false
     @Binding var expandedChart: GrowthChartZoomType?
     
@@ -439,7 +461,7 @@ struct CashVsStocksChart: View {
                         if let value = selectedAngleValue, let item = findItem(for: value) {
                             VStack {
                                 Text(item.name).font(.headline)
-                                Text(item.value.formatted(.currency(code: "EUR").precision(.fractionLength(2)))).font(.subheadline).foregroundColor(.secondary)
+                                Text(item.value.formatted(.currency(code: "EUR").precision(.fractionLength(2)))).font(.subheadline).foregroundColor(.secondary).blur(radius: privacyMode ? 6 : 0)
                             }.position(x: geometry.frame(in: .local).midX, y: geometry.frame(in: .local).midY)
                         }
                     }
@@ -459,6 +481,7 @@ struct CashVsStocksChart: View {
 // CHART 2: Source de la valeur (Capital vs Gain)
 struct CapitalVsGainsChart: View {
     @ObservedObject var viewModel: PortfolioViewModel
+    @Binding var privacyMode: Bool
     var isExpanded: Bool = false
     @Binding var expandedChart: GrowthChartZoomType?
     
@@ -500,7 +523,7 @@ struct CapitalVsGainsChart: View {
                         if let value = selectedAngleValue, let item = findItem(for: value) {
                             VStack {
                                 Text(item.name).font(.headline)
-                                Text(item.value.formatted(.currency(code: "EUR").precision(.fractionLength(2)))).font(.subheadline).foregroundColor(.secondary)
+                                Text(item.value.formatted(.currency(code: "EUR").precision(.fractionLength(2)))).font(.subheadline).foregroundColor(.secondary).blur(radius: privacyMode ? 6 : 0)
                             }.position(x: geometry.frame(in: .local).midX, y: geometry.frame(in: .local).midY)
                         }
                     }
@@ -520,6 +543,7 @@ struct CapitalVsGainsChart: View {
 // CHART 3: Provenance des gains (Dividendes vs Plus-Value)
 struct GainsProvenanceChart: View {
     @ObservedObject var viewModel: PortfolioViewModel
+    @Binding var privacyMode: Bool
     var isExpanded: Bool = false
     @Binding var expandedChart: GrowthChartZoomType?
     
@@ -565,7 +589,7 @@ struct GainsProvenanceChart: View {
                         if let value = selectedAngleValue, let item = findItem(for: value) {
                             VStack {
                                 Text(item.name).font(.headline)
-                                Text(item.value.formatted(.currency(code: "EUR").precision(.fractionLength(2)))).font(.subheadline).foregroundColor(.secondary)
+                                Text(item.value.formatted(.currency(code: "EUR").precision(.fractionLength(2)))).font(.subheadline).foregroundColor(.secondary).blur(radius: privacyMode ? 6 : 0)
                             }.position(x: geometry.frame(in: .local).midX, y: geometry.frame(in: .local).midY)
                         }
                     }
@@ -585,6 +609,7 @@ struct GainsProvenanceChart: View {
 // CHART 4: Annual Returns
 struct AnnualReturnsComboChart: View {
     @ObservedObject var viewModel: PortfolioViewModel
+    @Binding var privacyMode: Bool
     var isExpanded: Bool = false
     @Binding var expandedChart: GrowthChartZoomType?
 
@@ -648,12 +673,12 @@ struct AnnualReturnsComboChart: View {
                 HStack(spacing: 16) {
                     Text(String(item.year)).fontWeight(.bold)
                     Text(item.returnEUR.formatted(.currency(code: "EUR").precision(.fractionLength(2)).sign(strategy: .always())))
-                        .foregroundColor(item.returnEUR >= 0 ? .green : .red).fontWeight(.semibold)
+                        .foregroundColor(item.returnEUR >= 0 ? .green : .red).fontWeight(.semibold).blur(radius: privacyMode ? 6 : 0)
                     Text(String(format: "%+.2f%%", item.returnPercent))
                         .padding(.horizontal, 6).padding(.vertical, 2)
                         .background((item.returnPercent >= 0 ? Color.green : Color.red).opacity(0.1))
                         .foregroundColor(item.returnPercent >= 0 ? .green : .red)
-                        .cornerRadius(4).fontWeight(.semibold)
+                        .cornerRadius(4).fontWeight(.semibold).blur(radius: privacyMode ? 6 : 0)
                 }
                 .font(.caption).padding(.horizontal, 8).padding(.vertical, 4).background(Color(NSColor.windowBackgroundColor)).cornerRadius(6).transition(.opacity)
             }
@@ -694,6 +719,7 @@ struct AnnualReturnsComboChart: View {
 // CHART 5: Invested cumulé vs Valeur
 struct InvestedVsValueChart: View {
     @ObservedObject var viewModel: PortfolioViewModel
+    @Binding var privacyMode: Bool
     var isExpanded: Bool = false
     @Binding var expandedChart: GrowthChartZoomType?
 
@@ -734,11 +760,11 @@ struct InvestedVsValueChart: View {
             if let pItem = hoveredPortfolio {
                 HStack(spacing: 16) {
                     Text(String(pItem.year)).fontWeight(.bold)
-                    if !hiddenItems.contains("Portfolio Value") { HStack(spacing: 4) { Circle().fill(Color.blue).frame(width: 7, height: 7); Text(pItem.value.formatted(.currency(code: "EUR").precision(.fractionLength(0)))).foregroundColor(.blue).fontWeight(.semibold) } }
-                    if !hiddenItems.contains("Cumulative Invested"), let iItem = hoveredInvested { HStack(spacing: 4) { Circle().fill(Color.gray).frame(width: 7, height: 7); Text(iItem.value.formatted(.currency(code: "EUR").precision(.fractionLength(0)))).foregroundColor(.secondary).fontWeight(.semibold) } }
+                    if !hiddenItems.contains("Portfolio Value") { HStack(spacing: 4) { Circle().fill(Color.blue).frame(width: 7, height: 7); Text(pItem.value.formatted(.currency(code: "EUR").precision(.fractionLength(0)))).foregroundColor(.blue).fontWeight(.semibold).blur(radius: privacyMode ? 6 : 0) } }
+                    if !hiddenItems.contains("Cumulative Invested"), let iItem = hoveredInvested { HStack(spacing: 4) { Circle().fill(Color.gray).frame(width: 7, height: 7); Text(iItem.value.formatted(.currency(code: "EUR").precision(.fractionLength(0)))).foregroundColor(.secondary).fontWeight(.semibold).blur(radius: privacyMode ? 6 : 0) } }
                     if let iItem = hoveredInvested, !hiddenItems.contains("Portfolio Value"), !hiddenItems.contains("Cumulative Invested") {
                         let diff = pItem.value - iItem.value
-                        Text(diff.formatted(.currency(code: "EUR").precision(.fractionLength(0)).sign(strategy: .always()))).foregroundColor(diff >= 0 ? .green : .red).fontWeight(.bold)
+                        Text(diff.formatted(.currency(code: "EUR").precision(.fractionLength(0)).sign(strategy: .always()))).foregroundColor(diff >= 0 ? .green : .red).fontWeight(.bold).blur(radius: privacyMode ? 6 : 0)
                     }
                 }
                 .font(.caption).padding(.horizontal, 8).padding(.vertical, 4).background(Color(NSColor.windowBackgroundColor)).cornerRadius(6).transition(.opacity)
@@ -777,15 +803,18 @@ struct InvestedVsValueChart: View {
     }
 }
 
-// --- CHART 6 (NOUVEAU) : WEALTH WATERFALL CHART ---
+// --- CHART 6: WEALTH WATERFALL CHART ---
 struct WaterfallItem: Identifiable { let id = UUID(); let name: String; let start: Double; let end: Double; let color: Color }
 
 struct WealthWaterfallChart: View {
     @ObservedObject var viewModel: PortfolioViewModel
+    @Binding var privacyMode: Bool
     var isExpanded: Bool = false
     @Binding var expandedChart: GrowthChartZoomType?
     
-    var data: [WaterfallItem] {
+    @State private var hiddenItems: Set<String> = []
+    
+    var baseData: [WaterfallItem] {
         let currentYear = Calendar.current.component(.year, from: Date())
         let startWallet = viewModel.growthYears.first?.startWallet ?? 0.0
         let totalDeposits = viewModel.growthYears.filter { $0.year <= currentYear }.reduce(0) { $0 + $1.invested }
@@ -805,6 +834,8 @@ struct WealthWaterfallChart: View {
         items.append(WaterfallItem(name: "Current Value", start: 0, end: currentWallet, color: .purple.opacity(0.8)))
         return items
     }
+    
+    var filteredData: [WaterfallItem] { baseData.filter { !hiddenItems.contains($0.name) } }
 
     var body: some View {
         VStack(alignment: .leading, spacing: 8) {
@@ -814,10 +845,16 @@ struct WealthWaterfallChart: View {
                 if !isExpanded { Button(action: { expandedChart = .wealthWaterfall }) { Image(systemName: "plus.magnifyingglass").foregroundColor(.secondary) }.buttonStyle(.plain) }
             }.padding(.bottom, 4)
             
-            if data.isEmpty || data.last?.end == 0 {
+            InteractiveLegendView(
+                items: baseData.map { $0.name },
+                colorMap: { name in baseData.first(where: { $0.name == name })?.color ?? .gray },
+                hiddenItems: $hiddenItems
+            ).padding(.bottom, 8)
+            
+            if baseData.isEmpty || baseData.last?.end == 0 {
                 Spacer(); Text("Fill in your initial investment to see the waterfall.").foregroundColor(.secondary).frame(maxWidth: .infinity, alignment: .center); Spacer()
             } else {
-                Chart(data) { item in
+                Chart(filteredData) { item in
                     BarMark(
                         x: .value("Category", item.name),
                         yStart: .value("Start", item.start),
@@ -830,6 +867,7 @@ struct WealthWaterfallChart: View {
                         Text(diff.formatted(.currency(code: "EUR").precision(.fractionLength(0))))
                             .font(.caption.bold())
                             .foregroundColor(.secondary)
+                            .blur(radius: privacyMode ? 6 : 0)
                     }
                 }
                 .chartYAxis { AxisMarks(position: .leading) { value in AxisGridLine(); AxisTick(); AxisValueLabel { if let v = value.as(Double.self) { Text(v.formatted(.currency(code: "EUR").notation(.compactName))) } } } }
@@ -840,11 +878,12 @@ struct WealthWaterfallChart: View {
     }
 }
 
-// --- CHART 7 (NOUVEAU) : MoIC (Multiple on Invested Capital) ---
+// --- CHART 7: MoIC (Multiple on Invested Capital) ---
 struct MoICSeriesItem: Identifiable { let id = UUID(); let year: Int; let multiple: Double }
 
 struct MoICMultipleChart: View {
     @ObservedObject var viewModel: PortfolioViewModel
+    @Binding var privacyMode: Bool
     var isExpanded: Bool = false
     @Binding var expandedChart: GrowthChartZoomType?
     
@@ -862,7 +901,6 @@ struct MoICMultipleChart: View {
             let effectiveEnd = (year == currentYear) ? viewModel.currentTotalCapital : yearData.endWallet
             let multiple = cumInvested > 0 ? (effectiveEnd / cumInvested) : 1.0
             
-            // On ne trace le point que s'il y a eu un début d'investissement ou si on n'est pas à 0
             if cumInvested > 0 || effectiveEnd > 0 {
                 items.append(MoICSeriesItem(year: year, multiple: multiple))
             }
@@ -885,10 +923,11 @@ struct MoICMultipleChart: View {
                     Text(String(item.year)).fontWeight(.bold)
                     Text("\(item.multiple.formatted(.number.precision(.fractionLength(2))))x")
                         .foregroundColor(item.multiple >= 1.0 ? .green : .red).fontWeight(.bold)
+                        .blur(radius: privacyMode ? 6 : 0)
                 }
                 .font(.caption).padding(.horizontal, 8).padding(.vertical, 4).background(Color(NSColor.windowBackgroundColor)).cornerRadius(6).transition(.opacity)
             } else {
-                Text("Hover to view multiplier").font(.caption).foregroundColor(.clear) // Placeholder
+                Text("Hover to view multiplier").font(.caption).foregroundColor(.clear)
             }
             
             if data.isEmpty {
@@ -923,6 +962,183 @@ struct MoICMultipleChart: View {
     }
 }
 
+// --- CHART 8 (NOUVEAU) : THE TIPPING POINT ---
+struct TippingPointItem: Identifiable { let id = UUID(); let year: Int; let type: String; let value: Double }
+
+struct TippingPointChart: View {
+    @ObservedObject var viewModel: PortfolioViewModel
+    @Binding var privacyMode: Bool
+    var isExpanded: Bool = false
+    @Binding var expandedChart: GrowthChartZoomType?
+    
+    @State private var hiddenItems: Set<String> = []
+    @State private var hoveredYear: String? = nil
+    var currentYear: Int { Calendar.current.component(.year, from: Date()) }
+    
+    var baseData: [TippingPointItem] {
+        let startYear = viewModel.dividendStartYear
+        var items: [TippingPointItem] = []
+        for year in startYear...currentYear {
+            guard let yearData = viewModel.growthYears.first(where: { $0.year == year }) else { continue }
+            let contributions = yearData.invested
+            let effectiveEnd = (year == currentYear) ? viewModel.currentTotalCapital : yearData.endWallet
+            let marketReturn = effectiveEnd - (yearData.startWallet + contributions)
+            
+            if contributions != 0 || marketReturn != 0 || effectiveEnd > 0 {
+                items.append(TippingPointItem(year: year, type: "Contributions", value: contributions))
+                items.append(TippingPointItem(year: year, type: "Market Returns", value: marketReturn))
+            }
+        }
+        return items
+    }
+    
+    var filteredData: [TippingPointItem] { baseData.filter { !hiddenItems.contains($0.type) } }
+    
+    func color(for type: String, value: Double = 1.0) -> Color {
+        if type == "Contributions" { return .gray.opacity(0.7) }
+        return value >= 0 ? .green.opacity(0.8) : .red.opacity(0.8)
+    }
+    
+    var hoveredContributions: Double? { baseData.first { String($0.year) == hoveredYear && $0.type == "Contributions" }?.value }
+    var hoveredMarketReturn: Double? { baseData.first { String($0.year) == hoveredYear && $0.type == "Market Returns" }?.value }
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            HStack {
+                if !isExpanded { Text("The Tipping Point (Effort vs Market)").font(.headline).foregroundColor(.secondary) }
+                Spacer()
+                if !isExpanded { Button(action: { expandedChart = .tippingPoint }) { Image(systemName: "plus.magnifyingglass").foregroundColor(.secondary) }.buttonStyle(.plain) }
+            }.padding(.bottom, 4)
+            
+            InteractiveLegendView(items: ["Contributions", "Market Returns"], colorMap: { color(for: $0) }, hiddenItems: $hiddenItems).padding(.bottom, 8)
+            
+            if let y = hoveredYear, let contrib = hoveredContributions, let mReturn = hoveredMarketReturn {
+                HStack(spacing: 16) {
+                    Text(y).fontWeight(.bold)
+                    Text("Contributions: \(contrib.formatted(.currency(code: "EUR").precision(.fractionLength(0))))")
+                        .foregroundColor(.secondary).fontWeight(.semibold).blur(radius: privacyMode ? 6 : 0)
+                    Text("Market: \(mReturn.formatted(.currency(code: "EUR").precision(.fractionLength(0)).sign(strategy: .always())))")
+                        .foregroundColor(mReturn >= 0 ? .green : .red).fontWeight(.semibold).blur(radius: privacyMode ? 6 : 0)
+                }
+                .font(.caption).padding(.horizontal, 8).padding(.vertical, 4).background(Color(NSColor.windowBackgroundColor)).cornerRadius(6).transition(.opacity)
+            } else {
+                Text("Hover to view").font(.caption).foregroundColor(.clear)
+            }
+            
+            if baseData.isEmpty {
+                Spacer(); Text("No data").foregroundColor(.secondary).frame(maxWidth: .infinity, alignment: .center); Spacer()
+            } else {
+                Chart(filteredData) { item in
+                    BarMark(
+                        x: .value("Year", String(item.year)),
+                        y: .value("Value", item.value)
+                    )
+                    .foregroundStyle(color(for: item.type, value: item.value))
+                    .position(by: .value("Type", item.type))
+                    .cornerRadius(4)
+                }
+                .chartXSelection(value: $hoveredYear)
+                .chartYAxis { AxisMarks(position: .leading) { value in AxisGridLine(); AxisTick(); AxisValueLabel { if let v = value.as(Double.self) { Text(v.formatted(.currency(code: "EUR").notation(.compactName))) } } } }
+            }
+            HStack { Text("Watch for the year your money works harder than you").font(.caption2).foregroundColor(.secondary); Spacer(); BlueChipWatermark() }
+        }.padding().frame(minHeight: isExpanded ? 500 : 300, maxHeight: isExpanded ? .infinity : 300).background(Color(NSColor.controlBackgroundColor)).cornerRadius(12).shadow(color: Color.black.opacity(0.05), radius: 2, x: 0, y: 1)
+    }
+}
+
+/// --- CHART 9 : THE COMPOUNDING STACK (100% Stacked Bar) ---
+struct CompoundingPieItem: Identifiable { let id = UUID(); let year: Int; let category: String; let percentage: Double; let absoluteValue: Double }
+
+struct CompoundingPieChart: View {
+    @ObservedObject var viewModel: PortfolioViewModel
+    @Binding var privacyMode: Bool
+    var isExpanded: Bool = false
+    @Binding var expandedChart: GrowthChartZoomType?
+    
+    @State private var hiddenItems: Set<String> = []
+    @State private var hoveredYear: String? = nil
+    var currentYear: Int { Calendar.current.component(.year, from: Date()) }
+    
+    var baseData: [CompoundingPieItem] {
+        let startYear = viewModel.dividendStartYear
+        var items: [CompoundingPieItem] = []
+        var cumInvested: Double = viewModel.growthYears.first?.startWallet ?? 0
+        
+        for year in startYear...currentYear {
+            guard let yearData = viewModel.growthYears.first(where: { $0.year == year }) else { continue }
+            cumInvested += yearData.invested
+            let effectiveEnd = (year == currentYear) ? viewModel.currentTotalCapital : yearData.endWallet
+            
+            if effectiveEnd > 0 {
+                let gains = max(0, effectiveEnd - cumInvested) // On bloque les pertes à 0 pour ce graphe visuel
+                let totalForPct = cumInvested + gains
+                
+                let pctPrincipal = totalForPct > 0 ? (cumInvested / totalForPct) * 100.0 : 100.0
+                let pctGains = totalForPct > 0 ? (gains / totalForPct) * 100.0 : 0.0
+                
+                items.append(CompoundingPieItem(year: year, category: "Principal", percentage: pctPrincipal, absoluteValue: cumInvested))
+                items.append(CompoundingPieItem(year: year, category: "Growth", percentage: pctGains, absoluteValue: gains))
+            }
+        }
+        return items
+    }
+    
+    var filteredData: [CompoundingPieItem] { baseData.filter { !hiddenItems.contains($0.category) } }
+    
+    // Couleurs légèrement plus opaques pour un beau rendu en barres
+    func color(for category: String) -> Color { category == "Principal" ? .blue.opacity(0.8) : .green.opacity(0.8) }
+    
+    var hoveredPrincipal: CompoundingPieItem? { baseData.first { String($0.year) == hoveredYear && $0.category == "Principal" } }
+    var hoveredGrowth: CompoundingPieItem? { baseData.first { String($0.year) == hoveredYear && $0.category == "Growth" } }
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            HStack {
+                if !isExpanded { Text("The Compounding Stack (100%)").font(.headline).foregroundColor(.secondary) }
+                Spacer()
+                if !isExpanded { Button(action: { expandedChart = .compoundingPie }) { Image(systemName: "plus.magnifyingglass").foregroundColor(.secondary) }.buttonStyle(.plain) }
+            }.padding(.bottom, 4)
+            
+            InteractiveLegendView(items: ["Principal", "Growth"], colorMap: color, hiddenItems: $hiddenItems).padding(.bottom, 8)
+            
+            if let y = hoveredYear, let pItem = hoveredPrincipal, let gItem = hoveredGrowth {
+                HStack(spacing: 16) {
+                    Text(y).fontWeight(.bold)
+                    Text("Principal: \(pItem.percentage.formatted(.number.precision(.fractionLength(1))))%")
+                        .foregroundColor(.blue).fontWeight(.semibold)
+                    Text("Growth: \(gItem.percentage.formatted(.number.precision(.fractionLength(1))))%")
+                        .foregroundColor(.green).fontWeight(.semibold)
+                }
+                .font(.caption).padding(.horizontal, 8).padding(.vertical, 4).background(Color(NSColor.windowBackgroundColor)).cornerRadius(6).transition(.opacity)
+            } else {
+                Text("Hover to view").font(.caption).foregroundColor(.clear)
+            }
+            
+            if baseData.isEmpty {
+                Spacer(); Text("No data").foregroundColor(.secondary).frame(maxWidth: .infinity, alignment: .center); Spacer()
+            } else {
+                Chart(filteredData) { item in
+                    // SOLUTION : Remplacement du AreaMark par un BarMark
+                    BarMark(
+                        x: .value("Year", String(item.year)),
+                        y: .value("Percentage", item.percentage)
+                    )
+                    .foregroundStyle(color(for: item.category))
+                    // SwiftUI empile automatiquement les BarMark avec les mêmes X !
+                    
+                    if let y = hoveredYear {
+                        RuleMark(x: .value("Year", y))
+                            .foregroundStyle(Color.secondary.opacity(0.4))
+                            .lineStyle(StrokeStyle(lineWidth: 1, dash: [4, 3]))
+                    }
+                }
+                .chartXSelection(value: $hoveredYear)
+                .chartYAxis { AxisMarks(position: .leading) { value in AxisGridLine(); AxisTick(); AxisValueLabel { if let v = value.as(Double.self) { Text("\(v.formatted(.number.precision(.fractionLength(0))))%") } } } }
+            }
+            HStack { Text("Shows how returns snowball and overtake your principal over time").font(.caption2).foregroundColor(.secondary); Spacer(); BlueChipWatermark() }
+        }.padding().frame(minHeight: isExpanded ? 500 : 300, maxHeight: isExpanded ? .infinity : 300).background(Color(NSColor.controlBackgroundColor)).cornerRadius(12).shadow(color: Color.black.opacity(0.05), radius: 2, x: 0, y: 1)
+    }
+}
+
 // MARK: - FULL SCREEN ZOOM GROWTH
 struct GrowthFullScreenChartView: View {
     @Environment(\.dismiss) var dismiss
@@ -939,6 +1155,8 @@ struct GrowthFullScreenChartView: View {
         case .investedVsValue:    return "Invested vs Portfolio Value"
         case .wealthWaterfall:    return "Wealth Accumulation Waterfall"
         case .momMultiple:        return "MoIC Trend (Money on Money)"
+        case .tippingPoint:       return "The Tipping Point"
+        case .compoundingPie:     return "The Compounding Pie"
         }
     }
 
@@ -953,13 +1171,15 @@ struct GrowthFullScreenChartView: View {
             }
 
             switch zoomType {
-            case .cashVsStocks:       CashVsStocksChart(viewModel: viewModel, isExpanded: true, expandedChart: .constant(nil))
-            case .capitalVsGains:     CapitalVsGainsChart(viewModel: viewModel, isExpanded: true, expandedChart: .constant(nil))
-            case .gainsProvenance:    GainsProvenanceChart(viewModel: viewModel, isExpanded: true, expandedChart: .constant(nil))
-            case .annualReturnsCombo: AnnualReturnsComboChart(viewModel: viewModel, isExpanded: true, expandedChart: .constant(nil))
-            case .investedVsValue:    InvestedVsValueChart(viewModel: viewModel, isExpanded: true, expandedChart: .constant(nil))
-            case .wealthWaterfall:    WealthWaterfallChart(viewModel: viewModel, isExpanded: true, expandedChart: .constant(nil))
-            case .momMultiple:        MoICMultipleChart(viewModel: viewModel, isExpanded: true, expandedChart: .constant(nil))
+            case .cashVsStocks:       CashVsStocksChart(viewModel: viewModel, privacyMode: $privacyMode, isExpanded: true, expandedChart: .constant(nil))
+            case .capitalVsGains:     CapitalVsGainsChart(viewModel: viewModel, privacyMode: $privacyMode, isExpanded: true, expandedChart: .constant(nil))
+            case .gainsProvenance:    GainsProvenanceChart(viewModel: viewModel, privacyMode: $privacyMode, isExpanded: true, expandedChart: .constant(nil))
+            case .annualReturnsCombo: AnnualReturnsComboChart(viewModel: viewModel, privacyMode: $privacyMode, isExpanded: true, expandedChart: .constant(nil))
+            case .investedVsValue:    InvestedVsValueChart(viewModel: viewModel, privacyMode: $privacyMode, isExpanded: true, expandedChart: .constant(nil))
+            case .wealthWaterfall:    WealthWaterfallChart(viewModel: viewModel, privacyMode: $privacyMode, isExpanded: true, expandedChart: .constant(nil))
+            case .momMultiple:        MoICMultipleChart(viewModel: viewModel, privacyMode: $privacyMode, isExpanded: true, expandedChart: .constant(nil))
+            case .tippingPoint:       TippingPointChart(viewModel: viewModel, privacyMode: $privacyMode, isExpanded: true, expandedChart: .constant(nil))
+            case .compoundingPie:     CompoundingPieChart(viewModel: viewModel, privacyMode: $privacyMode, isExpanded: true, expandedChart: .constant(nil))
             }
 
         }.padding(30).frame(minWidth: 900, minHeight: 700)
