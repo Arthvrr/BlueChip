@@ -7,7 +7,7 @@ enum DividendChartZoomType: String, Identifiable {
     var id: String { self.rawValue }
 }
 
-// MARK: - MAIN VIEW (Ultra-légère pour compilation instantanée)
+// MARK: - MAIN VIEW
 struct DividendsView: View {
     @ObservedObject var viewModel: PortfolioViewModel
     @Binding var privacyMode: Bool
@@ -24,20 +24,20 @@ struct DividendsView: View {
                     .contentShape(Rectangle())
                     .onTapGesture(count: 2) { showGoalSheet = true }
                 
-                DividendsProjectedChartsSection(viewModel: viewModel, chartToZoom: $chartToZoom)
+                DividendsProjectedChartsSection(viewModel: viewModel, privacyMode: $privacyMode, chartToZoom: $chartToZoom)
                 
-                DividendsTableSection(viewModel: viewModel)
+                DividendsTableSection(viewModel: viewModel, privacyMode: $privacyMode)
                 
-                DividendsManualChartsSection(viewModel: viewModel, chartToZoom: $chartToZoom)
+                DividendsManualChartsSection(viewModel: viewModel, privacyMode: $privacyMode, chartToZoom: $chartToZoom)
                 
-                DividendsSecurityMetricsSection(viewModel: viewModel, chartToZoom: $chartToZoom)
+                DividendsSecurityMetricsSection(viewModel: viewModel, privacyMode: $privacyMode, chartToZoom: $chartToZoom)
                 
-                DividendsAdvancedAnalyticsSection(viewModel: viewModel, chartToZoom: $chartToZoom)
+                DividendsAdvancedAnalyticsSection(viewModel: viewModel, privacyMode: $privacyMode, chartToZoom: $chartToZoom)
             }
             .padding()
         }
         .sheet(isPresented: $showGoalSheet) { EditDividendGoalView(viewModel: viewModel) }
-        .sheet(item: $chartToZoom) { type in DividendFullScreenChartView(zoomType: type, viewModel: viewModel) }
+        .sheet(item: $chartToZoom) { type in DividendFullScreenChartView(zoomType: type, viewModel: viewModel, privacyMode: $privacyMode) }
     }
 }
 
@@ -51,7 +51,7 @@ struct EditDividendGoalView: View {
     var body: some View {
         Form {
             Section(header: Text("Set Dividend Goal").font(.headline)) { Picker("Goal Type", selection: $selectedGoal) { ForEach(DividendGoalType.allCases, id: \.self) { type in Text(type.rawValue).tag(type) } }; TextField("Target Amount", value: $targetInput, format: .number) }.padding()
-            HStack { Button("Cancel") { dismiss() }.keyboardShortcut(.cancelAction); Spacer(); Button("Save") { viewModel.dividendGoalType = selectedGoal; viewModel.dividendGoalTarget = targetInput; dismiss() }.keyboardShortcut(.defaultAction).buttonStyle(.borderedProminent) }.padding()
+            HStack { Button("Cancel") { dismiss() }.keyboardShortcut(.cancelAction); Spacer(); Button("Save") { viewModel.dividendGoalType = selectedGoal; viewModel.dividendGoalTarget = targetInput; viewModel.saveData(); dismiss() }.keyboardShortcut(.defaultAction).buttonStyle(.borderedProminent) }.padding()
         }.frame(width: 380).padding()
     }
 }
@@ -91,7 +91,7 @@ struct DividendsDashboardSection: View {
                 DashboardCard(title: "Best Year", value: bestYear.formatted(.currency(code: "EUR").precision(.fractionLength(2))), privacyMode: $privacyMode)
                 YoYCard(yoyGrowth: yoyGrowth, privacyMode: $privacyMode)
                 DashboardCard(title: "Projected Annual Yield", value: viewModel.portfolioYield.formatted(.percent.precision(.fractionLength(2))), privacyMode: $privacyMode)
-                StartYearCard(viewModel: viewModel)
+                StartYearCard(viewModel: viewModel, privacyMode: $privacyMode)
             }
         }
     }
@@ -110,30 +110,35 @@ struct YoYCard: View {
 
 struct StartYearCard: View {
     @ObservedObject var viewModel: PortfolioViewModel
+    @Binding var privacyMode: Bool
     var body: some View {
         VStack(alignment: .leading, spacing: 6) {
             Text("Start Year").font(.subheadline).foregroundColor(.secondary)
             TextField("Year", value: $viewModel.dividendStartYear, format: .number.grouping(.never))
                 .textFieldStyle(.roundedBorder).frame(maxWidth: 80).font(.title3.bold())
+                .blur(radius: privacyMode ? 6 : 0)
         }.padding().frame(maxWidth: .infinity, alignment: .leading).frame(height: 110).background(Color(NSColor.controlBackgroundColor)).cornerRadius(10).shadow(color: Color.black.opacity(0.05), radius: 2, x: 0, y: 1)
     }
 }
 
 struct DividendsProjectedChartsSection: View {
-    @ObservedObject var viewModel: PortfolioViewModel; @Binding var chartToZoom: DividendChartZoomType?
+    @ObservedObject var viewModel: PortfolioViewModel
+    @Binding var privacyMode: Bool
+    @Binding var chartToZoom: DividendChartZoomType?
     var body: some View {
         VStack(alignment: .leading, spacing: 8) {
             Text("Projected Dividend Analytics").font(.title2).fontWeight(.bold).foregroundColor(.secondary)
             HStack(spacing: 24) {
-                ExpectedMonthlyDividendChart(viewModel: viewModel, expandedChart: $chartToZoom)
-                StockYieldChart(viewModel: viewModel, expandedChart: $chartToZoom)
+                ExpectedMonthlyDividendChart(viewModel: viewModel, privacyMode: $privacyMode, expandedChart: $chartToZoom)
+                StockYieldChart(viewModel: viewModel, privacyMode: $privacyMode, expandedChart: $chartToZoom)
             }
         }
     }
 }
 
 struct DividendsTableSection: View {
-    @ObservedObject var viewModel: PortfolioViewModel; typealias YearBinding = Binding<DividendYear>
+    @ObservedObject var viewModel: PortfolioViewModel
+    @Binding var privacyMode: Bool
     var body: some View {
         VStack(alignment: .leading, spacing: 8) {
             Text("Manual Dividend Received Tracker").font(.title2).fontWeight(.bold).foregroundColor(.secondary).padding(.bottom, 4)
@@ -145,7 +150,7 @@ struct DividendsTableSection: View {
                     Text("Total").fontWeight(.bold).frame(width: 80, alignment: .trailing)
                 }.padding(.horizontal, 16).padding(.vertical, 12).background(Color(NSColor.windowBackgroundColor)); Divider()
                 
-                ScrollView { LazyVStack(spacing: 0) { ForEach($viewModel.dividendYears) { $yearData in SpreadsheetRowView(yearData: $yearData).padding(.horizontal, 16).padding(.vertical, 8); Divider() } } }
+                ScrollView { LazyVStack(spacing: 0) { ForEach($viewModel.dividendYears) { $yearData in SpreadsheetRowView(yearData: $yearData, privacyMode: privacyMode).padding(.horizontal, 16).padding(.vertical, 8); Divider() } } }
             }.background(Color(NSColor.controlBackgroundColor)).cornerRadius(8).overlay(RoundedRectangle(cornerRadius: 8).stroke(Color.gray.opacity(0.2), lineWidth: 1))
         }.frame(height: 380).padding().background(Color(NSColor.controlBackgroundColor)).cornerRadius(12).shadow(color: Color.black.opacity(0.05), radius: 2, x: 0, y: 1)
     }
@@ -153,59 +158,75 @@ struct DividendsTableSection: View {
 
 struct SpreadsheetRowView: View {
     @Binding var yearData: DividendYear
+    var privacyMode: Bool
     var body: some View {
         HStack(spacing: 8) {
             Group {
                 Text(String(yearData.year)).fontWeight(.bold).frame(width: 50, alignment: .leading)
-                MonthField(value: $yearData.jan); MonthField(value: $yearData.feb); MonthField(value: $yearData.mar)
-                MonthField(value: $yearData.apr); MonthField(value: $yearData.may); MonthField(value: $yearData.jun)
+                MonthField(value: $yearData.jan, privacyMode: privacyMode); MonthField(value: $yearData.feb, privacyMode: privacyMode); MonthField(value: $yearData.mar, privacyMode: privacyMode)
+                MonthField(value: $yearData.apr, privacyMode: privacyMode); MonthField(value: $yearData.may, privacyMode: privacyMode); MonthField(value: $yearData.jun, privacyMode: privacyMode)
             }
             Group {
-                MonthField(value: $yearData.jul); MonthField(value: $yearData.aug); MonthField(value: $yearData.sep)
-                MonthField(value: $yearData.oct); MonthField(value: $yearData.nov); MonthField(value: $yearData.dec)
-                Text(yearData.total.formatted(.currency(code: "EUR").precision(.fractionLength(2)))).fontWeight(.bold).foregroundColor(.green).frame(width: 80, alignment: .trailing)
+                MonthField(value: $yearData.jul, privacyMode: privacyMode); MonthField(value: $yearData.aug, privacyMode: privacyMode); MonthField(value: $yearData.sep, privacyMode: privacyMode)
+                MonthField(value: $yearData.oct, privacyMode: privacyMode); MonthField(value: $yearData.nov, privacyMode: privacyMode); MonthField(value: $yearData.dec, privacyMode: privacyMode)
+                Text(yearData.total.formatted(.currency(code: "EUR").precision(.fractionLength(2))))
+                    .fontWeight(.bold).foregroundColor(.green).frame(width: 80, alignment: .trailing)
+                    .blur(radius: privacyMode ? 6 : 0)
             }
         }
     }
 }
 
-struct MonthField: View { @Binding var value: Double; var body: some View { TextField("0", value: $value, format: .number).textFieldStyle(.plain).frame(maxWidth: .infinity, alignment: .leading) } }
+struct MonthField: View {
+    @Binding var value: Double
+    var privacyMode: Bool
+    var body: some View {
+        TextField("0", value: $value, format: .number).textFieldStyle(.plain).frame(maxWidth: .infinity, alignment: .leading)
+            .blur(radius: privacyMode ? 6 : 0)
+    }
+}
 
 struct DividendsManualChartsSection: View {
-    @ObservedObject var viewModel: PortfolioViewModel; @Binding var chartToZoom: DividendChartZoomType?
+    @ObservedObject var viewModel: PortfolioViewModel
+    @Binding var privacyMode: Bool
+    @Binding var chartToZoom: DividendChartZoomType?
     var currentYear: Int { Calendar.current.component(.year, from: Date()) }; var thisYearData: DividendYear? { viewModel.dividendYears.first { $0.year == currentYear } }
     var body: some View {
         VStack(alignment: .leading, spacing: 8) {
             Text("Spreadsheet Received History").font(.title2).fontWeight(.bold).foregroundColor(.secondary)
             HStack(spacing: 24) {
-                MonthlyDividendChart(viewModel: viewModel, thisYearData: thisYearData, expandedChart: $chartToZoom)
-                YearlyDividendChart(viewModel: viewModel, currentYear: currentYear, expandedChart: $chartToZoom)
+                MonthlyDividendChart(viewModel: viewModel, thisYearData: thisYearData, privacyMode: $privacyMode, expandedChart: $chartToZoom)
+                YearlyDividendChart(viewModel: viewModel, currentYear: currentYear, privacyMode: $privacyMode, expandedChart: $chartToZoom)
             }
         }
     }
 }
 
 struct DividendsSecurityMetricsSection: View {
-    @ObservedObject var viewModel: PortfolioViewModel; @Binding var chartToZoom: DividendChartZoomType?
+    @ObservedObject var viewModel: PortfolioViewModel
+    @Binding var privacyMode: Bool
+    @Binding var chartToZoom: DividendChartZoomType?
     var body: some View {
         VStack(alignment: .leading, spacing: 8) {
             Text("Positions Dividends & Yield On Cost").font(.title2).fontWeight(.bold).foregroundColor(.secondary)
             HStack(spacing: 24) {
-                TotalDividendsDonutChart(viewModel: viewModel, expandedChart: $chartToZoom)
-                YieldOnCostChart(viewModel: viewModel, expandedChart: $chartToZoom)
+                TotalDividendsDonutChart(viewModel: viewModel, privacyMode: $privacyMode, expandedChart: $chartToZoom)
+                YieldOnCostChart(viewModel: viewModel, privacyMode: $privacyMode, expandedChart: $chartToZoom)
             }
         }
     }
 }
 
 struct DividendsAdvancedAnalyticsSection: View {
-    @ObservedObject var viewModel: PortfolioViewModel; @Binding var chartToZoom: DividendChartZoomType?
+    @ObservedObject var viewModel: PortfolioViewModel
+    @Binding var privacyMode: Bool
+    @Binding var chartToZoom: DividendChartZoomType?
     var body: some View {
         VStack(alignment: .leading, spacing: 8) {
             Text("Advanced Analytics & History").font(.title2).fontWeight(.bold).foregroundColor(.secondary)
             HStack(spacing: 24) {
-                AllTimeHistoryChart(viewModel: viewModel, expandedChart: $chartToZoom)
-                ExpectedDividendHeatmapChart(viewModel: viewModel, expandedChart: $chartToZoom)
+                AllTimeHistoryChart(viewModel: viewModel, privacyMode: $privacyMode, expandedChart: $chartToZoom)
+                ExpectedDividendHeatmapChart(viewModel: viewModel, privacyMode: $privacyMode, expandedChart: $chartToZoom)
             }
         }
     }
@@ -234,18 +255,16 @@ struct DividendGoalProgressBar: View {
     }
 }
 
-// MARK: - CHART 1: EXPECTED MONTHLY (Simplifié : Gross vs Net groupés)
 // MARK: - CHART 1: EXPECTED MONTHLY (Simplifié : Gross vs Net groupés & Légende Interactive)
 struct ExpectedMonthlyDividendChart: View {
     @ObservedObject var viewModel: PortfolioViewModel
+    @Binding var privacyMode: Bool
     var isExpanded: Bool = false
     @Binding var expandedChart: DividendChartZoomType?
     @State private var hoveredMonth: String? = nil
     
-    // Gère les catégories masquées
     @State private var hiddenTypes: Set<String> = []
     
-    // Structure interne pour fusionner les montants de toutes les actions
     struct MonthlyAggregated: Identifiable {
         var id = UUID()
         var month: String
@@ -253,26 +272,26 @@ struct ExpectedMonthlyDividendChart: View {
         var amount: Double
     }
     
+    // FIX : On impose les 12 mois pour le cadenas chronologique
+    let allMonths = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"]
+    
     var aggregatedData: [MonthlyAggregated] {
-        let months = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"]
         var result: [MonthlyAggregated] = []
-        for month in months {
+        for month in allMonths {
             let net = viewModel.expectedMonthlyDividendSeries.filter { $0.monthName == month && $0.type == "Net" }.reduce(0) { $0 + $1.amount }
             let gross = viewModel.expectedMonthlyDividendSeries.filter { $0.monthName == month && $0.type == "Gross" }.reduce(0) { $0 + $1.amount }
-            if gross > 0 {
-                result.append(MonthlyAggregated(month: month, type: "Gross", amount: gross))
-                result.append(MonthlyAggregated(month: month, type: "Net", amount: net))
-            }
+            
+            // FIX : On ajoute toujours les mois, même s'ils valent 0, pour avoir le graphique complet
+            result.append(MonthlyAggregated(month: month, type: "Gross", amount: gross))
+            result.append(MonthlyAggregated(month: month, type: "Net", amount: net))
         }
         return result
     }
     
-    // Données filtrées selon la légende
     var filteredData: [MonthlyAggregated] {
         aggregatedData.filter { !hiddenTypes.contains($0.type) }
     }
     
-    // FIX YO-YO EFFECT : Basé sur les données filtrées pour que l'échelle s'adapte si on masque le "Gross"
     var yMaxStatic: Double {
         let maxTotal = filteredData.map { $0.amount }.max() ?? 10.0
         return maxTotal > 0 ? maxTotal * 1.25 : 100.0
@@ -286,46 +305,34 @@ struct ExpectedMonthlyDividendChart: View {
                 if !isExpanded { Button(action: { expandedChart = .expectedMonthly }) { Image(systemName: "plus.magnifyingglass").foregroundColor(.secondary) }.buttonStyle(.plain) }
             }.padding(.bottom, 4)
             
-            // LÉGENDE INTERACTIVE
             HStack(spacing: 16) {
                 Button(action: { toggle("Gross") }) {
-                    HStack(spacing: 6) {
-                        Circle().fill(Color.green).frame(width: 8, height: 8)
-                        Text("Gross").font(.caption).foregroundColor(hiddenTypes.contains("Gross") ? .secondary : .primary)
-                    }
-                }
-                .buttonStyle(.plain)
-                .opacity(hiddenTypes.contains("Gross") ? 0.4 : 1.0)
+                    HStack(spacing: 6) { Circle().fill(Color.green).frame(width: 8, height: 8); Text("Gross").font(.caption).foregroundColor(hiddenTypes.contains("Gross") ? .secondary : .primary) }
+                }.buttonStyle(.plain).opacity(hiddenTypes.contains("Gross") ? 0.4 : 1.0)
                 
                 Button(action: { toggle("Net") }) {
-                    HStack(spacing: 6) {
-                        Circle().fill(Color.green.opacity(0.5)).frame(width: 8, height: 8)
-                        Text("Net").font(.caption).foregroundColor(hiddenTypes.contains("Net") ? .secondary : .primary)
-                    }
-                }
-                .buttonStyle(.plain)
-                .opacity(hiddenTypes.contains("Net") ? 0.4 : 1.0)
+                    HStack(spacing: 6) { Circle().fill(Color.green.opacity(0.5)).frame(width: 8, height: 8); Text("Net").font(.caption).foregroundColor(hiddenTypes.contains("Net") ? .secondary : .primary) }
+                }.buttonStyle(.plain).opacity(hiddenTypes.contains("Net") ? 0.4 : 1.0)
             }.padding(.bottom, 8)
             
             if filteredData.isEmpty { Spacer(); Text("No data").foregroundColor(.secondary); Spacer() } else {
                 Chart(filteredData) { item in
-                    // Grouped Bar Chart (Côte à côte par mois)
                     BarMark(x: .value("Month", item.month), y: .value("Amount", item.amount))
                         .foregroundStyle(item.type == "Gross" ? Color.green : Color.green.opacity(0.5))
                         .position(by: .value("Type", item.type))
                         .cornerRadius(4)
-                        
-                        // ANNOTATION AU SURVOL
                         .annotation(position: .top) {
-                            if hoveredMonth == item.month {
+                            if hoveredMonth == item.month && item.amount > 0 {
                                 Text(item.amount.formatted(.currency(code: "EUR").precision(.fractionLength(2))))
                                     .font(.system(size: 8, weight: .bold))
                                     .foregroundColor(.secondary)
+                                    .blur(radius: privacyMode ? 6 : 0)
                             }
                         }
                 }
                 .chartLegend(.hidden)
-                .chartYScale(domain: 0...yMaxStatic) // Empêche l'axe Y de sauter au survol
+                .chartXScale(domain: allMonths) // FIX : Cadenas pour forcer les 12 mois dans l'ordre !
+                .chartYScale(domain: 0...yMaxStatic)
                 .chartYAxis { AxisMarks(position: .leading) { value in AxisGridLine(); AxisTick(); if let v = value.as(Double.self) { AxisValueLabel(v.formatted(.currency(code: "EUR").precision(.fractionLength(0)))) } } }
                 .chartXSelection(value: $hoveredMonth)
             }
@@ -333,21 +340,14 @@ struct ExpectedMonthlyDividendChart: View {
         }.padding().frame(minHeight: 360, maxHeight: isExpanded ? .infinity : 360).background(Color(NSColor.controlBackgroundColor)).cornerRadius(12).shadow(color: Color.black.opacity(0.05), radius: 2, x: 0, y: 1)
     }
     
-    // Fonction d'animation de la légende
-    func toggle(_ type: String) {
-        withAnimation {
-            if hiddenTypes.contains(type) {
-                hiddenTypes.remove(type)
-            } else {
-                hiddenTypes.insert(type)
-            }
-        }
-    }
+    func toggle(_ type: String) { withAnimation { if hiddenTypes.contains(type) { hiddenTypes.remove(type) } else { hiddenTypes.insert(type) } } }
 }
 
 // MARK: - CHART 2: STOCK YIELD
 struct StockYieldChart: View {
-    @ObservedObject var viewModel: PortfolioViewModel; var isExpanded: Bool = false; @Binding var expandedChart: DividendChartZoomType?
+    @ObservedObject var viewModel: PortfolioViewModel
+    @Binding var privacyMode: Bool
+    var isExpanded: Bool = false; @Binding var expandedChart: DividendChartZoomType?
     @State private var hoveredTicker: String? = nil
     var body: some View {
         VStack {
@@ -360,7 +360,7 @@ struct StockYieldChart: View {
                 Chart(viewModel.stockYieldsData) { item in
                     LineMark(x: .value("Ticker", item.ticker), y: .value("Yield", item.yield)).foregroundStyle(Color.gray.opacity(0.4)).interpolationMethod(.monotone)
                     PointMark(x: .value("Ticker", item.ticker), y: .value("Yield", item.yield)).foregroundStyle(viewModel.color(for: item.ticker)).symbolSize(hoveredTicker == item.ticker ? 100 : 40)
-                        .annotation(position: .top) { if hoveredTicker == item.ticker { Text("\(item.yield.formatted(.number.precision(.fractionLength(2))))%").font(.system(size: 9, weight: .bold)).foregroundColor(.secondary) } }
+                        .annotation(position: .top) { if hoveredTicker == item.ticker { Text("\(item.yield.formatted(.number.precision(.fractionLength(2))))%").font(.system(size: 9, weight: .bold)).foregroundColor(.secondary).blur(radius: privacyMode ? 6 : 0) } }
                 }
                 .chartLegend(.hidden)
                 .chartYAxis { AxisMarks(position: .leading) { value in AxisGridLine(); AxisTick(); if let v = value.as(Double.self) { AxisValueLabel("\(v.formatted(.number.precision(.fractionLength(0))))%") } } }
@@ -373,8 +373,11 @@ struct StockYieldChart: View {
 
 // MARK: - CHART 3: MANUAL MONTHLY
 struct MonthlyDividendChart: View {
-    @ObservedObject var viewModel: PortfolioViewModel; var thisYearData: DividendYear?; var isExpanded: Bool = false; @Binding var expandedChart: DividendChartZoomType?
+    @ObservedObject var viewModel: PortfolioViewModel; var thisYearData: DividendYear?
+    @Binding var privacyMode: Bool
+    var isExpanded: Bool = false; @Binding var expandedChart: DividendChartZoomType?
     @State private var hoveredMonth: String? = nil
+    let allMonths = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"]
     var monthlyData: [(String, Double)] { guard let thisYear = thisYearData else { return [] }; return [("Jan", thisYear.jan), ("Feb", thisYear.feb), ("Mar", thisYear.mar), ("Apr", thisYear.apr), ("May", thisYear.may), ("Jun", thisYear.jun), ("Jul", thisYear.jul), ("Aug", thisYear.aug), ("Sep", thisYear.sep), ("Oct", thisYear.oct), ("Nov", thisYear.nov), ("Dec", thisYear.dec)] }
     var yMaxStatic: Double { guard let thisYear = thisYearData else { return 10 }; let months = [thisYear.jan, thisYear.feb, thisYear.mar, thisYear.apr, thisYear.may, thisYear.jun, thisYear.jul, thisYear.aug, thisYear.sep, thisYear.oct, thisYear.nov, thisYear.dec]; return (months.max() ?? 10) * 1.2 }
     var body: some View {
@@ -387,8 +390,9 @@ struct MonthlyDividendChart: View {
             if monthlyData.isEmpty { Spacer(); Text("No data").foregroundColor(.secondary); Spacer() } else {
                 Chart(monthlyData, id: \.0) { item in
                     BarMark(x: .value("Month", item.0), y: .value("Amount", item.1)).foregroundStyle(Color.orange.opacity(0.8)).cornerRadius(4)
-                        .annotation(position: .top) { if hoveredMonth == item.0 { Text(item.1.formatted(.currency(code: "EUR").precision(.fractionLength(2)))).font(.system(size: 9, weight: .bold)).foregroundColor(.secondary) } }
+                        .annotation(position: .top) { if hoveredMonth == item.0 && item.1 > 0 { Text(item.1.formatted(.currency(code: "EUR").precision(.fractionLength(2)))).font(.system(size: 9, weight: .bold)).foregroundColor(.secondary).blur(radius: privacyMode ? 6 : 0) } }
                 }
+                .chartXScale(domain: allMonths) // Cadenas pour l'ordre des mois
                 .chartYScale(domain: 0...yMaxStatic)
                 .chartYAxis { AxisMarks { value in if let v = value.as(Double.self) { AxisValueLabel(v.formatted(.currency(code: "EUR").precision(.fractionLength(0)))) } } }
                 .chartXSelection(value: $hoveredMonth)
@@ -400,7 +404,9 @@ struct MonthlyDividendChart: View {
 
 // MARK: - CHART 4: MANUAL YEARLY
 struct YearlyDividendChart: View {
-    @ObservedObject var viewModel: PortfolioViewModel; var currentYear: Int; var isExpanded: Bool = false; @Binding var expandedChart: DividendChartZoomType?
+    @ObservedObject var viewModel: PortfolioViewModel; var currentYear: Int
+    @Binding var privacyMode: Bool
+    var isExpanded: Bool = false; @Binding var expandedChart: DividendChartZoomType?
     @State private var hoveredYear: String? = nil
     var activeYears: [DividendYear] { viewModel.dividendYears.filter { $0.total > 0 || $0.year == currentYear } }
     var yMaxStatic: Double { return (activeYears.map { $0.total }.max() ?? 10) * 1.2 }
@@ -415,7 +421,7 @@ struct YearlyDividendChart: View {
                 Chart(activeYears) { yearData in
                     let yearStr = String(yearData.year)
                     BarMark(x: .value("Year", yearStr), y: .value("Total", yearData.total)).foregroundStyle(Color.green.opacity(0.8)).cornerRadius(4)
-                        .annotation(position: .top) { if hoveredYear == yearStr { Text(yearData.total.formatted(.currency(code: "EUR").precision(.fractionLength(2)))).font(.system(size: 9, weight: .bold)).foregroundColor(.secondary) } }
+                        .annotation(position: .top) { if hoveredYear == yearStr { Text(yearData.total.formatted(.currency(code: "EUR").precision(.fractionLength(2)))).font(.system(size: 9, weight: .bold)).foregroundColor(.secondary).blur(radius: privacyMode ? 6 : 0) } }
                 }
                 .chartYScale(domain: 0...yMaxStatic)
                 .chartYAxis { AxisMarks { value in if let v = value.as(Double.self) { AxisValueLabel(v.formatted(.currency(code: "EUR").precision(.fractionLength(0)))) } } }
@@ -428,7 +434,9 @@ struct YearlyDividendChart: View {
 
 // MARK: - CHART 5: TOTAL DIVIDENDS DONUT
 struct TotalDividendsDonutChart: View {
-    @ObservedObject var viewModel: PortfolioViewModel; var isExpanded: Bool = false; @Binding var expandedChart: DividendChartZoomType?
+    @ObservedObject var viewModel: PortfolioViewModel
+    @Binding var privacyMode: Bool
+    var isExpanded: Bool = false; @Binding var expandedChart: DividendChartZoomType?
     @State private var selectedAngleValue: Double? = nil; @State private var hiddenItems: Set<String> = []
     var data: [ChartDataItem] { viewModel.positions.filter { $0.totalDividendEUR > 0 }.map { ChartDataItem(name: $0.ticker, value: $0.totalDividendEUR) }.sorted { $0.value > $1.value } }
     var filteredData: [ChartDataItem] { data.filter { !hiddenItems.contains($0.name) } }
@@ -447,7 +455,7 @@ struct TotalDividendsDonutChart: View {
                     GeometryReader { geometry in
                         if let value = selectedAngleValue {
                             let item = findItem(for: value)
-                            VStack { Text(item.name).font(.headline); Text(item.value.formatted(.currency(code: "EUR").precision(.fractionLength(2)))).font(.subheadline).foregroundColor(.secondary) }.position(x: geometry.frame(in: .local).midX, y: geometry.frame(in: .local).midY)
+                            VStack { Text(item.name).font(.headline); Text(item.value.formatted(.currency(code: "EUR").precision(.fractionLength(2)))).font(.subheadline).foregroundColor(.secondary).blur(radius: privacyMode ? 6 : 0) }.position(x: geometry.frame(in: .local).midX, y: geometry.frame(in: .local).midY)
                         }
                     }
                 }.animation(.easeInOut(duration: 0.2), value: selectedAngleValue)
@@ -460,7 +468,9 @@ struct TotalDividendsDonutChart: View {
 
 // MARK: - CHART 6: YIELD ON COST
 struct YieldOnCostChart: View {
-    @ObservedObject var viewModel: PortfolioViewModel; var isExpanded: Bool = false; @Binding var expandedChart: DividendChartZoomType?
+    @ObservedObject var viewModel: PortfolioViewModel
+    @Binding var privacyMode: Bool
+    var isExpanded: Bool = false; @Binding var expandedChart: DividendChartZoomType?
     @State private var hoveredTicker: String? = nil
     var data: [ChartDataItem] { viewModel.positions.filter { $0.investedAmountEUR > 0 && $0.totalDividendEUR > 0 }.map { ChartDataItem(name: $0.ticker, value: ($0.totalDividendEUR / $0.investedAmountEUR) * 100.0) }.sorted { $0.name < $1.name } }
     var body: some View {
@@ -473,7 +483,7 @@ struct YieldOnCostChart: View {
             if data.isEmpty { Spacer(); Text("No data").foregroundColor(.secondary); Spacer() } else {
                 Chart(data) { item in
                     BarMark(x: .value("Ticker", item.name), y: .value("YOC", item.value)).foregroundStyle(viewModel.color(for: item.name)).cornerRadius(4)
-                        .annotation(position: .top) { if hoveredTicker == item.name { Text("\(item.value.formatted(.number.precision(.fractionLength(2))))%").font(.system(size: 9, weight: .bold)).foregroundColor(.secondary) } }
+                        .annotation(position: .top) { if hoveredTicker == item.name { Text("\(item.value.formatted(.number.precision(.fractionLength(2))))%").font(.system(size: 9, weight: .bold)).foregroundColor(.secondary).blur(radius: privacyMode ? 6 : 0) } }
                 }
                 .chartLegend(.hidden)
                 .chartYAxis { AxisMarks(position: .leading) { value in AxisGridLine(); AxisTick(); if let v = value.as(Double.self) { AxisValueLabel("\(v.formatted(.number.precision(.fractionLength(0))))%") } } }
@@ -494,6 +504,7 @@ struct HistoricalDividendItem: Identifiable {
 
 struct AllTimeHistoryChart: View {
     @ObservedObject var viewModel: PortfolioViewModel
+    @Binding var privacyMode: Bool
     var isExpanded: Bool = false
     @Binding var expandedChart: DividendChartZoomType?
     @State private var hoveredDate: Date? = nil
@@ -572,7 +583,7 @@ struct AllTimeHistoryChart: View {
                                 .annotation(position: .top, alignment: .center) {
                                     VStack(alignment: .leading, spacing: 2) {
                                         Text(item.date.formatted(.dateTime.month(.abbreviated).year())).font(.system(size: 9, weight: .bold))
-                                        Text(item.amount.formatted(.currency(code: "EUR").precision(.fractionLength(2)))).font(.system(size: 9)).foregroundColor(.green)
+                                        Text(item.amount.formatted(.currency(code: "EUR").precision(.fractionLength(2)))).font(.system(size: 9)).foregroundColor(.green).blur(radius: privacyMode ? 6 : 0)
                                     }.padding(4).background(Color(NSColor.windowBackgroundColor).opacity(0.8)).cornerRadius(4)
                                 }
                         }
@@ -592,6 +603,7 @@ struct AllTimeHistoryChart: View {
 // MARK: - CHART 8: DIVIDEND CALENDAR HEATMAP
 struct ExpectedDividendHeatmapChart: View {
     @ObservedObject var viewModel: PortfolioViewModel
+    @Binding var privacyMode: Bool
     var isExpanded: Bool = false
     @Binding var expandedChart: DividendChartZoomType?
     
@@ -640,8 +652,8 @@ struct ExpectedDividendHeatmapChart: View {
                                         Text("\(item.ticker) in \(item.monthName)").font(.caption.bold())
                                     }
                                     Divider()
-                                    Text("Net: \(item.amount.formatted(.currency(code: "EUR").precision(.fractionLength(2))))").font(.caption2.bold()).foregroundColor(.primary)
-                                    Text("Gross: \((item.amount / 0.85).formatted(.currency(code: "EUR").precision(.fractionLength(2))))").font(.caption2).foregroundColor(.secondary)
+                                    Text("Net: \(item.amount.formatted(.currency(code: "EUR").precision(.fractionLength(2))))").font(.caption2.bold()).foregroundColor(.primary).blur(radius: privacyMode ? 6 : 0)
+                                    Text("Gross: \((item.amount / 0.85).formatted(.currency(code: "EUR").precision(.fractionLength(2))))").font(.caption2).foregroundColor(.secondary).blur(radius: privacyMode ? 6 : 0)
                                 }
                                 .padding(8).background(Color(NSColor.windowBackgroundColor).opacity(0.95)).cornerRadius(8).shadow(radius: 4)
                                 .position(x: geometry.frame(in: .local).midX, y: geometry.frame(in: .local).midY)
@@ -662,6 +674,7 @@ struct DividendFullScreenChartView: View {
     @Environment(\.dismiss) var dismiss
     let zoomType: DividendChartZoomType
     @ObservedObject var viewModel: PortfolioViewModel
+    @Binding var privacyMode: Bool
     
     var currentYear: Int { Calendar.current.component(.year, from: Date()) }
     var thisYearData: DividendYear? { viewModel.dividendYears.first { $0.year == currentYear } }
@@ -671,14 +684,14 @@ struct DividendFullScreenChartView: View {
             HStack { Text(titleForZoom).font(.title).fontWeight(.bold); Spacer(); Button(action: { dismiss() }) { Image(systemName: "xmark.circle.fill").font(.title).foregroundColor(.secondary) }.buttonStyle(.plain) }
             
             switch zoomType {
-            case .expectedMonthly: ExpectedMonthlyDividendChart(viewModel: viewModel, isExpanded: true, expandedChart: .constant(nil))
-            case .stockYield: StockYieldChart(viewModel: viewModel, isExpanded: true, expandedChart: .constant(nil))
-            case .monthly: MonthlyDividendChart(viewModel: viewModel, thisYearData: thisYearData, isExpanded: true, expandedChart: .constant(nil))
-            case .yearly: YearlyDividendChart(viewModel: viewModel, currentYear: currentYear, isExpanded: true, expandedChart: .constant(nil))
-            case .totalDividends: TotalDividendsDonutChart(viewModel: viewModel, isExpanded: true, expandedChart: .constant(nil))
-            case .yoc: YieldOnCostChart(viewModel: viewModel, isExpanded: true, expandedChart: .constant(nil))
-            case .allTimeHistory: AllTimeHistoryChart(viewModel: viewModel, isExpanded: true, expandedChart: .constant(nil))
-            case .heatmap: ExpectedDividendHeatmapChart(viewModel: viewModel, isExpanded: true, expandedChart: .constant(nil))
+            case .expectedMonthly: ExpectedMonthlyDividendChart(viewModel: viewModel, privacyMode: $privacyMode, isExpanded: true, expandedChart: .constant(nil))
+            case .stockYield: StockYieldChart(viewModel: viewModel, privacyMode: $privacyMode, isExpanded: true, expandedChart: .constant(nil))
+            case .monthly: MonthlyDividendChart(viewModel: viewModel, thisYearData: thisYearData, privacyMode: $privacyMode, isExpanded: true, expandedChart: .constant(nil))
+            case .yearly: YearlyDividendChart(viewModel: viewModel, currentYear: currentYear, privacyMode: $privacyMode, isExpanded: true, expandedChart: .constant(nil))
+            case .totalDividends: TotalDividendsDonutChart(viewModel: viewModel, privacyMode: $privacyMode, isExpanded: true, expandedChart: .constant(nil))
+            case .yoc: YieldOnCostChart(viewModel: viewModel, privacyMode: $privacyMode, isExpanded: true, expandedChart: .constant(nil))
+            case .allTimeHistory: AllTimeHistoryChart(viewModel: viewModel, privacyMode: $privacyMode, isExpanded: true, expandedChart: .constant(nil))
+            case .heatmap: ExpectedDividendHeatmapChart(viewModel: viewModel, privacyMode: $privacyMode, isExpanded: true, expandedChart: .constant(nil))
             }
         }.padding(30).frame(minWidth: 900, minHeight: 700)
     }
