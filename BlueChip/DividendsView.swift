@@ -4,6 +4,7 @@ import Charts
 // MARK: - SPECIFIC ZOOM ENUM FOR DIVIDENDS
 enum DividendChartZoomType: String, Identifiable {
     case monthly, yearly, expectedMonthly, stockYield, totalDividends, yoc, allTimeHistory, heatmap
+    case seasonality, dgr // NOUVEAUX GRAPHES
     var id: String { self.rawValue }
 }
 
@@ -33,6 +34,9 @@ struct DividendsView: View {
                 DividendsSecurityMetricsSection(viewModel: viewModel, privacyMode: $privacyMode, chartToZoom: $chartToZoom)
                 
                 DividendsAdvancedAnalyticsSection(viewModel: viewModel, privacyMode: $privacyMode, chartToZoom: $chartToZoom)
+                
+                // 8. NOUVELLE SECTION : SAISONNALITÉ ET CROISSANCE (DGR)
+                DividendsGrowthAndSeasonalitySection(viewModel: viewModel, privacyMode: $privacyMode, chartToZoom: $chartToZoom)
             }
             .padding()
         }
@@ -227,6 +231,21 @@ struct DividendsAdvancedAnalyticsSection: View {
             HStack(spacing: 24) {
                 AllTimeHistoryChart(viewModel: viewModel, privacyMode: $privacyMode, expandedChart: $chartToZoom)
                 ExpectedDividendHeatmapChart(viewModel: viewModel, privacyMode: $privacyMode, expandedChart: $chartToZoom)
+            }
+        }
+    }
+}
+
+struct DividendsGrowthAndSeasonalitySection: View {
+    @ObservedObject var viewModel: PortfolioViewModel
+    @Binding var privacyMode: Bool
+    @Binding var chartToZoom: DividendChartZoomType?
+    var body: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            Text("Seasonality & Growth Rate").font(.title2).fontWeight(.bold).foregroundColor(.secondary)
+            HStack(spacing: 24) {
+                TotalMonthlySeasonalityChart(viewModel: viewModel, privacyMode: $privacyMode, expandedChart: $chartToZoom)
+                DividendGrowthRateChart(viewModel: viewModel, privacyMode: $privacyMode, expandedChart: $chartToZoom)
             }
         }
     }
@@ -668,6 +687,196 @@ struct ExpectedDividendHeatmapChart: View {
     }
 }
 
+// --- NOUVEAU GRAPHIQUE 9 : ALL-TIME MONTHLY SEASONALITY ---
+struct TotalMonthlySeasonalityChart: View {
+    @ObservedObject var viewModel: PortfolioViewModel
+    @Binding var privacyMode: Bool
+    var isExpanded: Bool = false
+    @Binding var expandedChart: DividendChartZoomType?
+    
+    @State private var hoveredMonth: String? = nil
+    
+    let allMonths = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"]
+    
+    struct SeasonalityItem: Identifiable {
+        let id = UUID()
+        let month: String
+        let total: Double
+    }
+    
+    var data: [SeasonalityItem] {
+        var totals = Array(repeating: 0.0, count: 12)
+        
+        for yearData in viewModel.dividendYears {
+            totals[0] += yearData.jan
+            totals[1] += yearData.feb
+            totals[2] += yearData.mar
+            totals[3] += yearData.apr
+            totals[4] += yearData.may
+            totals[5] += yearData.jun
+            totals[6] += yearData.jul
+            totals[7] += yearData.aug
+            totals[8] += yearData.sep
+            totals[9] += yearData.oct
+            totals[10] += yearData.nov
+            totals[11] += yearData.dec
+        }
+        
+        var items: [SeasonalityItem] = []
+        for i in 0..<12 {
+            items.append(SeasonalityItem(month: allMonths[i], total: totals[i]))
+        }
+        return items
+    }
+    
+    var body: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            HStack {
+                if !isExpanded { Text("Cumulative Monthly Seasonality").font(.headline).foregroundColor(.secondary) }
+                Spacer()
+                if !isExpanded { Button(action: { expandedChart = .seasonality }) { Image(systemName: "plus.magnifyingglass").foregroundColor(.secondary) }.buttonStyle(.plain) }
+            }.padding(.bottom, 8)
+            
+            let totalSum = data.reduce(0) { $0 + $1.total }
+            
+            if totalSum == 0 {
+                Spacer(); Text("No data").foregroundColor(.secondary).frame(maxWidth: .infinity, alignment: .center); Spacer()
+            } else {
+                Chart(data) { item in
+                    BarMark(
+                        x: .value("Month", item.month),
+                        y: .value("Total", item.total)
+                    )
+                    .foregroundStyle(Color.orange.opacity(0.8))
+                    .cornerRadius(4)
+                    .annotation(position: .top) {
+                        if hoveredMonth == item.month && item.total > 0 {
+                            // FIX 1 : Passage à 2 décimales au lieu de 0
+                            Text(item.total.formatted(.currency(code: "EUR").precision(.fractionLength(2))))
+                                .font(.system(size: 9, weight: .bold))
+                                .foregroundColor(.secondary)
+                                .blur(radius: privacyMode ? 6 : 0)
+                        }
+                    }
+                }
+                .chartXScale(domain: allMonths)
+                .chartYAxis { AxisMarks(position: .leading) { value in AxisGridLine(); AxisTick(); if let v = value.as(Double.self) { AxisValueLabel(v.formatted(.currency(code: "EUR").notation(.compactName))) } } }
+                .chartXSelection(value: $hoveredMonth)
+            }
+            HStack { Text("Total aggregated dividends per month since portfolio inception").font(.caption2).foregroundColor(.secondary); Spacer(); BlueChipWatermark() }
+        }
+        .padding().frame(minHeight: 360, maxHeight: isExpanded ? .infinity : 360).background(Color(NSColor.controlBackgroundColor)).cornerRadius(12).shadow(color: Color.black.opacity(0.05), radius: 2, x: 0, y: 1)
+    }
+}
+
+// --- NOUVEAU GRAPHIQUE 10 : DIVIDEND GROWTH RATE (YoY) ---
+struct DGRItem: Identifiable {
+    let id = UUID()
+    let year: Int
+    let dgr: Double
+}
+
+struct DividendGrowthRateChart: View {
+    @ObservedObject var viewModel: PortfolioViewModel
+    @Binding var privacyMode: Bool
+    var isExpanded: Bool = false
+    @Binding var expandedChart: DividendChartZoomType?
+    
+    // FIX 2 : Le survol utilise maintenant un String pour correspondre à l'axe X catégorique
+    @State private var hoveredYear: String? = nil
+    
+    var currentYear: Int { Calendar.current.component(.year, from: Date()) }
+    
+    var data: [DGRItem] {
+        let startYear = viewModel.dividendStartYear
+        var items: [DGRItem] = []
+        
+        if currentYear <= startYear { return items }
+        
+        // On calcule la croissance année par année de manière stricte
+        for year in (startYear + 1)...currentYear {
+            let prevYearTotal = viewModel.dividendYears.first(where: { $0.year == year - 1 })?.total ?? 0.0
+            let currYearTotal = viewModel.dividendYears.first(where: { $0.year == year })?.total ?? 0.0
+            
+            if prevYearTotal > 0 {
+                let dgr = ((currYearTotal - prevYearTotal) / prevYearTotal) * 100.0
+                items.append(DGRItem(year: year, dgr: dgr))
+            }
+        }
+        return items
+    }
+    
+    // FIX 3 : Le Cadenas Chronologique
+    var yearsDomain: [String] {
+        data.map { String($0.year) }
+    }
+    
+    var body: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            HStack {
+                if !isExpanded { Text("Dividend Growth Rate (YoY DGR)").font(.headline).foregroundColor(.secondary) }
+                Spacer()
+                if !isExpanded { Button(action: { expandedChart = .dgr }) { Image(systemName: "plus.magnifyingglass").foregroundColor(.secondary) }.buttonStyle(.plain) }
+            }.padding(.bottom, 8)
+            
+            if let hYearStr = hoveredYear, let hYearInt = Int(hYearStr), let item = data.first(where: { $0.year == hYearInt }) {
+                HStack(spacing: 8) {
+                    Text(String(item.year)).fontWeight(.bold)
+                    Text("\(item.dgr > 0 ? "+" : "")\(item.dgr.formatted(.number.precision(.fractionLength(1))))%")
+                        .foregroundColor(item.dgr >= 0 ? .green : .red)
+                        .fontWeight(.bold)
+                        .blur(radius: privacyMode ? 6 : 0)
+                }
+                .font(.caption).padding(.horizontal, 8).padding(.vertical, 4).background(Color(NSColor.windowBackgroundColor)).cornerRadius(6).transition(.opacity)
+            } else {
+                Text("Hover to view").font(.caption).foregroundColor(.clear)
+            }
+            
+            if data.isEmpty {
+                Spacer(); Text("Need at least two consecutive years with dividends to calculate YoY growth.").foregroundColor(.secondary).frame(maxWidth: .infinity, alignment: .center); Spacer()
+            } else {
+                Chart(data) { item in
+                    RuleMark(y: .value("Zero", 0))
+                        .lineStyle(StrokeStyle(lineWidth: 1))
+                        .foregroundStyle(Color.gray.opacity(0.3))
+                    
+                    AreaMark(
+                        x: .value("Year", String(item.year)), // FIX 4 : On caste l'année en String
+                        y: .value("DGR", item.dgr)
+                    )
+                    .foregroundStyle(LinearGradient(colors: [Color.green.opacity(0.4), Color.green.opacity(0.0)], startPoint: .top, endPoint: .bottom))
+                    .interpolationMethod(.monotone)
+                    
+                    LineMark(
+                        x: .value("Year", String(item.year)), // FIX 4 : On caste l'année en String
+                        y: .value("DGR", item.dgr)
+                    )
+                    .foregroundStyle(Color.green)
+                    .lineStyle(StrokeStyle(lineWidth: 2.5))
+                    .interpolationMethod(.monotone)
+                    .symbol { Circle().fill(item.dgr >= 0 ? Color.green : Color.red).frame(width: 8, height: 8) }
+                    
+                    if let y = hoveredYear {
+                        RuleMark(x: .value("Year", y))
+                            .foregroundStyle(Color.secondary.opacity(0.4))
+                            .lineStyle(StrokeStyle(lineWidth: 1, dash: [4, 3]))
+                    }
+                }
+                .chartXSelection(value: $hoveredYear)
+                .chartXScale(domain: yearsDomain) // FIX 5 : Application du Cadenas
+                .chartYAxis { AxisMarks(position: .leading) { value in AxisGridLine(); AxisTick(); if let v = value.as(Double.self) { AxisValueLabel("\(v.formatted(.number.precision(.fractionLength(0))))%") } } }
+                .chartXAxis {
+                    AxisMarks(values: .automatic) { value in
+                        if let strYear = value.as(String.self) { AxisValueLabel { Text(strYear).font(.caption) } }
+                    }
+                }
+            }
+            HStack { Text("Year-over-Year percentage increase of total dividends").font(.caption2).foregroundColor(.secondary); Spacer(); BlueChipWatermark() }
+        }
+        .padding().frame(minHeight: 360, maxHeight: isExpanded ? .infinity : 360).background(Color(NSColor.controlBackgroundColor)).cornerRadius(12).shadow(color: Color.black.opacity(0.05), radius: 2, x: 0, y: 1)
+    }
+}
+
 
 // MARK: - FULL SCREEN ZOOM
 struct DividendFullScreenChartView: View {
@@ -692,6 +901,8 @@ struct DividendFullScreenChartView: View {
             case .yoc: YieldOnCostChart(viewModel: viewModel, privacyMode: $privacyMode, isExpanded: true, expandedChart: .constant(nil))
             case .allTimeHistory: AllTimeHistoryChart(viewModel: viewModel, privacyMode: $privacyMode, isExpanded: true, expandedChart: .constant(nil))
             case .heatmap: ExpectedDividendHeatmapChart(viewModel: viewModel, privacyMode: $privacyMode, isExpanded: true, expandedChart: .constant(nil))
+            case .seasonality: TotalMonthlySeasonalityChart(viewModel: viewModel, privacyMode: $privacyMode, isExpanded: true, expandedChart: .constant(nil))
+            case .dgr: DividendGrowthRateChart(viewModel: viewModel, privacyMode: $privacyMode, isExpanded: true, expandedChart: .constant(nil))
             }
         }.padding(30).frame(minWidth: 900, minHeight: 700)
     }
@@ -706,6 +917,8 @@ struct DividendFullScreenChartView: View {
         case .yoc: return "Yield On Cost (YOC)"
         case .allTimeHistory: return "All-Time Dividend History & Trend"
         case .heatmap: return "Dividend Calendar Heatmap"
+        case .seasonality: return "Cumulative Monthly Seasonality"
+        case .dgr: return "Dividend Growth Rate (YoY DGR)"
         }
     }
 }
