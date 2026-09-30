@@ -9,7 +9,7 @@ enum SimulationChartZoomType: String, Identifiable {
     case currentPositions, simulatedPositions
     case currentSectors, simulatedSectors
     case cashAllocation, totalValueCompare
-    case yieldImpact, simulatedDividends // NOUVEAU GRAPHIQUE
+    case yieldImpact, simulatedDividends
     var id: String { self.rawValue }
 }
 
@@ -51,6 +51,10 @@ struct SimulationView: View {
     @State private var simulatedPositions: [Position] = []
     @State private var simulatedCash: Double = 0.0
     
+    // Registres comptables pour les actions Undo
+    @State private var manualCashOffset: Double = 0.0
+    @State private var tradeCashImpacts: [String: Double] = [:]
+    
     @State private var chartToZoom: SimulationChartZoomType? = nil
     @State private var showAddSimulatedStock: Bool = false
     @State private var showSimulatedCashSheet: Bool = false
@@ -79,7 +83,6 @@ struct SimulationView: View {
         return items.sorted { $0.value > $1.value }
     }
     
-    // RESTAURÉ : Current Sectors et Simulated Sectors
     var simulatedAllocationBySector: [ChartDataItem] {
         var dict: [String: Double] = [:]
         for pos in simulatedPositions { dict[pos.sector.isEmpty ? "Unknown" : pos.sector.capitalized, default: 0] += pos.currentValueEUR }
@@ -87,7 +90,6 @@ struct SimulationView: View {
         return dict.map { ChartDataItem(name: $0.key, value: $0.value) }.sorted { $0.value > $1.value }
     }
     
-    // NOUVEAU : Simulated Dividends By Position
     var simulatedDividendsByPosition: [ChartDataItem] {
         var items: [ChartDataItem] = []
         for pos in simulatedPositions {
@@ -124,33 +126,58 @@ struct SimulationView: View {
     var simulationDiffs: [SimulationDiff] {
         var diffs = [SimulationDiff]()
         
-        if abs(simulatedCash - viewModel.availableCash) > 0.01 {
-            let diff = simulatedCash - viewModel.availableCash
+        // 1. Log exclusif pour les ajouts/retraits manuels de cash
+        if abs(manualCashOffset) > 0.01 {
             diffs.append(SimulationDiff(
-                text: diff > 0 ? "Cash increased by \(diff.formatted(.currency(code: "EUR")))" : "Cash decreased by \((-diff).formatted(.currency(code: "EUR")))",
-                type: diff > 0 ? .add : .remove,
-                onUndo: { simulatedCash = viewModel.availableCash }
+                text: manualCashOffset > 0 ? "Manual Cash added: \(manualCashOffset.formatted(.currency(code: "EUR")))" : "Manual Cash removed: \((-manualCashOffset).formatted(.currency(code: "EUR")))",
+                type: manualCashOffset > 0 ? .add : .remove,
+                onUndo: {
+                    simulatedCash -= manualCashOffset
+                    manualCashOffset = 0.0
+                }
             ))
         }
         
         let realDict = Dictionary(uniqueKeysWithValues: viewModel.positions.map { ($0.ticker, $0) })
         let simDict = Dictionary(uniqueKeysWithValues: simulatedPositions.map { ($0.ticker, $0) })
         
+        // 2. Achats et Ventes d'actions
         for (ticker, simPos) in simDict {
             if let realPos = realDict[ticker] {
                 if abs(simPos.quantity - realPos.quantity) > 0.001 || abs(simPos.averageCost - realPos.averageCost) > 0.001 {
                     let qtyDiff = simPos.quantity - realPos.quantity
-                    let text = abs(qtyDiff) > 0.001 ? (qtyDiff > 0 ? "Added \(qtyDiff.formatted()) shares of \(ticker)" : "Sold \((-qtyDiff).formatted()) shares of \(ticker)") : "Modified \(ticker) (Avg Cost or Sector)"
-                    diffs.append(SimulationDiff(text: text, type: qtyDiff > 0 ? .add : (qtyDiff < 0 ? .remove : .modify), onUndo: { if let idx = simulatedPositions.firstIndex(where: { $0.ticker == ticker }) { simulatedPositions[idx] = realPos } }))
+                    let impact = tradeCashImpacts[ticker] ?? 0.0
+                    let impactStr = impact != 0 ? " (\(impact > 0 ? "+" : "")\(impact.formatted(.currency(code: "EUR"))))" : ""
+                    
+                    let text = abs(qtyDiff) > 0.001 ? (qtyDiff > 0 ? "Added \(qtyDiff.formatted()) shares of \(ticker)\(impactStr)" : "Sold \((-qtyDiff).formatted()) shares of \(ticker)\(impactStr)") : "Modified \(ticker) (Avg Cost or Sector)"
+                    
+                    diffs.append(SimulationDiff(text: text, type: qtyDiff > 0 ? .add : (qtyDiff < 0 ? .remove : .modify), onUndo: {
+                        if let idx = simulatedPositions.firstIndex(where: { $0.ticker == ticker }) { simulatedPositions[idx] = realPos }
+                        simulatedCash -= impact // Rembourse ou déduit l'impact du cash
+                        tradeCashImpacts[ticker] = 0.0
+                    }))
                 }
             } else {
-                diffs.append(SimulationDiff(text: "New position added: \(simPos.quantity.formatted())x \(ticker)", type: .add, onUndo: { simulatedPositions.removeAll { $0.ticker == ticker } }))
+                let impact = tradeCashImpacts[ticker] ?? 0.0
+                let impactStr = impact != 0 ? " (\(impact > 0 ? "+" : "")\(impact.formatted(.currency(code: "EUR"))))" : ""
+                diffs.append(SimulationDiff(text: "New position added: \(simPos.quantity.formatted())x \(ticker)\(impactStr)", type: .add, onUndo: {
+                    simulatedPositions.removeAll { $0.ticker == ticker }
+                    simulatedCash -= impact
+                    tradeCashImpacts[ticker] = 0.0
+                }))
             }
         }
         
+        // 3. Liquidations totales
         for (ticker, realPos) in realDict {
             if simDict[ticker] == nil {
-                diffs.append(SimulationDiff(text: "Liquidated position: \(ticker)", type: .remove, onUndo: { simulatedPositions.append(realPos) }))
+                let impact = tradeCashImpacts[ticker] ?? 0.0
+                let impactStr = impact != 0 ? " (\(impact > 0 ? "+" : "")\(impact.formatted(.currency(code: "EUR"))))" : ""
+                diffs.append(SimulationDiff(text: "Liquidated position: \(ticker)\(impactStr)", type: .remove, onUndo: {
+                    simulatedPositions.append(realPos)
+                    simulatedCash -= impact
+                    tradeCashImpacts[ticker] = 0.0
+                }))
             }
         }
         
@@ -200,7 +227,15 @@ struct SimulationView: View {
                             totalCapital: simulatedTotalCapital,
                             privacyMode: $privacyMode,
                             onEdit: { editingSimulatedPosition = $0 },
-                            onDelete: { id in simulatedPositions.removeAll { $0.id == id } }
+                            onDelete: { id in
+                                // Gère aussi la suppression directe via menu contextuel
+                                if let pos = simulatedPositions.first(where: { $0.id == id }) {
+                                    let valEUR = pos.quantity * pos.currentPrice * (pos.currency == "USD" ? pos.usdToEurRate : 1.0)
+                                    simulatedCash += valEUR
+                                    tradeCashImpacts[pos.ticker, default: 0] += valEUR
+                                }
+                                simulatedPositions.removeAll { $0.id == id }
+                            }
                         )
                     }.frame(maxWidth: .infinity)
                 }.padding().background(Color(NSColor.controlBackgroundColor)).cornerRadius(12).shadow(color: Color.black.opacity(0.05), radius: 2, x: 0, y: 1)
@@ -246,14 +281,22 @@ struct SimulationView: View {
                 privacyMode: $privacyMode
             )
         }
-        .sheet(isPresented: $showAddSimulatedStock) { SimulatedAddEditSheet(simulatedPositions: $simulatedPositions, simulatedCash: $simulatedCash, totalCapital: simulatedTotalCapital, itemToEdit: nil) }
-        .sheet(item: $editingSimulatedPosition) { pos in SimulatedAddEditSheet(simulatedPositions: $simulatedPositions, simulatedCash: $simulatedCash, totalCapital: simulatedTotalCapital, itemToEdit: pos) }
-        .sheet(isPresented: $showSimulatedCashSheet) { SimulatedCashSheet(simulatedCash: $simulatedCash) }
+        .sheet(isPresented: $showAddSimulatedStock) {
+            SimulatedAddEditSheet(simulatedPositions: $simulatedPositions, simulatedCash: $simulatedCash, tradeCashImpacts: $tradeCashImpacts, totalCapital: simulatedTotalCapital, itemToEdit: nil)
+        }
+        .sheet(item: $editingSimulatedPosition) { pos in
+            SimulatedAddEditSheet(simulatedPositions: $simulatedPositions, simulatedCash: $simulatedCash, tradeCashImpacts: $tradeCashImpacts, totalCapital: simulatedTotalCapital, itemToEdit: pos)
+        }
+        .sheet(isPresented: $showSimulatedCashSheet) {
+            SimulatedCashSheet(simulatedCash: $simulatedCash, manualCashOffset: $manualCashOffset)
+        }
     }
     
     private func resetSimulation() {
         simulatedPositions = viewModel.positions.map { $0 }
         simulatedCash = viewModel.availableCash
+        manualCashOffset = 0.0
+        tradeCashImpacts = [:]
     }
 }
 
@@ -294,21 +337,27 @@ struct SimulationDiffSection: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
             Text("Sandbox Actions Log (Line by Line)").font(.headline).foregroundColor(.secondary)
-            ScrollView(.vertical, showsIndicators: true) {
-                VStack(alignment: .leading, spacing: 8) {
-                    ForEach(diffs) { diff in
-                        HStack(spacing: 12) {
-                            Image(systemName: diff.icon).foregroundColor(diff.color)
-                            Text(diff.text).font(.subheadline).fontWeight(.medium).blur(radius: privacyMode ? 6 : 0)
-                            Spacer()
-                            if let undoAction = diff.onUndo {
-                                Button(action: undoAction) { HStack(spacing: 4) { Image(systemName: "arrow.uturn.backward"); Text("Undo") }.font(.caption).fontWeight(.bold).foregroundColor(.red).padding(.horizontal, 8).padding(.vertical, 4).background(Color.red.opacity(0.1)).cornerRadius(6) }.buttonStyle(.plain)
-                            }
+            VStack(alignment: .leading, spacing: 8) {
+                ForEach(diffs) { diff in
+                    HStack(spacing: 12) {
+                        Image(systemName: diff.icon).foregroundColor(diff.color)
+                        Text(diff.text).font(.subheadline).fontWeight(.medium).blur(radius: privacyMode ? 6 : 0)
+                        Spacer()
+                        if let undoAction = diff.onUndo {
+                            Button(action: undoAction) {
+                                HStack(spacing: 4) { Image(systemName: "arrow.uturn.backward"); Text("Undo") }
+                                .font(.caption).fontWeight(.bold).foregroundColor(.red)
+                                .padding(.horizontal, 8).padding(.vertical, 4)
+                                .background(Color.red.opacity(0.1)).cornerRadius(6)
+                            }.buttonStyle(.plain)
                         }
-                        .padding(.horizontal, 12).padding(.vertical, 8).background(Color(NSColor.windowBackgroundColor)).cornerRadius(8).overlay(RoundedRectangle(cornerRadius: 8).stroke(Color.gray.opacity(0.1), lineWidth: 1))
                     }
+                    .padding(.horizontal, 12).padding(.vertical, 8)
+                    .background(Color(NSColor.windowBackgroundColor))
+                    .cornerRadius(8)
+                    .overlay(RoundedRectangle(cornerRadius: 8).stroke(Color.gray.opacity(0.1), lineWidth: 1))
                 }
-            }.frame(maxHeight: 250)
+            }
         }.padding().background(Color(NSColor.controlBackgroundColor)).cornerRadius(12).shadow(color: Color.black.opacity(0.05), radius: 2, x: 0, y: 1)
     }
 }
@@ -346,7 +395,6 @@ struct SimulatedPortfolioTable: View {
         Table(positions) {
             TableColumn("Ticker") { pos in
                 Text(pos.ticker).fontWeight(.bold)
-                    // Extension de la zone cliquable pour réparer le double clic
                     .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .leading)
                     .contentShape(Rectangle())
                     .onTapGesture(count: 2) { onEdit(pos) }
@@ -528,13 +576,25 @@ struct SimulationFullScreenChartView: View {
 }
 
 // =========================================================================
-// MARK: - SHEET : AJOUT CASH SEUL
+// MARK: - SHEET : AJOUT/RETRAIT CASH SEUL
 // =========================================================================
+
+enum CashAction: String, CaseIterable {
+    case add = "Add Cash"
+    case remove = "Remove Cash"
+}
 
 struct SimulatedCashSheet: View {
     @Environment(\.dismiss) var dismiss
     @Binding var simulatedCash: Double
+    @Binding var manualCashOffset: Double // Mémorise la transaction pour l'historique
     @State private var cashInput: Double? = nil
+    @State private var action: CashAction = .add
+    
+    var newBalance: Double {
+        let amount = cashInput ?? 0.0
+        return action == .add ? simulatedCash + amount : max(0, simulatedCash - amount)
+    }
     
     var body: some View {
         VStack(spacing: 0) {
@@ -545,24 +605,53 @@ struct SimulatedCashSheet: View {
             }.padding()
             Divider()
             
-            Form {
-                Section(header: Text("Add or Remove Cash").font(.headline)) {
-                    TextField("Amount to Add or Remove (€)", value: $cashInput, format: .number)
-                    Text("Current Simulated Cash: \(simulatedCash.formatted(.currency(code: "EUR")))").font(.caption).foregroundColor(.secondary)
-                }.padding(.bottom, 12)
-            }.padding()
+            VStack(alignment: .leading, spacing: 20) {
+                Picker("Action", selection: $action) {
+                    ForEach(CashAction.allCases, id: \.self) { act in
+                        Text(act.rawValue).tag(act)
+                    }
+                }
+                .pickerStyle(.segmented)
+                
+                VStack(alignment: .leading, spacing: 8) {
+                    Text("Amount (€)").font(.headline).foregroundColor(.secondary)
+                    TextField("0.00", value: $cashInput, format: .number)
+                        .textFieldStyle(.roundedBorder)
+                        .font(.title3)
+                }
+                
+                VStack(spacing: 8) {
+                    HStack {
+                        Text("Current Cash:").foregroundColor(.secondary)
+                        Spacer()
+                        Text(simulatedCash.formatted(.currency(code: "EUR"))).foregroundColor(.secondary)
+                    }
+                    Divider()
+                    HStack {
+                        Text("New Balance:").fontWeight(.semibold)
+                        Spacer()
+                        Text(newBalance.formatted(.currency(code: "EUR")))
+                            .fontWeight(.bold)
+                            .foregroundColor(action == .add ? .green : .orange)
+                    }
+                }.font(.subheadline)
+            }.padding(24)
             
+            Spacer()
             Divider()
             HStack {
                 Button("Cancel") { dismiss() }.keyboardShortcut(.cancelAction)
                 Spacer()
-                Button("Update") {
-                    simulatedCash += (cashInput ?? 0.0)
+                Button("Update Cash") {
+                    let amountAdded = newBalance - simulatedCash
+                    manualCashOffset += amountAdded
+                    simulatedCash = newBalance
                     dismiss()
                 }.keyboardShortcut(.defaultAction).buttonStyle(.borderedProminent)
+                .disabled((cashInput ?? 0) <= 0)
             }.padding()
         }
-        .frame(width: 350, height: 250)
+        .frame(width: 350, height: 350)
     }
 }
 
@@ -579,12 +668,14 @@ struct SimulatedAddEditSheet: View {
     @Environment(\.dismiss) var dismiss
     @Binding var simulatedPositions: [Position]
     @Binding var simulatedCash: Double
+    @Binding var tradeCashImpacts: [String: Double] // Mémorise l'impact financier du trade
+    
     let totalCapital: Double
     let itemToEdit: Position?
     
     @State private var ticker: String = ""
     @State private var tradeAction: TradeAction = .buy
-    @State private var tradedShares: Double? = nil // Delta (Combien j'achète/vends)
+    @State private var tradedShares: Double? = nil
     
     @State private var pru: Double? = nil
     @State private var currentPrice: Double? = nil
@@ -716,6 +807,7 @@ struct SimulatedAddEditSheet: View {
                             Text("Remaining Cash will be: \((simulatedCash + cashImpactEUR).formatted(.currency(code: "EUR")))")
                                 .font(.caption).foregroundColor(.secondary)
                                 .padding(.top, 8)
+                            
                             if hasInsufficientCash {
                                 Text("Error: Insufficient simulated cash for this purchase!").font(.caption).fontWeight(.bold).foregroundColor(.red).padding(.top, 2)
                             }
@@ -739,7 +831,6 @@ struct SimulatedAddEditSheet: View {
         .onAppear {
             if let pos = itemToEdit {
                 ticker = pos.ticker; pru = pos.averageCost; currentPrice = pos.currentPrice; dividendPerShare = pos.annualDividendNet; sector = pos.sector; currency = pos.currency; usdToEurRate = pos.usdToEurRate
-                // On met tradedShares à nil (0) pour laisser l'utilisateur choisir combien acheter/vendre
                 tradedShares = nil
             }
         }
@@ -760,12 +851,11 @@ struct SimulatedAddEditSheet: View {
         let cleanTicker = ticker.uppercased()
         
         simulatedCash += cashImpactEUR
+        tradeCashImpacts[cleanTicker, default: 0] += cashImpactEUR
         
         if newQuantity <= 0 && isEditing {
-            // Liquidation totale
             if let id = itemToEdit?.id { simulatedPositions.removeAll { $0.id == id } }
         } else {
-            // Mise à jour ou Création
             let newPos = Position(
                 id: itemToEdit?.id ?? UUID(), ticker: cleanTicker, quantity: newQuantity, averageCost: pru ?? safePrice, currentPrice: safePrice, currency: currency, usdToEurRate: usdToEurRate, annualDividendNet: dividendPerShare ?? 0.0, country: itemToEdit?.country ?? "", sector: sector, marketCap: itemToEdit?.marketCap ?? "", dividendMonths: itemToEdit?.dividendMonths ?? [], purchaseDate: itemToEdit?.purchaseDate ?? Date(), dividendGrowth5Y: itemToEdit?.dividendGrowth5Y ?? 0.0
             )
@@ -776,10 +866,10 @@ struct SimulatedAddEditSheet: View {
     }
     
     private func deletePosition() {
-        // En cas de suppression forcée, on peut rajouter la valeur totale au cash si désiré
         if let pos = itemToEdit {
             let valEUR = pos.quantity * pos.currentPrice * (pos.currency == "USD" ? pos.usdToEurRate : 1.0)
             simulatedCash += valEUR
+            tradeCashImpacts[pos.ticker, default: 0] += valEUR
         }
         if let id = itemToEdit?.id { simulatedPositions.removeAll { $0.id == id } }
         dismiss()
