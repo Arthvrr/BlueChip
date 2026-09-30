@@ -19,22 +19,18 @@ struct WatchlistItem: Identifiable, Codable {
     var currency: String = "EUR"
     var note: String = ""
     
-    // NOUVEAU : Sauvegarde des critères fondamentaux pour la Watchlist
     var fundamentalValues: [String: Double]?
     
-    // Calcul du Fair Price : ((GF + TipRanks) / 2) * (1 - Margin of Safety)
     func fairPrice(marginOfSafety: Double) -> Double {
         let avgValuation = (guruFocusPrice + tipRanksPrice) / 2.0
         return avgValuation * (1.0 - (marginOfSafety / 100.0))
     }
     
-    // Potentiel de hausse vers le Prix Cible (%)
     var targetUpsidePercent: Double {
         guard currentPrice > 0 else { return 0 }
         return (targetPrice - currentPrice) / currentPrice
     }
     
-    // Potentiel de hausse vers le Fair Price (%)
     func fairPriceUpsidePercent(marginOfSafety: Double) -> Double {
         guard currentPrice > 0 else { return 0 }
         let fp = fairPrice(marginOfSafety: marginOfSafety)
@@ -42,7 +38,6 @@ struct WatchlistItem: Identifiable, Codable {
     }
 }
 
-// Zoom Enum
 enum WatchListChartZoomType: String, Identifiable {
     case priceComparison, peComparison, pegComparison, potentialUpside, labScore, labRadar
     var id: String { self.rawValue }
@@ -56,15 +51,13 @@ struct WatchListView: View {
     @ObservedObject var viewModel: PortfolioViewModel
     @Binding var privacyMode: Bool
     
-    @State private var marginOfSafety: Double = 10.0 // 10% par défaut
+    @State private var marginOfSafety: Double = 10.0
     @State private var searchText: String = ""
     @State private var showAddSheet: Bool = false
     @State private var editingItem: WatchlistItem? = nil
     @State private var chartToZoom: WatchListChartZoomType? = nil
     @State private var isRefreshingPrices: Bool = false
     
-    // État global pour savoir quelle action est analysée dans le labo
-    // (Permet au Zoom Plein Écran de retrouver la bonne action)
     @State private var labSelectedItemID: UUID? = nil
 
     var filteredItems: [WatchlistItem] {
@@ -76,14 +69,12 @@ struct WatchListView: View {
         ScrollView(.vertical) {
             VStack(spacing: 24) {
                 
-                // 1. DASHBOARD DE SYNTHÈSE
                 WatchListDashboardSection(
                     items: viewModel.watchlistItems,
                     marginOfSafety: marginOfSafety,
                     privacyMode: $privacyMode
                 )
                 
-                // 2. PANNEAU DE CONTRÔLE (Slider Marge de Sécurité & Actions)
                 WatchListControlsSection(
                     marginOfSafety: $marginOfSafety,
                     searchText: $searchText,
@@ -92,7 +83,6 @@ struct WatchListView: View {
                     onRefresh: { refreshPrices() }
                 )
                 
-                // 3. TABLEAU DES ENTREPRISES SUIVIES
                 WatchListTableSection(
                     items: filteredItems,
                     marginOfSafety: marginOfSafety,
@@ -101,7 +91,6 @@ struct WatchListView: View {
                     onDelete: { id in viewModel.watchlistItems.removeAll { $0.id == id } }
                 )
                 
-                // 4. LES 4 GRAPHIQUES ANALYTIQUES
                 WatchListChartsSection(
                     items: viewModel.watchlistItems,
                     marginOfSafety: marginOfSafety,
@@ -109,11 +98,11 @@ struct WatchListView: View {
                     chartToZoom: $chartToZoom
                 )
                 
-                // 5. LE LABORATOIRE DE QUALITÉ FONDAMENTALE
                 WatchlistQualityLabSection(
                     viewModel: viewModel,
                     selectedItemID: $labSelectedItemID,
-                    chartToZoom: $chartToZoom
+                    chartToZoom: $chartToZoom,
+                    privacyMode: $privacyMode
                 )
             }
             .padding()
@@ -137,7 +126,7 @@ struct WatchListView: View {
                 marginOfSafety: marginOfSafety,
                 privacyMode: $privacyMode,
                 viewModel: viewModel,
-                labSelectedItemID: $labSelectedItemID // Permet au Zoom de fonctionner
+                labSelectedItemID: $labSelectedItemID
             )
         }
     }
@@ -187,16 +176,16 @@ struct WatchListDashboardSection: View {
     var body: some View {
         VStack(spacing: 16) {
             HStack(spacing: 16) {
-                DashboardCard(title: "Watchlist Companies", value: "\(totalCount)", titleIcon: nil, privacyMode: .constant(false))
-                DashboardCard(title: "Undervalued (Fair Price)", value: "\(undervaluedCount) / \(totalCount)", titleIcon: nil, privacyMode: .constant(false))
-                DashboardCard(title: "Avg. Target Upside", value: avgUpsideToTarget.formatted(.percent.precision(.fractionLength(1)).sign(strategy: .always())), titleIcon: nil, privacyMode: .constant(false))
-                DashboardCard(title: "Avg. Watchlist PEG", value: avgPEG.formatted(.number.precision(.fractionLength(2))), titleIcon: nil, privacyMode: .constant(false))
+                DashboardCard(title: "Watchlist Companies", value: "\(totalCount)", titleIcon: nil, privacyMode: $privacyMode)
+                DashboardCard(title: "Undervalued (Fair Price)", value: "\(undervaluedCount) / \(totalCount)", titleIcon: nil, privacyMode: $privacyMode)
+                DashboardCard(title: "Avg. Target Upside", value: avgUpsideToTarget.formatted(.percent.precision(.fractionLength(1)).sign(strategy: .always())), titleIcon: nil, privacyMode: $privacyMode)
+                DashboardCard(title: "Avg. Watchlist PEG", value: avgPEG.formatted(.number.precision(.fractionLength(2))), titleIcon: nil, privacyMode: $privacyMode)
             }
             HStack(spacing: 16) {
-                DashboardCard(title: "Avg. Current PE", value: avgCurrentPE > 0 ? avgCurrentPE.formatted(.number.precision(.fractionLength(1))) + "x" : "0", titleIcon: nil, privacyMode: .constant(false))
-                DashboardCard(title: "Avg. Forward PE", value: avgForwardPE > 0 ? avgForwardPE.formatted(.number.precision(.fractionLength(1))) + "x" : "0", titleIcon: nil, privacyMode: .constant(false))
-                DashboardCard(title: "PEG ≤ 1.0 (Bargains)", value: "\(bargainPEGCount)", titleIcon: nil, privacyMode: .constant(false))
-                DashboardCard(title: "Top Pick (Fair Price)", value: topPickTicker, titleIcon: nil, privacyMode: .constant(false))
+                DashboardCard(title: "Avg. Current PE", value: avgCurrentPE > 0 ? avgCurrentPE.formatted(.number.precision(.fractionLength(1))) + "x" : "0", titleIcon: nil, privacyMode: $privacyMode)
+                DashboardCard(title: "Avg. Forward PE", value: avgForwardPE > 0 ? avgForwardPE.formatted(.number.precision(.fractionLength(1))) + "x" : "0", titleIcon: nil, privacyMode: $privacyMode)
+                DashboardCard(title: "PEG ≤ 1.0 (Bargains)", value: "\(bargainPEGCount)", titleIcon: nil, privacyMode: $privacyMode)
+                DashboardCard(title: "Top Pick (Fair Price)", value: topPickTicker, titleIcon: nil, privacyMode: $privacyMode)
             }
         }
     }
@@ -250,7 +239,7 @@ struct WatchListControlsSection: View {
 }
 
 // =========================================================================
-// MARK: - TABLEAU DES ACTIONS
+// MARK: - TABLEAU DES ACTIONS (HAUTEUR DYNAMIQUE ET DOUBLE-CLIC)
 // =========================================================================
 
 struct WatchListTableSection: View {
@@ -277,7 +266,6 @@ struct WatchListTableSection: View {
                     Text("PE 10Y").fontWeight(.bold).frame(maxWidth: .infinity, alignment: .trailing)
                     Text("PEG").fontWeight(.bold).frame(maxWidth: .infinity, alignment: .trailing)
                     Text("Upside").fontWeight(.bold).frame(maxWidth: .infinity, alignment: .trailing)
-                    Text("Actions").fontWeight(.bold).frame(width: 60, alignment: .center)
                 }.font(.subheadline).foregroundColor(.secondary).padding(.horizontal, 16).padding(.vertical, 12).background(Color(NSColor.windowBackgroundColor))
                 
                 Divider()
@@ -285,40 +273,50 @@ struct WatchListTableSection: View {
                 if items.isEmpty {
                     Text("No companies in Watchlist. Click '+ Add Stock' to get started.").foregroundColor(.secondary).padding(30)
                 } else {
-                    ScrollView {
-                        LazyVStack(spacing: 0) {
-                            ForEach(items) { item in
-                                let fairP = item.fairPrice(marginOfSafety: marginOfSafety)
-                                let upside = item.fairPriceUpsidePercent(marginOfSafety: marginOfSafety)
-                                let isUndervalued = item.currentPrice < fairP
-                                
-                                HStack(spacing: 8) {
-                                    VStack(alignment: .leading, spacing: 2) {
-                                        Text(item.ticker).fontWeight(.bold)
-                                        if !item.note.isEmpty { Text(item.note).font(.caption2).foregroundColor(.secondary).lineLimit(1) }
-                                    }.frame(width: 70, alignment: .leading)
-                                    
-                                    Text(item.currentPrice.formatted(.currency(code: item.currency).precision(.fractionLength(2)))).fontWeight(.semibold).blur(radius: isPrivate ? 6 : 0).frame(maxWidth: .infinity, alignment: .trailing)
-                                    Text(item.targetPrice.formatted(.currency(code: item.currency).precision(.fractionLength(2)))).foregroundColor(.purple).blur(radius: isPrivate ? 6 : 0).frame(maxWidth: .infinity, alignment: .trailing)
-                                    Text(fairP.formatted(.currency(code: item.currency).precision(.fractionLength(2)))).fontWeight(.bold).foregroundColor(isUndervalued ? .green : .primary).blur(radius: isPrivate ? 6 : 0).frame(maxWidth: .infinity, alignment: .trailing)
-                                    Text(item.currentPE.formatted(.number.precision(.fractionLength(1)))).foregroundColor(item.currentPE < item.historicalPE10Y ? .green : .primary).frame(maxWidth: .infinity, alignment: .trailing)
-                                    Text(item.forwardPE.formatted(.number.precision(.fractionLength(1)))).foregroundColor(item.forwardPE < item.currentPE ? .teal : .primary).frame(maxWidth: .infinity, alignment: .trailing)
-                                    Text(item.historicalPE10Y.formatted(.number.precision(.fractionLength(1)))).foregroundColor(.secondary).frame(maxWidth: .infinity, alignment: .trailing)
-                                    Text(item.peg.formatted(.number.precision(.fractionLength(2)))).fontWeight(.semibold).foregroundColor(item.peg <= 1.0 ? .green : (item.peg > 2.0 ? .orange : .primary)).frame(maxWidth: .infinity, alignment: .trailing)
-                                    Text(upside.formatted(.percent.precision(.fractionLength(1)).sign(strategy: .always()))).fontWeight(.bold).padding(.horizontal, 6).padding(.vertical, 2).background((upside >= 0 ? Color.green : Color.red).opacity(0.15)).foregroundColor(upside >= 0 ? .green : .red).cornerRadius(4).blur(radius: isPrivate ? 6 : 0).frame(maxWidth: .infinity, alignment: .trailing)
-                                    
-                                    HStack(spacing: 8) {
-                                        Button(action: { onEdit(item) }) { Image(systemName: "pencil").foregroundColor(.secondary) }.buttonStyle(.plain)
-                                        Button(action: { onDelete(item.id) }) { Image(systemName: "trash").foregroundColor(.red.opacity(0.7)) }.buttonStyle(.plain)
-                                    }.frame(width: 60, alignment: .center)
-                                }.padding(.horizontal, 16).padding(.vertical, 8)
-                                Divider()
-                            }
+                    ForEach(items) { item in
+                        let fairP = item.fairPrice(marginOfSafety: marginOfSafety)
+                        let upside = item.fairPriceUpsidePercent(marginOfSafety: marginOfSafety)
+                        
+                        HStack(spacing: 8) {
+                            VStack(alignment: .leading, spacing: 2) {
+                                Text(item.ticker).fontWeight(.bold)
+                                if !item.note.isEmpty { Text(item.note).font(.caption2).foregroundColor(.secondary).lineLimit(1) }
+                            }.frame(width: 70, alignment: .leading)
+                            
+                            Text(item.currentPrice.formatted(.currency(code: item.currency).precision(.fractionLength(2)))).fontWeight(.semibold).blur(radius: isPrivate ? 6 : 0).frame(maxWidth: .infinity, alignment: .trailing)
+                            Text(item.targetPrice.formatted(.currency(code: item.currency).precision(.fractionLength(2)))).foregroundColor(.purple).blur(radius: isPrivate ? 6 : 0).frame(maxWidth: .infinity, alignment: .trailing)
+                            
+                            // Couleurs uniformisées en .primary
+                            Text(fairP.formatted(.currency(code: item.currency).precision(.fractionLength(2)))).fontWeight(.bold).foregroundColor(.primary).blur(radius: isPrivate ? 6 : 0).frame(maxWidth: .infinity, alignment: .trailing)
+                            Text(item.currentPE.formatted(.number.precision(.fractionLength(1)))).foregroundColor(.primary).blur(radius: isPrivate ? 6 : 0).frame(maxWidth: .infinity, alignment: .trailing)
+                            Text(item.forwardPE.formatted(.number.precision(.fractionLength(1)))).foregroundColor(.primary).blur(radius: isPrivate ? 6 : 0).frame(maxWidth: .infinity, alignment: .trailing)
+                            Text(item.historicalPE10Y.formatted(.number.precision(.fractionLength(1)))).foregroundColor(.primary).blur(radius: isPrivate ? 6 : 0).frame(maxWidth: .infinity, alignment: .trailing)
+                            Text(item.peg.formatted(.number.precision(.fractionLength(2)))).fontWeight(.semibold).foregroundColor(.primary).blur(radius: isPrivate ? 6 : 0).frame(maxWidth: .infinity, alignment: .trailing)
+                            
+                            // Upside garde son fond de couleur car c'est un badge
+                            Text(upside.formatted(.percent.precision(.fractionLength(1)).sign(strategy: .always()))).fontWeight(.bold).padding(.horizontal, 6).padding(.vertical, 2).background((upside >= 0 ? Color.green : Color.red).opacity(0.15)).foregroundColor(upside >= 0 ? .green : .red).cornerRadius(4).blur(radius: isPrivate ? 6 : 0).frame(maxWidth: .infinity, alignment: .trailing)
                         }
+                        .padding(.horizontal, 16)
+                        .padding(.vertical, 8)
+                        .contentShape(Rectangle()) // Extension pour le clic
+                        .onTapGesture(count: 2) { onEdit(item) } // Double-clic
+                        .contextMenu { // Menu Clic Droit
+                            Button("Edit") { onEdit(item) }
+                            Button(role: .destructive) { onDelete(item.id) } label: { Label("Delete", systemImage: "trash") }
+                        }
+                        
+                        Divider()
                     }
                 }
-            }.background(Color(NSColor.controlBackgroundColor)).cornerRadius(8).overlay(RoundedRectangle(cornerRadius: 8).stroke(Color.gray.opacity(0.2), lineWidth: 1))
-        }.frame(height: 380).padding().background(Color(NSColor.controlBackgroundColor)).cornerRadius(12).shadow(color: Color.black.opacity(0.05), radius: 2, x: 0, y: 1)
+            }
+            .background(Color(NSColor.controlBackgroundColor))
+            .cornerRadius(8)
+            .overlay(RoundedRectangle(cornerRadius: 8).stroke(Color.gray.opacity(0.2), lineWidth: 1))
+        }
+        .padding()
+        .background(Color(NSColor.controlBackgroundColor))
+        .cornerRadius(12)
+        .shadow(color: Color.black.opacity(0.05), radius: 2, x: 0, y: 1)
     }
 }
 
@@ -348,12 +346,24 @@ struct WatchListChartsSection: View {
     }
 }
 
-struct PriceSeriesItem: Identifiable { let id = UUID(); let ticker: String; let type: String; let price: Double }
+struct PriceSeriesItem: Identifiable { let id = UUID(); let ticker: String; let type: String; let price: Double; let currency: String }
 
 struct WatchListPriceComparisonChart: View {
     let items: [WatchlistItem]; let marginOfSafety: Double; @Binding var privacyMode: Bool; var isExpanded: Bool = false; @Binding var expandedChart: WatchListChartZoomType?
     @State private var hiddenSeries: Set<String> = []; @State private var hoveredTicker: String? = nil
-    var seriesData: [PriceSeriesItem] { var result: [PriceSeriesItem] = []; for item in items { result.append(PriceSeriesItem(ticker: item.ticker, type: "Current Price", price: item.currentPrice)); result.append(PriceSeriesItem(ticker: item.ticker, type: "Target Price", price: item.targetPrice)); result.append(PriceSeriesItem(ticker: item.ticker, type: "GuruFocus", price: item.guruFocusPrice)); result.append(PriceSeriesItem(ticker: item.ticker, type: "TipRanks", price: item.tipRanksPrice)); result.append(PriceSeriesItem(ticker: item.ticker, type: "Fair Price", price: item.fairPrice(marginOfSafety: marginOfSafety))) }; return result }
+    
+    var seriesData: [PriceSeriesItem] {
+        var result: [PriceSeriesItem] = []
+        for item in items {
+            result.append(PriceSeriesItem(ticker: item.ticker, type: "Current Price", price: item.currentPrice, currency: item.currency))
+            result.append(PriceSeriesItem(ticker: item.ticker, type: "Target Price", price: item.targetPrice, currency: item.currency))
+            result.append(PriceSeriesItem(ticker: item.ticker, type: "GuruFocus", price: item.guruFocusPrice, currency: item.currency))
+            result.append(PriceSeriesItem(ticker: item.ticker, type: "TipRanks", price: item.tipRanksPrice, currency: item.currency))
+            result.append(PriceSeriesItem(ticker: item.ticker, type: "Fair Price", price: item.fairPrice(marginOfSafety: marginOfSafety), currency: item.currency))
+        }
+        return result
+    }
+    
     let allTypes = ["Current Price", "Target Price", "GuruFocus", "TipRanks", "Fair Price"]
     func color(for type: String) -> Color { switch type { case "Current Price": return .blue; case "Target Price": return .purple; case "GuruFocus": return .gray; case "TipRanks": return .teal; case "Fair Price": return .green; default: return .primary } }
 
@@ -362,9 +372,47 @@ struct WatchListPriceComparisonChart: View {
         VStack(alignment: .leading, spacing: 8) {
             HStack { if !isExpanded { Text("Valuation & Target Prices Comparison").font(.headline).foregroundColor(.secondary) }; Spacer(); if !isExpanded { Button(action: { expandedChart = .priceComparison }) { Image(systemName: "plus.magnifyingglass").foregroundColor(.secondary) }.buttonStyle(.plain) } }.padding(.bottom, 4)
             InteractiveLegendView(items: allTypes, colorMap: color, hiddenItems: $hiddenSeries).padding(.bottom, 4)
+            
             if items.isEmpty { Spacer(); Text("No data").foregroundColor(.secondary).frame(maxWidth: .infinity, alignment: .center); Spacer() } else {
-                Chart(filteredSeries) { item in BarMark(x: .value("Ticker", item.ticker), y: .value("Price", item.price)).foregroundStyle(color(for: item.type)).position(by: .value("Type", item.type)).cornerRadius(4); if let hTicker = hoveredTicker, item.ticker == hTicker { RuleMark(x: .value("Ticker", hTicker)).foregroundStyle(.secondary.opacity(0.3)).lineStyle(StrokeStyle(lineWidth: 1, dash: [4])) } }
-                .chartLegend(.hidden).chartXSelection(value: $hoveredTicker).chartYAxis { AxisMarks(position: .leading) { value in AxisGridLine(); AxisTick(); if let val = value.as(Double.self) { AxisValueLabel(val.formatted(.currency(code: "EUR").notation(.compactName))) } } }
+                Chart(filteredSeries) { item in
+                    BarMark(x: .value("Ticker", item.ticker), y: .value("Price", item.price))
+                        .foregroundStyle(color(for: item.type))
+                        .position(by: .value("Type", item.type))
+                        .cornerRadius(4)
+                    
+                    if let hTicker = hoveredTicker, item.ticker == hTicker {
+                        RuleMark(x: .value("Ticker", hTicker)).foregroundStyle(Color.secondary.opacity(0.3)).zIndex(-1)
+                    }
+                }
+                .chartOverlay { proxy in
+                    GeometryReader { geometry in
+                        Rectangle().fill(.clear).contentShape(Rectangle())
+                            .onContinuousHover { phase in
+                                switch phase {
+                                case .active(let location):
+                                    if let ticker: String = proxy.value(atX: location.x) { hoveredTicker = ticker }
+                                case .ended:
+                                    hoveredTicker = nil
+                                }
+                            }
+                        
+                        if let hTicker = hoveredTicker, let item = items.first(where: { $0.ticker == hTicker }) {
+                            if let xPosition = proxy.position(forX: hTicker) {
+                                VStack(alignment: .leading, spacing: 4) {
+                                    Text(hTicker).font(.caption.bold())
+                                    Text("Current: \(item.currentPrice.formatted(.currency(code: item.currency)))").font(.caption2).foregroundColor(.blue).blur(radius: privacyMode ? 6 : 0)
+                                    Text("Target: \(item.targetPrice.formatted(.currency(code: item.currency)))").font(.caption2).foregroundColor(.purple).blur(radius: privacyMode ? 6 : 0)
+                                    Text("GuruFocus: \(item.guruFocusPrice.formatted(.currency(code: item.currency)))").font(.caption2).foregroundColor(.gray).blur(radius: privacyMode ? 6 : 0)
+                                    Text("TipRanks: \(item.tipRanksPrice.formatted(.currency(code: item.currency)))").font(.caption2).foregroundColor(.teal).blur(radius: privacyMode ? 6 : 0)
+                                    Text("Fair Price: \(item.fairPrice(marginOfSafety: marginOfSafety).formatted(.currency(code: item.currency)))").font(.caption2).foregroundColor(.green).blur(radius: privacyMode ? 6 : 0)
+                                }
+                                .padding(8).background(Color(NSColor.windowBackgroundColor).opacity(0.95)).cornerRadius(8).shadow(radius: 4)
+                                .position(x: max(60, min(geometry.size.width - 60, xPosition)), y: 45)
+                            }
+                        }
+                    }
+                }
+                .chartLegend(.hidden).chartYAxis { AxisMarks(position: .leading) { value in AxisGridLine(); AxisTick(); if let val = value.as(Double.self) { AxisValueLabel(val.formatted(.currency(code: "EUR").notation(.compactName))) } } }
             }
             HStack { Text("Hover over bars for comparison").font(.caption2).foregroundColor(.secondary); Spacer(); BlueChipWatermark() }
         }.padding().frame(minHeight: isExpanded ? 500 : 360, maxHeight: isExpanded ? .infinity : 360).background(Color(NSColor.controlBackgroundColor)).cornerRadius(12).shadow(color: Color.black.opacity(0.05), radius: 2, x: 0, y: 1)
@@ -374,6 +422,7 @@ struct WatchListPriceComparisonChart: View {
 struct WatchListPEComparisonChart: View {
     let items: [WatchlistItem]; @Binding var privacyMode: Bool; var isExpanded: Bool = false; @Binding var expandedChart: WatchListChartZoomType?
     @State private var hiddenSeries: Set<String> = []; @State private var hoveredTicker: String? = nil
+    
     struct PESeriesItem: Identifiable { let id = UUID(); let ticker: String; let type: String; let pe: Double }
     var seriesData: [PESeriesItem] { var result: [PESeriesItem] = []; for item in items { result.append(PESeriesItem(ticker: item.ticker, type: "Current PE", pe: item.currentPE)); result.append(PESeriesItem(ticker: item.ticker, type: "Forward PE", pe: item.forwardPE)); result.append(PESeriesItem(ticker: item.ticker, type: "10Y Avg PE", pe: item.historicalPE10Y)) }; return result }
     func color(for type: String) -> Color { switch type { case "Current PE": return .orange; case "Forward PE": return .teal; case "10Y Avg PE": return .indigo; default: return .gray } }
@@ -383,9 +432,45 @@ struct WatchListPEComparisonChart: View {
         VStack(alignment: .leading, spacing: 8) {
             HStack { if !isExpanded { Text("PE Valuation (Current vs Fwd vs 10Y)").font(.headline).foregroundColor(.secondary) }; Spacer(); if !isExpanded { Button(action: { expandedChart = .peComparison }) { Image(systemName: "plus.magnifyingglass").foregroundColor(.secondary) }.buttonStyle(.plain) } }.padding(.bottom, 4)
             InteractiveLegendView(items: legendTypes, colorMap: color, hiddenItems: $hiddenSeries).padding(.bottom, 4)
+            
             if items.isEmpty { Spacer(); Text("No data").foregroundColor(.secondary).frame(maxWidth: .infinity, alignment: .center); Spacer() } else {
-                Chart(filtered) { item in BarMark(x: .value("Ticker", item.ticker), y: .value("PE", item.pe)).foregroundStyle(color(for: item.type)).position(by: .value("Type", item.type)).cornerRadius(4); if let hTicker = hoveredTicker, item.ticker == hTicker, let watchItem = items.first(where: { $0.ticker == hTicker }) { RuleMark(x: .value("Ticker", hTicker)).foregroundStyle(.secondary.opacity(0.4)).annotation(position: .top) { VStack(alignment: .leading, spacing: 2) { Text(watchItem.ticker).font(.caption.bold()); Text("Current PE: \(watchItem.currentPE.formatted())x").font(.caption2).foregroundColor(.orange); Text("Forward PE: \(watchItem.forwardPE.formatted())x").font(.caption2).foregroundColor(.teal); Text("10Y Avg PE: \(watchItem.historicalPE10Y.formatted())x").font(.caption2).foregroundColor(.indigo) }.padding(6).background(Color(NSColor.windowBackgroundColor)).cornerRadius(6).shadow(radius: 3) } } }
-                .chartLegend(.hidden).chartXSelection(value: $hoveredTicker)
+                Chart(filtered) { item in
+                    BarMark(x: .value("Ticker", item.ticker), y: .value("PE", item.pe))
+                        .foregroundStyle(color(for: item.type))
+                        .position(by: .value("Type", item.type))
+                        .cornerRadius(4)
+                    
+                    if let hTicker = hoveredTicker, item.ticker == hTicker {
+                        RuleMark(x: .value("Ticker", hTicker)).foregroundStyle(Color.secondary.opacity(0.3)).zIndex(-1)
+                    }
+                }
+                .chartOverlay { proxy in
+                    GeometryReader { geometry in
+                        Rectangle().fill(.clear).contentShape(Rectangle())
+                            .onContinuousHover { phase in
+                                switch phase {
+                                case .active(let location):
+                                    if let ticker: String = proxy.value(atX: location.x) { hoveredTicker = ticker }
+                                case .ended:
+                                    hoveredTicker = nil
+                                }
+                            }
+                        
+                        if let hTicker = hoveredTicker, let watchItem = items.first(where: { $0.ticker == hTicker }) {
+                            if let xPosition = proxy.position(forX: hTicker) {
+                                VStack(alignment: .leading, spacing: 2) {
+                                    Text(watchItem.ticker).font(.caption.bold())
+                                    Text("Current PE: \(watchItem.currentPE.formatted(.number.precision(.fractionLength(2))))x").font(.caption2).foregroundColor(.orange).blur(radius: privacyMode ? 6 : 0)
+                                    Text("Forward PE: \(watchItem.forwardPE.formatted(.number.precision(.fractionLength(2))))x").font(.caption2).foregroundColor(.teal).blur(radius: privacyMode ? 6 : 0)
+                                    Text("10Y Avg PE: \(watchItem.historicalPE10Y.formatted(.number.precision(.fractionLength(2))))x").font(.caption2).foregroundColor(.indigo).blur(radius: privacyMode ? 6 : 0)
+                                }
+                                .padding(8).background(Color(NSColor.windowBackgroundColor).opacity(0.95)).cornerRadius(8).shadow(radius: 4)
+                                .position(x: max(60, min(geometry.size.width - 60, xPosition)), y: 35)
+                            }
+                        }
+                    }
+                }
+                .chartLegend(.hidden)
             }
             HStack { Text("Forward PE < Current PE indicates expected growth").font(.caption2).foregroundColor(.secondary); Spacer(); BlueChipWatermark() }
         }.padding().frame(minHeight: isExpanded ? 500 : 360, maxHeight: isExpanded ? .infinity : 360).background(Color(NSColor.controlBackgroundColor)).cornerRadius(12).shadow(color: Color.black.opacity(0.05), radius: 2, x: 0, y: 1)
@@ -395,12 +480,49 @@ struct WatchListPEComparisonChart: View {
 struct WatchListPEGChart: View {
     let items: [WatchlistItem]; @Binding var privacyMode: Bool; var isExpanded: Bool = false; @Binding var expandedChart: WatchListChartZoomType?
     @State private var hoveredTicker: String? = nil
+    
     var body: some View {
         VStack(alignment: .leading, spacing: 8) {
             HStack { if !isExpanded { Text("PEG Ratio (PEG < 1.0 = Undervalued)").font(.headline).foregroundColor(.secondary) }; Spacer(); if !isExpanded { Button(action: { expandedChart = .pegComparison }) { Image(systemName: "plus.magnifyingglass").foregroundColor(.secondary) }.buttonStyle(.plain) } }.padding(.bottom, 4)
+            
             if items.isEmpty { Spacer(); Text("No data").foregroundColor(.secondary).frame(maxWidth: .infinity, alignment: .center); Spacer() } else {
-                Chart(items) { item in BarMark(x: .value("Ticker", item.ticker), y: .value("PEG", item.peg)).foregroundStyle(item.peg <= 1.0 ? Color.green.opacity(0.8) : (item.peg > 2.0 ? Color.orange.opacity(0.8) : Color.blue.opacity(0.8))).cornerRadius(4); RuleMark(y: .value("Fair PEG", 1.0)).foregroundStyle(Color.green).lineStyle(StrokeStyle(lineWidth: 1.5, dash: [4, 4])).annotation(position: .top, alignment: .trailing) { Text("PEG = 1.0").font(.caption2).foregroundColor(.green) }; if let hTicker = hoveredTicker, item.ticker == hTicker { RuleMark(x: .value("Ticker", hTicker)).foregroundStyle(.secondary.opacity(0.3)).annotation(position: .top) { VStack(alignment: .leading) { Text("\(item.ticker) PEG: \(item.peg.formatted(.number.precision(.fractionLength(2))))").font(.caption.bold()).foregroundColor(item.peg <= 1.0 ? .green : .primary) }.padding(6).background(Color(NSColor.windowBackgroundColor)).cornerRadius(6) } } }
-                .chartXSelection(value: $hoveredTicker)
+                Chart(items) { item in
+                    BarMark(x: .value("Ticker", item.ticker), y: .value("PEG", item.peg))
+                        .foregroundStyle(item.peg <= 1.0 ? Color.green.opacity(0.8) : (item.peg > 2.0 ? Color.orange.opacity(0.8) : Color.blue.opacity(0.8)))
+                        .cornerRadius(4)
+                    
+                    RuleMark(y: .value("Fair PEG", 1.0)).foregroundStyle(Color.green).lineStyle(StrokeStyle(lineWidth: 1.5, dash: [4, 4]))
+                    
+                    if let hTicker = hoveredTicker, item.ticker == hTicker {
+                        RuleMark(x: .value("Ticker", hTicker)).foregroundStyle(Color.secondary.opacity(0.3)).zIndex(-1)
+                    }
+                }
+                .chartOverlay { proxy in
+                    GeometryReader { geometry in
+                        Rectangle().fill(.clear).contentShape(Rectangle())
+                            .onContinuousHover { phase in
+                                switch phase {
+                                case .active(let location):
+                                    if let ticker: String = proxy.value(atX: location.x) { hoveredTicker = ticker }
+                                case .ended:
+                                    hoveredTicker = nil
+                                }
+                            }
+                        
+                        if let hTicker = hoveredTicker, let watchItem = items.first(where: { $0.ticker == hTicker }) {
+                            if let xPosition = proxy.position(forX: hTicker) {
+                                VStack(alignment: .leading) {
+                                    Text("\(watchItem.ticker) PEG: \(watchItem.peg.formatted(.number.precision(.fractionLength(2))))")
+                                        .font(.caption.bold())
+                                        .foregroundColor(watchItem.peg <= 1.0 ? .green : .primary)
+                                        .blur(radius: privacyMode ? 6 : 0)
+                                }
+                                .padding(8).background(Color(NSColor.windowBackgroundColor).opacity(0.95)).cornerRadius(6).shadow(radius: 4)
+                                .position(x: max(60, min(geometry.size.width - 60, xPosition)), y: 20)
+                            }
+                        }
+                    }
+                }
             }
             HStack { HStack(spacing: 12) { HStack(spacing: 4) { Circle().fill(Color.green).frame(width: 8, height: 8); Text("PEG ≤ 1.0 (Bargain)").font(.caption).foregroundColor(.secondary) }; HStack(spacing: 4) { Circle().fill(Color.blue).frame(width: 8, height: 8); Text("1.0 < PEG ≤ 2.0").font(.caption).foregroundColor(.secondary) }; HStack(spacing: 4) { Circle().fill(Color.orange).frame(width: 8, height: 8); Text("PEG > 2.0 (Expensive)").font(.caption).foregroundColor(.secondary) } }; Spacer(); BlueChipWatermark() }
         }.padding().frame(minHeight: isExpanded ? 500 : 360, maxHeight: isExpanded ? .infinity : 360).background(Color(NSColor.controlBackgroundColor)).cornerRadius(12).shadow(color: Color.black.opacity(0.05), radius: 2, x: 0, y: 1)
@@ -412,6 +534,7 @@ struct UpsideSeriesItem: Identifiable { let id = UUID(); let ticker: String; let
 struct WatchListUpsideChart: View {
     let items: [WatchlistItem]; let marginOfSafety: Double; @Binding var privacyMode: Bool; var isExpanded: Bool = false; @Binding var expandedChart: WatchListChartZoomType?
     @State private var hiddenSeries: Set<String> = []; @State private var hoveredTicker: String? = nil
+    
     var seriesData: [UpsideSeriesItem] { var result: [UpsideSeriesItem] = []; for item in items { result.append(UpsideSeriesItem(ticker: item.ticker, type: "Target Upside %", upside: item.targetUpsidePercent * 100)); result.append(UpsideSeriesItem(ticker: item.ticker, type: "Fair Price Upside %", upside: item.fairPriceUpsidePercent(marginOfSafety: marginOfSafety) * 100)) }; return result }
     func color(for type: String) -> Color { type == "Target Upside %" ? .purple : .green }
 
@@ -420,9 +543,48 @@ struct WatchListUpsideChart: View {
         VStack(alignment: .leading, spacing: 8) {
             HStack { if !isExpanded { Text("Potential Upside % (Target vs Fair Price)").font(.headline).foregroundColor(.secondary) }; Spacer(); if !isExpanded { Button(action: { expandedChart = .potentialUpside }) { Image(systemName: "plus.magnifyingglass").foregroundColor(.secondary) }.buttonStyle(.plain) } }.padding(.bottom, 4)
             InteractiveLegendView(items: ["Target Upside %", "Fair Price Upside %"], colorMap: color, hiddenItems: $hiddenSeries).padding(.bottom, 4)
+            
             if items.isEmpty { Spacer(); Text("No data").foregroundColor(.secondary).frame(maxWidth: .infinity, alignment: .center); Spacer() } else {
-                Chart(filtered) { item in BarMark(x: .value("Ticker", item.ticker), y: .value("Upside %", item.upside)).foregroundStyle(item.upside >= 0 ? color(for: item.type).opacity(0.8) : Color.red.opacity(0.8)).position(by: .value("Type", item.type)).cornerRadius(4); RuleMark(y: .value("Zero", 0)).foregroundStyle(Color.gray.opacity(0.5)); if let hTicker = hoveredTicker, item.ticker == hTicker, let watchItem = items.first(where: { $0.ticker == hTicker }) { RuleMark(x: .value("Ticker", hTicker)).foregroundStyle(.secondary.opacity(0.3)).annotation(position: .top) { let tUp = watchItem.targetUpsidePercent * 100; let fUp = watchItem.fairPriceUpsidePercent(marginOfSafety: marginOfSafety) * 100; VStack(alignment: .leading, spacing: 2) { Text(watchItem.ticker).font(.caption.bold()); Text("To Target: \(tUp.formatted(.number.precision(.fractionLength(1)).sign(strategy: .always())))%").font(.caption2).foregroundColor(.purple).blur(radius: isPrivate ? 6 : 0); Text("To Fair Price: \(fUp.formatted(.number.precision(.fractionLength(1)).sign(strategy: .always())))%").font(.caption2).foregroundColor(.green).blur(radius: isPrivate ? 6 : 0) }.padding(6).background(Color(NSColor.windowBackgroundColor)).cornerRadius(6) } } }
-                .chartLegend(.hidden).chartXSelection(value: $hoveredTicker)
+                Chart(filtered) { item in
+                    BarMark(x: .value("Ticker", item.ticker), y: .value("Upside %", item.upside))
+                        .foregroundStyle(item.upside >= 0 ? color(for: item.type).opacity(0.8) : Color.red.opacity(0.8))
+                        .position(by: .value("Type", item.type))
+                        .cornerRadius(4)
+                    
+                    RuleMark(y: .value("Zero", 0)).foregroundStyle(Color.gray.opacity(0.5))
+                    
+                    if let hTicker = hoveredTicker, item.ticker == hTicker {
+                        RuleMark(x: .value("Ticker", hTicker)).foregroundStyle(Color.secondary.opacity(0.3)).zIndex(-1)
+                    }
+                }
+                .chartOverlay { proxy in
+                    GeometryReader { geometry in
+                        Rectangle().fill(.clear).contentShape(Rectangle())
+                            .onContinuousHover { phase in
+                                switch phase {
+                                case .active(let location):
+                                    if let ticker: String = proxy.value(atX: location.x) { hoveredTicker = ticker }
+                                case .ended:
+                                    hoveredTicker = nil
+                                }
+                            }
+                        
+                        if let hTicker = hoveredTicker, let watchItem = items.first(where: { $0.ticker == hTicker }) {
+                            if let xPosition = proxy.position(forX: hTicker) {
+                                VStack(alignment: .leading, spacing: 2) {
+                                    let tUp = watchItem.targetUpsidePercent * 100
+                                    let fUp = watchItem.fairPriceUpsidePercent(marginOfSafety: marginOfSafety) * 100
+                                    Text(watchItem.ticker).font(.caption.bold())
+                                    Text("To Target: \(tUp.formatted(.number.precision(.fractionLength(1)).sign(strategy: .always())))%").font(.caption2).foregroundColor(.purple).blur(radius: isPrivate ? 6 : 0)
+                                    Text("To Fair Price: \(fUp.formatted(.number.precision(.fractionLength(1)).sign(strategy: .always())))%").font(.caption2).foregroundColor(.green).blur(radius: isPrivate ? 6 : 0)
+                                }
+                                .padding(8).background(Color(NSColor.windowBackgroundColor).opacity(0.95)).cornerRadius(8).shadow(radius: 4)
+                                .position(x: max(60, min(geometry.size.width - 60, xPosition)), y: 35)
+                            }
+                        }
+                    }
+                }
+                .chartLegend(.hidden)
             }
             HStack { Text("Positive % indicates discount / upside potential").font(.caption2).foregroundColor(.secondary); Spacer(); BlueChipWatermark() }
         }.padding().frame(minHeight: isExpanded ? 500 : 360, maxHeight: isExpanded ? .infinity : 360).background(Color(NSColor.controlBackgroundColor)).cornerRadius(12).shadow(color: Color.black.opacity(0.05), radius: 2, x: 0, y: 1)
@@ -437,6 +599,7 @@ struct WatchlistQualityLabSection: View {
     @ObservedObject var viewModel: PortfolioViewModel
     @Binding var selectedItemID: UUID?
     @Binding var chartToZoom: WatchListChartZoomType?
+    @Binding var privacyMode: Bool
     
     var selectedItemIndex: Int? {
         viewModel.watchlistItems.firstIndex(where: { $0.id == selectedItemID })
@@ -481,13 +644,11 @@ struct WatchlistQualityLabSection: View {
                 
                 if let idx = selectedItemIndex {
                     VStack(spacing: 24) {
-                        // 1. LE FORMULAIRE EN PLEINE LARGEUR (Grille Adaptative)
                         WatchlistLabForm(viewModel: viewModel, itemIndex: idx)
                         
-                        // 2. LES GRAPHIQUES EN DESSOUS (Côte à côte)
                         HStack(alignment: .top, spacing: 24) {
-                            WatchlistLabScoreChart(viewModel: viewModel, itemIndex: idx, expandedChart: $chartToZoom)
-                            WatchlistLabRadarChart(viewModel: viewModel, itemIndex: idx, expandedChart: $chartToZoom)
+                            WatchlistLabScoreChart(viewModel: viewModel, itemIndex: idx, privacyMode: $privacyMode, expandedChart: $chartToZoom)
+                            WatchlistLabRadarChart(viewModel: viewModel, itemIndex: idx, privacyMode: $privacyMode, expandedChart: $chartToZoom)
                         }
                     }
                 } else {
@@ -531,7 +692,6 @@ struct WatchlistLabForm: View {
             viewModel.watchlistItems[itemIndex].fundamentalValues = [:]
         }
         viewModel.watchlistItems[itemIndex].fundamentalValues?[crit.id.uuidString] = value
-        // L'update déclenchera SwiftUI automatiquement car viewModel est Observé
     }
     
     var body: some View {
@@ -580,6 +740,7 @@ struct WatchlistLabForm: View {
 struct WatchlistLabScoreChart: View {
     @ObservedObject var viewModel: PortfolioViewModel
     let itemIndex: Int
+    @Binding var privacyMode: Bool
     var isExpanded: Bool = false
     @Binding var expandedChart: WatchListChartZoomType?
     
@@ -640,6 +801,7 @@ struct WatchlistLabScoreChart: View {
                 .annotation(position: .top) {
                     Text(analyzedScore.formatted(.number.precision(.fractionLength(1))))
                         .font(.caption.bold())
+                        .blur(radius: privacyMode ? 6 : 0)
                 }
                 
                 BarMark(
@@ -651,6 +813,7 @@ struct WatchlistLabScoreChart: View {
                 .annotation(position: .top) {
                     Text(portfolioWeightedScore.formatted(.number.precision(.fractionLength(1))))
                         .font(.caption.bold())
+                        .blur(radius: privacyMode ? 6 : 0)
                 }
                 
                 if let hTarget = hoveredTarget {
@@ -660,7 +823,7 @@ struct WatchlistLabScoreChart: View {
                             let score = hTarget == tickerStr ? analyzedScore : portfolioWeightedScore
                             VStack {
                                 Text(hTarget).font(.caption.bold())
-                                Text("\(score.formatted(.number.precision(.fractionLength(1)))) pts").font(.caption2)
+                                Text("\(score.formatted(.number.precision(.fractionLength(1)))) pts").font(.caption2).blur(radius: privacyMode ? 6 : 0)
                             }.padding(6).background(Color(NSColor.windowBackgroundColor).opacity(0.95)).cornerRadius(6).shadow(radius: 4)
                         }
                 }
@@ -672,7 +835,6 @@ struct WatchlistLabScoreChart: View {
             BlueChipWatermark()
         }
         .padding()
-        // CORRECTION ICI : Hauteur globale passée à 360 pour s'aligner parfaitement avec le radar
         .frame(minHeight: isExpanded ? 500 : 360, maxHeight: isExpanded ? .infinity : 360)
         .background(Color(NSColor.windowBackgroundColor))
         .cornerRadius(12)
@@ -683,10 +845,12 @@ struct WatchlistLabScoreChart: View {
 struct WatchlistLabRadarChart: View {
     @ObservedObject var viewModel: PortfolioViewModel
     let itemIndex: Int
+    @Binding var privacyMode: Bool
     var isExpanded: Bool = false
     @Binding var expandedChart: WatchListChartZoomType?
     
     @State private var hiddenTickers: Set<String> = []
+    @State private var hoveredTicker: String? = nil
     
     var analyzedTicker: String { viewModel.watchlistItems[itemIndex].ticker }
     
@@ -787,21 +951,19 @@ struct WatchlistLabRadarChart: View {
                         .position(x: center.x, y: center.y)
                 }
             }
-            // CORRECTION ICI : Remplacement par maxHeight: .infinity pour corriger le crash "Invalid frame dimension"
-            .frame(maxHeight: .infinity)
+            .frame(maxWidth: .infinity, minHeight: 250) // Sécurité d'affichage
             
             Spacer()
             BlueChipWatermark()
         }
         .padding()
-        // Hauteur globale 360 pour s'aligner parfaitement avec le graphique de Score
         .frame(minHeight: isExpanded ? 500 : 360, maxHeight: isExpanded ? .infinity : 360)
         .background(Color(NSColor.windowBackgroundColor))
         .cornerRadius(12)
     }
 }
 
-// Formes dédiées pour le Radar (Évite les conflits de nom avec FundamentalsView)
+// Formes dédiées pour le Radar
 struct WL_RadarPolygon: Shape {
     let dataCount: Int
     let radius: CGFloat
@@ -929,13 +1091,13 @@ struct WatchListFullScreenChartView: View {
                 WatchListUpsideChart(items: items, marginOfSafety: marginOfSafety, privacyMode: $privacyMode, isExpanded: true, expandedChart: .constant(nil))
             case .labScore:
                 if let id = labSelectedItemID, let idx = items.firstIndex(where: { $0.id == id }) {
-                    WatchlistLabScoreChart(viewModel: viewModel, itemIndex: idx, isExpanded: true, expandedChart: .constant(nil))
+                    WatchlistLabScoreChart(viewModel: viewModel, itemIndex: idx, privacyMode: $privacyMode, isExpanded: true, expandedChart: .constant(nil))
                 } else {
                     Text("No stock selected").foregroundColor(.secondary)
                 }
             case .labRadar:
                 if let id = labSelectedItemID, let idx = items.firstIndex(where: { $0.id == id }) {
-                    WatchlistLabRadarChart(viewModel: viewModel, itemIndex: idx, isExpanded: true, expandedChart: .constant(nil))
+                    WatchlistLabRadarChart(viewModel: viewModel, itemIndex: idx, privacyMode: $privacyMode, isExpanded: true, expandedChart: .constant(nil))
                 } else {
                     Text("No stock selected").foregroundColor(.secondary)
                 }
