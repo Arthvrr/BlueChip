@@ -7,6 +7,7 @@ import Charts
 
 enum ExposureChartZoomType: String, Identifiable {
     case donutExposure, stackedBarExposure
+    case geographicTreemap, sectorRegionMatrix // NOUVEAUX GRAPHES
     var id: String { self.rawValue }
 }
 
@@ -24,6 +25,21 @@ struct FXRiskItem: Identifiable {
     let color: Color
 }
 
+// Modèles pour les nouveaux graphiques
+struct SectorRegionItem: Identifiable {
+    let id = UUID()
+    let sector: String
+    let region: String
+    let weight: Double
+}
+
+struct TreemapRegionNode: Identifiable {
+    let id = UUID()
+    let name: String
+    let percentage: Double
+    let rect: CGRect
+}
+
 // =========================================================================
 // MARK: - MAIN EXPOSURE VIEW
 // =========================================================================
@@ -35,7 +51,7 @@ struct ExposureView: View {
     @State private var editingPosition: Position? = nil
     @State private var chartToZoom: ExposureChartZoomType? = nil
     
-    // Extraction dynamique de toutes les régions uniques saisies dans le portefeuille
+    // Extraction dynamique de toutes les régions uniques
     var allRegions: [String] {
         let regions = viewModel.positions.flatMap { ($0.revenueExposures ?? []).map { $0.regionName } }
         return Array(Set(regions)).sorted()
@@ -103,7 +119,6 @@ struct ExposureView: View {
             if market.name == "Unknown" { continue }
             let name = market.name.lowercased()
             
-            // Classification intelligente basée sur le nom de la région
             if name.contains("us") || name.contains("america") { usd += market.percentage }
             else if name.contains("eu") || name.contains("emea") || name.contains("uk") { eur += market.percentage }
             else if name.contains("asia") || name.contains("apac") || name.contains("china") || name.contains("japan") { asia += market.percentage }
@@ -136,6 +151,37 @@ struct ExposureView: View {
         }
         return items
     }
+    
+    // MARK: - DONNÉES SECTOR X GEOGRAPHY MATRIX
+    var sectorRegionData: [SectorRegionItem] {
+        var dict: [String: [String: Double]] = [:]
+        let totalVal = viewModel.totalValue
+        guard totalVal > 0 else { return [] }
+        
+        for pos in viewModel.positions {
+            let sector = pos.sector.isEmpty ? "Unknown" : pos.sector
+            let posWeight = pos.currentValueEUR / totalVal
+            let exposures = pos.revenueExposures ?? []
+            var knownPct = 0.0
+            
+            for exp in exposures {
+                dict[sector, default: [:]][exp.regionName, default: 0] += posWeight * (exp.percentage / 100.0)
+                knownPct += exp.percentage
+            }
+            let unknownPct = max(0, 100.0 - knownPct)
+            if unknownPct > 0 {
+                dict[sector, default: [:]]["Unknown", default: 0] += posWeight * (unknownPct / 100.0)
+            }
+        }
+        
+        var result: [SectorRegionItem] = []
+        for (sec, regions) in dict {
+            for (reg, weight) in regions {
+                if weight > 0 { result.append(SectorRegionItem(sector: sec, region: reg, weight: weight)) }
+            }
+        }
+        return result
+    }
 
     var body: some View {
         ScrollView(.vertical) {
@@ -147,7 +193,7 @@ struct ExposureView: View {
                     Spacer()
                 }
                 
-                // 1. DASHBOARD (8 CARTES)
+                // 1. DASHBOARD
                 VStack(spacing: 16) {
                     let totalVal = viewModel.totalValue
                     let usaPct = totalVal > 0 ? (usaWeightedValue / totalVal) : 0
@@ -160,16 +206,16 @@ struct ExposureView: View {
                     let estFxRisk = rowPct // Risque de change = tout ce qui n'est pas aux US
                     
                     HStack(spacing: 16) {
-                        DashboardCard(title: "Weighted USA Exposure", value: usaPct.formatted(.percent.precision(.fractionLength(1))), titleIcon: "star.fill", privacyMode: .constant(false))
-                        DashboardCard(title: "Weighted ROW Exposure", value: rowPct.formatted(.percent.precision(.fractionLength(1))), titleIcon: "globe.europe.africa.fill", privacyMode: .constant(false))
-                        DashboardCard(title: "Unassigned Revenue", value: unknownPct.formatted(.percent.precision(.fractionLength(1))), titleIcon: "questionmark.circle.fill", privacyMode: .constant(false))
-                        DashboardCard(title: "Primary Market Target", value: topRegionStr, titleIcon: "chart.bar.fill", privacyMode: .constant(false))
+                        DashboardCard(title: "Weighted USA Exposure", value: usaPct.formatted(.percent.precision(.fractionLength(1))), titleIcon: "star.fill", privacyMode: $privacyMode)
+                        DashboardCard(title: "Weighted ROW Exposure", value: rowPct.formatted(.percent.precision(.fractionLength(1))), titleIcon: "globe.europe.africa.fill", privacyMode: $privacyMode)
+                        DashboardCard(title: "Unassigned Revenue", value: unknownPct.formatted(.percent.precision(.fractionLength(1))), titleIcon: "questionmark.circle.fill", privacyMode: $privacyMode)
+                        DashboardCard(title: "Primary Market Target", value: topRegionStr, titleIcon: "chart.bar.fill", privacyMode: $privacyMode)
                     }
                     HStack(spacing: 16) {
-                        DashboardCard(title: "Total Regions Tracked", value: "\(allRegions.count)", titleIcon: nil, privacyMode: .constant(false))
-                        DashboardCard(title: "Fully Mapped Stocks", value: "\(fullyMapped) / \(viewModel.positions.count)", titleIcon: nil, privacyMode: .constant(false))
-                        DashboardCard(title: "Max Single-Region Focus", value: maxConcentration.formatted(.percent.precision(.fractionLength(1))), titleIcon: nil, privacyMode: .constant(false))
-                        DashboardCard(title: "Est. FX Risk (Non-USA)", value: estFxRisk.formatted(.percent.precision(.fractionLength(1))), titleIcon: nil, privacyMode: .constant(false))
+                        DashboardCard(title: "Total Regions Tracked", value: "\(allRegions.count)", titleIcon: nil, privacyMode: $privacyMode)
+                        DashboardCard(title: "Fully Mapped Stocks", value: "\(fullyMapped) / \(viewModel.positions.count)", titleIcon: nil, privacyMode: $privacyMode)
+                        DashboardCard(title: "Max Single-Region Focus", value: maxConcentration.formatted(.percent.precision(.fractionLength(1))), titleIcon: nil, privacyMode: $privacyMode)
+                        DashboardCard(title: "Est. FX Risk (Non-USA)", value: estFxRisk.formatted(.percent.precision(.fractionLength(1))), titleIcon: nil, privacyMode: $privacyMode)
                     }
                 }
                 
@@ -196,6 +242,7 @@ struct ExposureView: View {
                                         Spacer()
                                         Text(market.percentage.formatted(.percent.precision(.fractionLength(1))))
                                             .font(.subheadline).fontWeight(.bold).foregroundColor(.blue)
+                                            .blur(radius: privacyMode ? 6 : 0)
                                     }
                                 }
                             }
@@ -225,7 +272,9 @@ struct ExposureView: View {
                                         HStack {
                                             Text(item.currencyZone).font(.caption).fontWeight(.semibold)
                                             Spacer()
-                                            Text(item.percentage.formatted(.percent.precision(.fractionLength(1)))).font(.caption).fontWeight(.bold)
+                                            Text(item.percentage.formatted(.percent.precision(.fractionLength(1))))
+                                                .font(.caption).fontWeight(.bold)
+                                                .blur(radius: privacyMode ? 6 : 0)
                                         }
                                         GeometryReader { geo in
                                             ZStack(alignment: .leading) {
@@ -246,7 +295,7 @@ struct ExposureView: View {
                     .shadow(color: Color.black.opacity(0.05), radius: 2, x: 0, y: 1)
                 }
                 
-                // 3. TABLEAU PLEINE LARGEUR D'ÉDITION PAR DOUBLE-CLIC
+                // 3. TABLEAU PLEINE LARGEUR
                 VStack(alignment: .leading, spacing: 8) {
                     HStack {
                         Text("Revenue Segmentation by Stock").font(.title2).fontWeight(.bold)
@@ -254,11 +303,9 @@ struct ExposureView: View {
                         Text("(Double-click on any row to edit regions)").font(.caption).foregroundColor(.secondary).italic()
                     }
                     
-                    // ✨ L'ASTUCE EST ICI : GeometryReader capte la largeur de l'écran ✨
                     GeometryReader { geo in
                         ScrollView(.horizontal, showsIndicators: true) {
                             VStack(spacing: 0) {
-                                // Header du Tableau
                                 HStack(spacing: 12) {
                                     Text("Ticker").fontWeight(.bold).frame(width: 80, alignment: .leading)
                                     Text("Known %").fontWeight(.bold).frame(width: 110, alignment: .leading)
@@ -275,7 +322,6 @@ struct ExposureView: View {
                                 
                                 Divider()
                                 
-                                // Rows du Tableau
                                 if viewModel.positions.isEmpty {
                                     Text("No positions in portfolio.").foregroundColor(.secondary).padding(20)
                                 } else {
@@ -286,10 +332,8 @@ struct ExposureView: View {
                                                 let totalKnown = exposures.reduce(0) { $0 + $1.percentage }
                                                 
                                                 HStack(spacing: 12) {
-                                                    // Ticker
                                                     Text(pos.ticker).fontWeight(.bold).frame(width: 80, alignment: .leading)
                                                     
-                                                    // Known %
                                                     HStack {
                                                         ProgressView(value: min(totalKnown, 100.0), total: 100.0)
                                                             .tint(totalKnown >= 100 ? .green : .orange)
@@ -297,15 +341,16 @@ struct ExposureView: View {
                                                         Text("\(Int(totalKnown))%")
                                                             .font(.caption).fontWeight(.bold)
                                                             .foregroundColor(totalKnown >= 100 ? .green : .orange)
+                                                            .blur(radius: privacyMode ? 6 : 0)
                                                     }
                                                     .frame(width: 110, alignment: .leading)
                                                     
-                                                    // Colonnes Dynamiques (Pleine largeur)
                                                     ForEach(allRegions, id: \.self) { region in
                                                         let pct = exposures.first(where: { $0.regionName == region })?.percentage
                                                         Text(pct != nil ? "\(pct!.formatted(.number.precision(.fractionLength(1))))%" : "/")
                                                             .frame(maxWidth: .infinity, alignment: .trailing)
                                                             .foregroundColor(pct != nil ? .primary : .secondary.opacity(0.3))
+                                                            .blur(radius: privacyMode ? 6 : 0)
                                                     }
                                                 }
                                                 .padding(.horizontal, 16)
@@ -321,25 +366,30 @@ struct ExposureView: View {
                                     }
                                 }
                             }
-                            // On force la largeur minimale à celle mesurée par le GeometryReader
                             .frame(minWidth: geo.size.width)
                             .background(Color(NSColor.controlBackgroundColor))
                             .cornerRadius(8)
                             .overlay(RoundedRectangle(cornerRadius: 8).stroke(Color.gray.opacity(0.2), lineWidth: 1))
                         }
                     }
-                    .frame(height: 300) // On fixe la hauteur pour stabiliser le GeometryReader
+                    .frame(height: 300)
                 }
                 .padding()
                 .background(Color(NSColor.controlBackgroundColor))
                 .cornerRadius(12)
                 .shadow(color: Color.black.opacity(0.05), radius: 2, x: 0, y: 1)
                 
-                // 4. LES 2 GRAPHIQUES INTERACTIFS (SURVOL, LÉGENDE CLIQUABLE, ZOOM, WATERMARK)
+                // 4. LES 2 PREMIERS GRAPHIQUES INTERACTIFS
                 HStack(alignment: .top, spacing: 24) {
                     let totalPortfolioValue = viewModel.totalValue
-                    ExposureDonutChart(data: donutData, totalValue: totalPortfolioValue, title: "Weighted Portfolio Exposure (USA vs ROW)", expandedChart: $chartToZoom)
-                    ExposureStackedBarChart(data: stackedBarData, allRegions: allRegions, title: "Detailed Geographic Breakdown by Stock", expandedChart: $chartToZoom)
+                    ExposureDonutChart(data: donutData, totalValue: totalPortfolioValue, title: "Weighted Portfolio Exposure (USA vs ROW)", privacyMode: $privacyMode, expandedChart: $chartToZoom)
+                    ExposureStackedBarChart(data: stackedBarData, allRegions: allRegions, title: "Detailed Geographic Breakdown by Stock", privacyMode: $privacyMode, expandedChart: $chartToZoom)
+                }
+                
+                // 5. NOUVEAUX GRAPHIQUES : GLOBAL HEATMAP & RISK MATRIX
+                HStack(alignment: .top, spacing: 24) {
+                    GeographicTreemapChart(data: regionalExposure, privacyMode: $privacyMode, expandedChart: $chartToZoom)
+                    SectorRegionMatrixChart(data: sectorRegionData, allRegions: allRegionCategories, privacyMode: $privacyMode, expandedChart: $chartToZoom)
                 }
             }
             .padding()
@@ -354,9 +404,19 @@ struct ExposureView: View {
                 donutData: donutData,
                 stackedBarData: stackedBarData,
                 allRegions: allRegions,
-                totalValue: totalPortfolioValue
+                totalValue: totalPortfolioValue,
+                treemapData: regionalExposure,
+                matrixData: sectorRegionData,
+                allRegionCategories: allRegionCategories,
+                privacyMode: $privacyMode
             )
         }
+    }
+    
+    var allRegionCategories: [String] {
+        var list = allRegions
+        if !list.contains("Unknown") { list.append("Unknown") }
+        return list
     }
 }
 
@@ -368,6 +428,7 @@ struct ExposureDonutChart: View {
     let data: [ChartDataItem]
     let totalValue: Double
     let title: String
+    @Binding var privacyMode: Bool
     var isExpanded: Bool = false
     @Binding var expandedChart: ExposureChartZoomType?
     
@@ -424,6 +485,7 @@ struct ExposureDonutChart: View {
                                 Text(item.name).font(.headline).lineLimit(1)
                                 Text(percent.formatted(.percent.precision(.fractionLength(1))))
                                     .font(.title3).fontWeight(.bold).foregroundColor(color(for: item.name))
+                                    .blur(radius: privacyMode ? 6 : 0)
                             }
                             .position(x: geometry.frame(in: .local).midX, y: geometry.frame(in: .local).midY)
                         } else {
@@ -433,6 +495,7 @@ struct ExposureDonutChart: View {
                                 Text("Displayed").font(.caption).foregroundColor(.secondary)
                                 Text(displayedPercent.formatted(.percent.precision(.fractionLength(1))))
                                     .font(.title2).fontWeight(.bold)
+                                    .blur(radius: privacyMode ? 6 : 0)
                             }
                             .position(x: geometry.frame(in: .local).midX, y: geometry.frame(in: .local).midY)
                         }
@@ -461,13 +524,14 @@ struct ExposureDonutChart: View {
 }
 
 // =========================================================================
-// MARK: - GRAPHE 2 : STACKED BAR CHART INTERACTIF (AVEC TOOLTIP)
+// MARK: - GRAPHE 2 : STACKED BAR CHART INTERACTIF
 // =========================================================================
 
 struct ExposureStackedBarChart: View {
     let data: [StackedBarItem]
     let allRegions: [String]
     let title: String
+    @Binding var privacyMode: Bool
     var isExpanded: Bool = false
     @Binding var expandedChart: ExposureChartZoomType?
     
@@ -515,12 +579,26 @@ struct ExposureStackedBarChart: View {
                     )
                     .foregroundStyle(color(for: item.region))
                     
-                    // CORRECTION TOOLTIP : Annotation affichée au-dessus de la barre survolée
                     if let hTicker = hoveredTicker, item.ticker == hTicker {
                         RuleMark(x: .value("Ticker", hTicker))
-                            .foregroundStyle(.secondary.opacity(0.3))
-                            .annotation(position: .top, alignment: .center) {
-                                // Récupération des segments spécifiques à cette action
+                            .foregroundStyle(Color.secondary.opacity(0.3))
+                            .zIndex(-1)
+                    }
+                }
+                .chartOverlay { proxy in
+                    GeometryReader { geometry in
+                        Rectangle().fill(.clear).contentShape(Rectangle())
+                            .onContinuousHover { phase in
+                                switch phase {
+                                case .active(let location):
+                                    if let ticker: String = proxy.value(atX: location.x) { hoveredTicker = ticker }
+                                case .ended:
+                                    hoveredTicker = nil
+                                }
+                            }
+                        
+                        if let hTicker = hoveredTicker {
+                            if let xPosition = proxy.position(forX: hTicker) {
                                 let tickerSegments = data.filter { $0.ticker == hTicker && !hiddenRegions.contains($0.region) }
                                     .sorted { $0.percentage > $1.percentage }
                                 
@@ -531,6 +609,7 @@ struct ExposureStackedBarChart: View {
                                             Circle().fill(color(for: seg.region)).frame(width: 6, height: 6)
                                             Text("\(seg.region): \(seg.percentage.formatted(.number.precision(.fractionLength(1))))%")
                                                 .font(.caption2)
+                                                .blur(radius: privacyMode ? 6 : 0)
                                         }
                                     }
                                 }
@@ -538,11 +617,12 @@ struct ExposureStackedBarChart: View {
                                 .background(Color(NSColor.windowBackgroundColor).opacity(0.95))
                                 .cornerRadius(8)
                                 .shadow(radius: 4)
+                                .position(x: max(70, min(geometry.size.width - 70, xPosition)), y: geometry.size.height / 3)
                             }
+                        }
                     }
                 }
                 .chartLegend(.hidden)
-                .chartXSelection(value: $hoveredTicker)
                 .chartYScale(domain: [0, 100])
                 .chartYAxis {
                     AxisMarks(position: .leading) { value in
@@ -569,21 +649,277 @@ struct ExposureStackedBarChart: View {
 }
 
 // =========================================================================
+// MARK: - GRAPHE 3 : GLOBAL GEOGRAPHIC TREEMAP (NOUVEAU)
+// =========================================================================
+
+struct TreemapRegionNodeView: View {
+    let node: TreemapRegionNode
+    @Binding var hoveredRegion: String?
+    @Binding var privacyMode: Bool
+    
+    // Couleur dynamique basée sur la taille
+    func color(for percentage: Double) -> Color {
+        if node.name == "Unknown" { return Color.gray.opacity(0.4) }
+        // On intensifie le bleu selon la concentration
+        let intensity = min(max(percentage * 2, 0.4), 1.0)
+        return Color.blue.opacity(intensity)
+    }
+    
+    var isHovered: Bool { hoveredRegion == node.name }
+    
+    var body: some View {
+        ZStack {
+            Rectangle()
+                .fill(color(for: node.percentage))
+                .border(Color(NSColor.windowBackgroundColor), width: 1.5)
+            
+            VStack(spacing: 4) {
+                Text(node.name)
+                    .font(.system(size: node.rect.width > 60 && node.rect.height > 40 ? 14 : 10, weight: .bold))
+                    .foregroundColor(.white)
+                    .lineLimit(1)
+                
+                if node.rect.width > 80 && node.rect.height > 60 {
+                    Text(node.percentage.formatted(.percent.precision(.fractionLength(1))))
+                        .font(.caption)
+                        .foregroundColor(.white.opacity(0.9))
+                        .lineLimit(1)
+                        .blur(radius: privacyMode ? 6 : 0)
+                }
+            }
+            
+            // Tooltip au survol
+            if isHovered {
+                VStack {
+                    Text(node.name).font(.caption.bold())
+                    Text(node.percentage.formatted(.percent.precision(.fractionLength(1))))
+                        .font(.caption2)
+                        .blur(radius: privacyMode ? 6 : 0)
+                }
+                .padding(6)
+                .background(Color(NSColor.windowBackgroundColor).opacity(0.95))
+                .cornerRadius(6)
+                .shadow(radius: 4)
+                .zIndex(10)
+            }
+        }
+        .frame(width: node.rect.width, height: node.rect.height)
+        .offset(x: node.rect.minX, y: node.rect.minY)
+        .scaleEffect(isHovered ? 1.02 : 1.0)
+        .zIndex(isHovered ? 1 : 0)
+        .onContinuousHover { phase in
+            switch phase {
+            case .active(_): hoveredRegion = node.name
+            case .ended: hoveredRegion = nil
+            }
+        }
+    }
+}
+
+struct GeographicTreemapChart: View {
+    let data: [(name: String, percentage: Double)] // regionalExposure
+    @Binding var privacyMode: Bool
+    var isExpanded: Bool = false
+    @Binding var expandedChart: ExposureChartZoomType?
+    
+    @State private var hoveredRegion: String? = nil
+    
+    // Algorithme de squarification simple pour créer le Treemap
+    func layoutNodes(in rect: CGRect) -> [TreemapRegionNode] {
+        var nodes: [TreemapRegionNode] = []
+        var currentRect = rect
+        var remainingWeight = data.reduce(0) { $0 + $1.percentage }
+        
+        for item in data {
+            guard remainingWeight > 0 else { continue }
+            let fraction = item.percentage / remainingWeight
+            
+            if currentRect.width > currentRect.height {
+                let w = currentRect.width * CGFloat(fraction)
+                // SUPPRESSION DE 'id: UUID(),' ICI
+                nodes.append(TreemapRegionNode(name: item.name, percentage: item.percentage, rect: CGRect(x: currentRect.minX, y: currentRect.minY, width: w, height: currentRect.height)))
+                currentRect = CGRect(x: currentRect.minX + w, y: currentRect.minY, width: currentRect.width - w, height: currentRect.height)
+            } else {
+                let h = currentRect.height * CGFloat(fraction)
+                // SUPPRESSION DE 'id: UUID(),' ICI
+                nodes.append(TreemapRegionNode(name: item.name, percentage: item.percentage, rect: CGRect(x: currentRect.minX, y: currentRect.minY, width: currentRect.width, height: h)))
+                currentRect = CGRect(x: currentRect.minX, y: currentRect.minY + h, width: currentRect.width, height: currentRect.height - h)
+            }
+            remainingWeight -= item.percentage
+        }
+        return nodes
+    }
+    
+    var body: some View {
+        VStack {
+            HStack {
+                if !isExpanded { Text("Global Exposure Heatmap (Treemap)").font(.headline).foregroundColor(.secondary) }
+                Spacer()
+                if !isExpanded {
+                    Button(action: { expandedChart = .geographicTreemap }) {
+                        Image(systemName: "plus.magnifyingglass").foregroundColor(.secondary)
+                    }.buttonStyle(.plain)
+                }
+            }.padding(.bottom, 8)
+            
+            if data.isEmpty {
+                Spacer(); Text("No regional data").foregroundColor(.secondary); Spacer()
+            } else {
+                GeometryReader { geo in
+                    ZStack(alignment: .topLeading) {
+                        ForEach(layoutNodes(in: CGRect(origin: .zero, size: geo.size))) { node in
+                            TreemapRegionNodeView(node: node, hoveredRegion: $hoveredRegion, privacyMode: $privacyMode)
+                        }
+                    }
+                }
+            }
+            
+            HStack {
+                Text("Block size represents portfolio weight").font(.caption2).foregroundColor(.secondary)
+                Spacer()
+                BlueChipWatermark()
+            }.padding(.top, 4)
+        }
+        .padding()
+        .frame(minHeight: isExpanded ? 500 : 360, maxHeight: isExpanded ? .infinity : 360)
+        .background(Color(NSColor.controlBackgroundColor))
+        .cornerRadius(12)
+        .shadow(color: Color.black.opacity(0.05), radius: 2, x: 0, y: 1)
+    }
+}
+
+// =========================================================================
+// MARK: - GRAPHE 4 : SECTOR X GEOGRAPHY RISK MATRIX (NOUVEAU)
+// =========================================================================
+
+struct SectorRegionMatrixChart: View {
+    let data: [SectorRegionItem]
+    let allRegions: [String]
+    @Binding var privacyMode: Bool
+    var isExpanded: Bool = false
+    @Binding var expandedChart: ExposureChartZoomType?
+    
+    @State private var hoveredSector: String? = nil
+    @State private var hoveredRegion: String? = nil
+    
+    // On intensifie la couleur en fonction du poids dans le portefeuille (ex: 20% = très rouge/bleu)
+    func color(for weight: Double) -> Color {
+        if weight == 0 { return Color.gray.opacity(0.1) }
+        let intensity = min(max(weight * 3, 0.2), 1.0)
+        // Les fortes concentrations virent au rouge pour alerter sur le risque
+        return weight > 0.15 ? Color.orange.opacity(intensity) : Color.blue.opacity(intensity)
+    }
+    
+    var body: some View {
+        VStack {
+            HStack {
+                if !isExpanded { Text("Sector × Geography Risk Matrix").font(.headline).foregroundColor(.secondary) }
+                Spacer()
+                if !isExpanded {
+                    Button(action: { expandedChart = .sectorRegionMatrix }) {
+                        Image(systemName: "plus.magnifyingglass").foregroundColor(.secondary)
+                    }.buttonStyle(.plain)
+                }
+            }.padding(.bottom, 8)
+            
+            if data.isEmpty {
+                Spacer(); Text("No intersection data").foregroundColor(.secondary); Spacer()
+            } else {
+                Chart(data) { item in
+                    RectangleMark(
+                        x: .value("Region", item.region),
+                        y: .value("Sector", item.sector)
+                    )
+                    .foregroundStyle(color(for: item.weight))
+                    .annotation(position: .overlay) {
+                        // N'affiche le texte que si la cellule est assez grande ou en mode Zoom
+                        if isExpanded || data.count < 20 {
+                            Text(item.weight.formatted(.percent.precision(.fractionLength(1))))
+                                .font(.system(size: isExpanded ? 10 : 8))
+                                .foregroundColor(item.weight > 0.15 ? .white : .primary)
+                                .blur(radius: privacyMode ? 6 : 0)
+                        }
+                    }
+                }
+                .chartOverlay { proxy in
+                    GeometryReader { geometry in
+                        Rectangle().fill(.clear).contentShape(Rectangle())
+                            .onContinuousHover { phase in
+                                switch phase {
+                                case .active(let location):
+                                    if let region: String = proxy.value(atX: location.x),
+                                       let sector: String = proxy.value(atY: location.y) {
+                                        hoveredRegion = region
+                                        hoveredSector = sector
+                                    }
+                                case .ended:
+                                    hoveredRegion = nil
+                                    hoveredSector = nil
+                                }
+                            }
+                        
+                        // Tooltip
+                        if let hReg = hoveredRegion, let hSec = hoveredSector,
+                           let item = data.first(where: { $0.region == hReg && $0.sector == hSec }) {
+                            if let xPos = proxy.position(forX: hReg), let yPos = proxy.position(forY: hSec) {
+                                VStack {
+                                    Text("\(hSec) - \(hReg)").font(.caption.bold())
+                                    Text("Portfolio Weight: \(item.weight.formatted(.percent.precision(.fractionLength(1))))")
+                                        .font(.caption2)
+                                        .blur(radius: privacyMode ? 6 : 0)
+                                }
+                                .padding(6).background(Color(NSColor.windowBackgroundColor).opacity(0.95)).cornerRadius(6).shadow(radius: 4)
+                                .position(x: xPos, y: yPos - 30) // Affiche juste au-dessus de la cellule
+                            }
+                        }
+                    }
+                }
+                .chartXAxis {
+                    AxisMarks { value in AxisValueLabel(centered: true) }
+                }
+                .chartYAxis {
+                    AxisMarks { value in AxisValueLabel(centered: true) }
+                }
+            }
+            
+            HStack {
+                Text("Orange indicates high risk concentration (>15%)").font(.caption2).foregroundColor(.secondary)
+                Spacer()
+                BlueChipWatermark()
+            }.padding(.top, 4)
+        }
+        .padding()
+        .frame(minHeight: isExpanded ? 500 : 360, maxHeight: isExpanded ? .infinity : 360)
+        .background(Color(NSColor.controlBackgroundColor))
+        .cornerRadius(12)
+        .shadow(color: Color.black.opacity(0.05), radius: 2, x: 0, y: 1)
+    }
+}
+
+
+// =========================================================================
 // MARK: - FULLSCREEN ZOOM FOR EXPOSURE
 // =========================================================================
 
 struct ExposureFullScreenChartView: View {
     @Environment(\.dismiss) var dismiss
     let zoomType: ExposureChartZoomType
+    
     let donutData: [ChartDataItem]
     let stackedBarData: [StackedBarItem]
     let allRegions: [String]
     let totalValue: Double
+    
+    let treemapData: [(name: String, percentage: Double)]
+    let matrixData: [SectorRegionItem]
+    let allRegionCategories: [String]
+    
+    @Binding var privacyMode: Bool
 
     var body: some View {
         VStack(spacing: 20) {
             HStack {
-                Text(zoomType == .donutExposure ? "Weighted Portfolio Exposure" : "Detailed Geographic Breakdown").font(.title).fontWeight(.bold)
+                Text(titleForZoom).font(.title).fontWeight(.bold)
                 Spacer()
                 Button(action: { dismiss() }) {
                     Image(systemName: "xmark.circle.fill").font(.title).foregroundColor(.secondary)
@@ -592,13 +928,26 @@ struct ExposureFullScreenChartView: View {
             
             switch zoomType {
             case .donutExposure:
-                ExposureDonutChart(data: donutData, totalValue: totalValue, title: "Weighted Portfolio Exposure", isExpanded: true, expandedChart: .constant(nil))
+                ExposureDonutChart(data: donutData, totalValue: totalValue, title: "Weighted Portfolio Exposure", privacyMode: $privacyMode, isExpanded: true, expandedChart: .constant(nil))
             case .stackedBarExposure:
-                ExposureStackedBarChart(data: stackedBarData, allRegions: allRegions, title: "Detailed Breakdown by Stock", isExpanded: true, expandedChart: .constant(nil))
+                ExposureStackedBarChart(data: stackedBarData, allRegions: allRegions, title: "Detailed Breakdown by Stock", privacyMode: $privacyMode, isExpanded: true, expandedChart: .constant(nil))
+            case .geographicTreemap:
+                GeographicTreemapChart(data: treemapData, privacyMode: $privacyMode, isExpanded: true, expandedChart: .constant(nil))
+            case .sectorRegionMatrix:
+                SectorRegionMatrixChart(data: matrixData, allRegions: allRegionCategories, privacyMode: $privacyMode, isExpanded: true, expandedChart: .constant(nil))
             }
         }
         .padding(30)
         .frame(minWidth: 900, minHeight: 700)
+    }
+    
+    var titleForZoom: String {
+        switch zoomType {
+        case .donutExposure: return "Weighted Portfolio Exposure"
+        case .stackedBarExposure: return "Detailed Geographic Breakdown"
+        case .geographicTreemap: return "Global Exposure Heatmap"
+        case .sectorRegionMatrix: return "Sector × Geography Risk Matrix"
+        }
     }
 }
 
