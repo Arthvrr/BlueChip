@@ -27,31 +27,6 @@ extension Color {
     }
 }
 
-// Responsive column layout helper
-struct TxColumnLayout {
-    let fixedWidths: [CGFloat]   // Date, Type, Ticker, Qty, Amount, Note, Actions
-    let customWidth: CGFloat      // Per custom column
-
-    static func compute(totalWidth: CGFloat, customCount: Int) -> TxColumnLayout {
-        // Fixed columns: Date=120, Type=95, Ticker=70, Qty=65, Amount=100, Note=flex, Actions=44
-        let fixedTotal: CGFloat = 120 + 95 + 70 + 65 + 100 + 44
-        let customTotal: CGFloat = customCount == 0 ? 0 : CGFloat(customCount) * 100
-        let remaining = max(totalWidth - fixedTotal - customTotal - 32, 120)
-        let noteWidth = min(remaining, 280)
-        return TxColumnLayout(
-            fixedWidths: [120, 95, 70, 65, 100, noteWidth, 44],
-            customWidth: 100
-        )
-    }
-    var dateW: CGFloat   { fixedWidths[0] }
-    var typeW: CGFloat   { fixedWidths[1] }
-    var tickerW: CGFloat { fixedWidths[2] }
-    var qtyW: CGFloat    { fixedWidths[3] }
-    var amtW: CGFloat    { fixedWidths[4] }
-    var noteW: CGFloat   { fixedWidths[5] }
-    var actW: CGFloat    { fixedWidths[6] }
-}
-
 // =========================================================================
 // MARK: - MAIN VIEW
 // =========================================================================
@@ -67,7 +42,6 @@ struct TransactionsView: View {
     @State private var searchText          = ""
     @State private var filterType: TransactionType? = nil
     
-    // NOUVEAU: État pour le zoom des graphes
     @State private var chartToZoom: TxChartZoomType? = nil
 
     var body: some View {
@@ -107,7 +81,6 @@ struct TransactionsView: View {
         .sheet(isPresented: $showAddColumnSheet) {
             AddCustomColumnView(viewModel: viewModel)
         }
-        // NOUVEAU: Sheet pour le zoom
         .sheet(item: $chartToZoom) { type in
             TransactionsFullScreenChartView(zoomType: type, viewModel: viewModel, privacyMode: $privacyMode)
         }
@@ -144,7 +117,7 @@ struct TransactionsDashboardSection: View {
                 txCard("Total Sold",         value: totalSold,       color: .orange)
                 txCard("Dividends Received", value: totalDividends,  color: .mint)
                 txCard("Total Fees & Taxes", value: totalCustomFees, color: .red)
-                DashboardCard(title: "Total Transactions", value: "\(tx.count)", privacyMode: .constant(false))
+                DashboardCard(title: "Total Transactions", value: "\(tx.count)", titleIcon: nil, privacyMode: $privacyMode)
             }
         }
     }
@@ -155,7 +128,7 @@ struct TransactionsDashboardSection: View {
             Text(title).font(.subheadline).foregroundColor(.secondary).lineLimit(1).minimumScaleFactor(0.8)
             Text(value.formatted(.currency(code: "EUR").precision(.fractionLength(2))))
                 .font(.title2).fontWeight(.bold).foregroundColor(color)
-                .blur(radius: privacyMode ? 8 : 0)
+                .blur(radius: privacyMode ? 6 : 0)
         }
         .padding().frame(maxWidth: .infinity, alignment: .leading).frame(height: 110)
         .background(Color(NSColor.controlBackgroundColor)).cornerRadius(10)
@@ -183,7 +156,7 @@ struct TransactionsGoalBar: View {
                 Text("\(txCount) / \(Int(target))")
                     .font(.subheadline).fontWeight(.bold)
                     .foregroundColor(progress >= 1 ? .green : .primary)
-                    .blur(radius: privacyMode ? 8 : 0)
+                    .blur(radius: privacyMode ? 6 : 0)
             }
             GeometryReader { geo in
                 ZStack(alignment: .leading) {
@@ -267,36 +240,38 @@ struct TransactionsTableSection: View {
             }.padding(.bottom, 4)
 
             GeometryReader { geo in
-                let layout = TxColumnLayout.compute(totalWidth: geo.size.width, customCount: columns.count)
-                VStack(spacing: 0) {
-                    txHeaderRow(layout: layout).background(Color(NSColor.windowBackgroundColor))
-                    Divider()
-                    if filtered.isEmpty {
-                        VStack(spacing: 12) {
-                            Image(systemName: "clock.arrow.circlepath").font(.system(size: 36)).foregroundColor(.secondary)
-                            Text(searchText.isEmpty ? "No transactions yet. Tap + Add to log your first." : "No results for \"\(searchText)\".")
-                                .foregroundColor(.secondary)
-                        }
-                        .frame(maxWidth: .infinity).padding(40)
-                    } else {
-                        ScrollView {
-                            LazyVStack(spacing: 0) {
-                                ForEach(filtered) { tx in
-                                    TransactionRowView(
-                                        tx: tx, columns: columns, layout: layout,
-                                        privacyMode: privacyMode, dateFormatter: dateFormatter,
-                                        onEdit: { editingTransaction = tx },
-                                        onDelete: { viewModel.transactions.removeAll { $0.id == tx.id } }
-                                    )
-                                    Divider()
+                ScrollView(.horizontal, showsIndicators: true) {
+                    VStack(spacing: 0) {
+                        txHeaderRow().background(Color(NSColor.windowBackgroundColor))
+                        Divider()
+                        
+                        if filtered.isEmpty {
+                            VStack(spacing: 12) {
+                                Image(systemName: "clock.arrow.circlepath").font(.system(size: 36)).foregroundColor(.secondary)
+                                Text(searchText.isEmpty ? "No transactions yet. Tap + Add to log your first." : "No results for \"\(searchText)\".")
+                                    .foregroundColor(.secondary)
+                            }
+                            .frame(maxWidth: .infinity, maxHeight: .infinity).padding(40)
+                        } else {
+                            ScrollView(.vertical) {
+                                LazyVStack(spacing: 0) {
+                                    ForEach(filtered) { tx in
+                                        TransactionRowView(
+                                            tx: tx, columns: columns, privacyMode: privacyMode, dateFormatter: dateFormatter,
+                                            onEdit: { editingTransaction = tx },
+                                            onDelete: { viewModel.transactions.removeAll { $0.id == tx.id } }
+                                        )
+                                        Divider()
+                                    }
                                 }
                             }
                         }
                     }
+                    .frame(minWidth: geo.size.width)
+                    .background(Color(NSColor.controlBackgroundColor))
+                    .cornerRadius(8)
+                    .overlay(RoundedRectangle(cornerRadius: 8).stroke(Color.gray.opacity(0.2), lineWidth: 1))
                 }
-                .background(Color(NSColor.controlBackgroundColor))
-                .cornerRadius(8)
-                .overlay(RoundedRectangle(cornerRadius: 8).stroke(Color.gray.opacity(0.2), lineWidth: 1))
             }
             .frame(height: 420)
         }
@@ -305,24 +280,20 @@ struct TransactionsTableSection: View {
     }
 
     @ViewBuilder
-    func txHeaderRow(layout: TxColumnLayout) -> some View {
-        HStack(spacing: 0) {
-            hCell("Date",     w: layout.dateW)
-            hCell("Type",     w: layout.typeW)
-            hCell("Ticker",   w: layout.tickerW)
-            hCell("Qty",      w: layout.qtyW)
-            hCell("Amount €", w: layout.amtW)
-            ForEach(columns, id: \.self) { col in hCell(col, w: layout.customWidth) }
-            hCell("Note",     w: layout.noteW)
-            hCell("",         w: layout.actW)
+    func txHeaderRow() -> some View {
+        HStack(spacing: 12) {
+            Text("Date").frame(width: 120, alignment: .leading)
+            Text("Type").frame(width: 90, alignment: .leading)
+            Text("Ticker").frame(width: 70, alignment: .leading)
+            Text("Qty").frame(maxWidth: .infinity, alignment: .trailing)
+            Text("Amount €").frame(maxWidth: .infinity, alignment: .trailing)
+            ForEach(columns, id: \.self) { col in
+                Text(col).frame(maxWidth: .infinity, alignment: .trailing)
+            }
+            Text("Note").frame(maxWidth: .infinity, alignment: .leading)
         }
         .font(.subheadline).foregroundColor(.secondary)
-        .padding(.vertical, 10).padding(.horizontal, 8)
-    }
-
-    @ViewBuilder
-    func hCell(_ text: String, w: CGFloat) -> some View {
-        Text(text).frame(width: w, alignment: .leading).padding(.horizontal, 4)
+        .padding(.vertical, 10).padding(.horizontal, 16)
     }
 
     @ViewBuilder
@@ -341,17 +312,16 @@ struct TransactionsTableSection: View {
 struct TransactionRowView: View {
     let tx: Transaction
     let columns: [String]
-    let layout: TxColumnLayout
     let privacyMode: Bool
     let dateFormatter: DateFormatter
     let onEdit: () -> Void
     let onDelete: () -> Void
 
     var body: some View {
-        HStack(spacing: 0) {
+        HStack(spacing: 12) {
             Text(dateFormatter.string(from: tx.date))
                 .font(.system(size: 12))
-                .frame(width: layout.dateW, alignment: .leading).padding(.horizontal, 4)
+                .frame(width: 120, alignment: .leading)
 
             HStack(spacing: 4) {
                 Image(systemName: tx.type.icon).font(.caption)
@@ -361,22 +331,23 @@ struct TransactionRowView: View {
             .background(Color.forTransactionType(tx.type).opacity(0.15))
             .foregroundColor(Color.forTransactionType(tx.type))
             .cornerRadius(6)
-            .frame(width: layout.typeW, alignment: .leading).padding(.horizontal, 4)
+            .frame(width: 90, alignment: .leading)
 
             Text(tx.ticker.isEmpty ? "—" : tx.ticker)
                 .font(.system(size: 13, weight: .semibold))
-                .frame(width: layout.tickerW, alignment: .leading).padding(.horizontal, 4)
+                .frame(width: 70, alignment: .leading)
 
             Text(tx.quantity == 0 ? "—" : tx.quantity.formatted(.number.precision(.fractionLength(4))))
                 .font(.system(size: 12))
-                .frame(width: layout.qtyW, alignment: .leading).padding(.horizontal, 4)
+                .blur(radius: privacyMode ? 6 : 0)
+                .frame(maxWidth: .infinity, alignment: .trailing)
 
             Text(tx.amountEUR.formatted(.currency(code: "EUR").precision(.fractionLength(2))))
                 .fontWeight(.semibold)
                 .foregroundColor(tx.type == .withdrawal || tx.type == .sell ? .orange : .primary)
                 .font(.system(size: 13))
                 .blur(radius: privacyMode ? 6 : 0)
-                .frame(width: layout.amtW, alignment: .leading).padding(.horizontal, 4)
+                .frame(maxWidth: .infinity, alignment: .trailing)
 
             ForEach(columns, id: \.self) { col in
                 let val = tx.customFields[col] ?? 0
@@ -384,22 +355,20 @@ struct TransactionRowView: View {
                     .font(.system(size: 12))
                     .foregroundColor(val > 0 ? .red : .secondary)
                     .blur(radius: privacyMode ? 6 : 0)
-                    .frame(width: layout.customWidth, alignment: .leading).padding(.horizontal, 4)
+                    .frame(maxWidth: .infinity, alignment: .trailing)
             }
 
             Text(tx.note.isEmpty ? "—" : tx.note)
                 .font(.system(size: 12)).foregroundColor(.secondary).lineLimit(1)
-                .frame(width: layout.noteW, alignment: .leading).padding(.horizontal, 4)
-
-            HStack(spacing: 6) {
-                Button(action: onEdit) { Image(systemName: "pencil").font(.caption) }
-                    .buttonStyle(.plain).foregroundColor(.secondary)
-                Button(action: onDelete) { Image(systemName: "trash").font(.caption) }
-                    .buttonStyle(.plain).foregroundColor(.red.opacity(0.7))
-            }
-            .frame(width: layout.actW)
+                .frame(maxWidth: .infinity, alignment: .leading)
         }
-        .padding(.vertical, 10).padding(.horizontal, 8)
+        .padding(.vertical, 10).padding(.horizontal, 16)
+        .contentShape(Rectangle())
+        .onTapGesture(count: 2) { onEdit() }
+        .contextMenu {
+            Button("Edit Transaction") { onEdit() }
+            Button(role: .destructive) { onDelete() } label: { Label("Delete Transaction", systemImage: "trash") }
+        }
     }
 }
 
@@ -418,38 +387,32 @@ struct TransactionsYearlySummarySection: View {
         viewModel.transactions.filter { Calendar.current.component(.year, from: $0.date) == year }
     }
 
-    let yearW: CGFloat      = 65
-    let countW: CGFloat     = 105
-    let typeW: CGFloat      = 65
-    let amountW: CGFloat    = 110
-    let customW: CGFloat    = 110
-
     var body: some View {
         VStack(alignment: .leading, spacing: 8) {
             Text("Yearly Summary").font(.title2).fontWeight(.bold).foregroundColor(.secondary)
             if years.isEmpty {
                 Text("No data yet.").foregroundColor(.secondary).padding()
             } else {
-                VStack(spacing: 0) {
-                    ScrollView(.horizontal, showsIndicators: false) {
-                        summaryHeaderRow()
-                    }
-                    .background(Color(NSColor.windowBackgroundColor))
-                    Divider()
+                GeometryReader { geo in
                     ScrollView(.horizontal, showsIndicators: false) {
                         VStack(spacing: 0) {
-                            ForEach(years, id: \.self) { year in
-                                YearlySummaryRowView(year: year, transactions: txForYear(year),
-                                    columns: viewModel.transactionCustomColumns, privacyMode: privacyMode,
-                                    yearW: yearW, countW: countW, typeW: typeW, amountW: amountW, customW: customW)
-                                Divider()
+                            summaryHeaderRow()
+                                .background(Color(NSColor.windowBackgroundColor))
+                            Divider()
+                            ScrollView(.vertical) {
+                                VStack(spacing: 0) {
+                                    ForEach(years, id: \.self) { year in
+                                        YearlySummaryRowView(year: year, transactions: txForYear(year), columns: viewModel.transactionCustomColumns, privacyMode: privacyMode)
+                                        Divider()
+                                    }
+                                    YearlyTotalsRowView(transactions: viewModel.transactions, columns: viewModel.transactionCustomColumns, privacyMode: privacyMode)
+                                }
                             }
-                            YearlyTotalsRowView(transactions: viewModel.transactions,
-                                columns: viewModel.transactionCustomColumns, privacyMode: privacyMode,
-                                yearW: yearW, countW: countW, typeW: typeW, amountW: amountW, customW: customW)
                         }
+                        .frame(minWidth: geo.size.width)
                     }
                 }
+                .frame(height: 250)
                 .background(Color(NSColor.controlBackgroundColor)).cornerRadius(8)
                 .overlay(RoundedRectangle(cornerRadius: 8).stroke(Color.gray.opacity(0.2), lineWidth: 1))
             }
@@ -460,32 +423,29 @@ struct TransactionsYearlySummarySection: View {
 
     @ViewBuilder
     func summaryHeaderRow() -> some View {
-        HStack(spacing: 0) {
-            hCell("Year",          w: yearW)
-            hCell("Transactions",  w: countW)
-            hCell("Buys",          w: typeW)
-            hCell("Sells",         w: typeW)
-            hCell("Deposits",      w: typeW + 10)
-            hCell("Withdrawals",   w: typeW + 10)
-            hCell("Dividends",     w: typeW + 10)
-            hCell("Invested €",    w: amountW)
-            hCell("Sold €",        w: amountW)
-            hCell("Deposited €",   w: amountW)
-            hCell("Fees & Taxes",  w: amountW)
-            ForEach(viewModel.transactionCustomColumns, id: \.self) { col in hCell(col, w: customW) }
+        HStack(spacing: 12) {
+            Text("Year").frame(width: 50, alignment: .leading)
+            Text("Count").frame(maxWidth: .infinity, alignment: .trailing)
+            Text("Buys").frame(maxWidth: .infinity, alignment: .trailing)
+            Text("Sells").frame(maxWidth: .infinity, alignment: .trailing)
+            Text("Deposits").frame(maxWidth: .infinity, alignment: .trailing)
+            Text("Withdrawals").frame(maxWidth: .infinity, alignment: .trailing)
+            Text("Dividends").frame(maxWidth: .infinity, alignment: .trailing)
+            Text("Invested €").frame(maxWidth: .infinity, alignment: .trailing)
+            Text("Sold €").frame(maxWidth: .infinity, alignment: .trailing)
+            Text("Deposited €").frame(maxWidth: .infinity, alignment: .trailing)
+            Text("Fees & Taxes").frame(maxWidth: .infinity, alignment: .trailing)
+            ForEach(viewModel.transactionCustomColumns, id: \.self) { col in
+                Text(col).frame(maxWidth: .infinity, alignment: .trailing)
+            }
         }
         .font(.subheadline).foregroundColor(.secondary)
-        .padding(.vertical, 10).padding(.horizontal, 8)
-    }
-
-    @ViewBuilder func hCell(_ text: String, w: CGFloat) -> some View {
-        Text(text).frame(width: w, alignment: .leading).padding(.horizontal, 4)
+        .padding(.vertical, 10).padding(.horizontal, 16)
     }
 }
 
 struct YearlySummaryRowView: View {
     let year: Int; let transactions: [Transaction]; let columns: [String]; let privacyMode: Bool
-    let yearW, countW, typeW, amountW, customW: CGFloat
 
     var buys:        Int    { transactions.filter { $0.type == .buy        }.count }
     var sells:       Int    { transactions.filter { $0.type == .sell       }.count }
@@ -499,38 +459,39 @@ struct YearlySummaryRowView: View {
     func colTotal(_ col: String) -> Double { transactions.reduce(0) { $0 + ($1.customFields[col] ?? 0) } }
 
     var body: some View {
-        HStack(spacing: 0) {
-            Text(String(year)).fontWeight(.bold).frame(width: yearW, alignment: .leading).padding(.horizontal, 4)
-            nc(transactions.count, w: countW, color: .primary)
-            nc(buys,        w: typeW,      color: .blue)
-            nc(sells,       w: typeW,      color: .orange)
-            nc(deposits,    w: typeW + 10, color: .green)
-            nc(withdrawals, w: typeW + 10, color: .red)
-            nc(dividends,   w: typeW + 10, color: .mint)
-            ec(invested,  w: amountW, color: .blue)
-            ec(sold,      w: amountW, color: .orange)
-            ec(deposited, w: amountW, color: .green)
-            ec(totalFees, w: amountW, color: .red)
-            ForEach(columns, id: \.self) { col in ec(colTotal(col), w: customW, color: .red) }
+        HStack(spacing: 12) {
+            Text(String(year)).fontWeight(.bold).frame(width: 50, alignment: .leading)
+            nc(transactions.count, color: .primary)
+            nc(buys,        color: .blue)
+            nc(sells,       color: .orange)
+            nc(deposits,    color: .green)
+            nc(withdrawals, color: .red)
+            nc(dividends,   color: .mint)
+            ec(invested,  color: .blue)
+            ec(sold,      color: .orange)
+            ec(deposited, color: .green)
+            ec(totalFees, color: .red)
+            ForEach(columns, id: \.self) { col in ec(colTotal(col), color: .red) }
         }
-        .padding(.vertical, 10).padding(.horizontal, 8)
+        .padding(.vertical, 10).padding(.horizontal, 16)
     }
 
-    @ViewBuilder func nc(_ v: Int, w: CGFloat, color: Color) -> some View {
+    @ViewBuilder func nc(_ v: Int, color: Color) -> some View {
         Text("\(v)").foregroundColor(v == 0 ? .secondary : color).fontWeight(v == 0 ? .regular : .semibold)
-            .frame(width: w, alignment: .leading).padding(.horizontal, 4)
+            .blur(radius: privacyMode ? 6 : 0)
+            .frame(maxWidth: .infinity, alignment: .trailing)
     }
-    @ViewBuilder func ec(_ v: Double, w: CGFloat, color: Color) -> some View {
+    @ViewBuilder func ec(_ v: Double, color: Color) -> some View {
         Text(v == 0 ? "—" : v.formatted(.currency(code: "EUR").precision(.fractionLength(2))))
             .foregroundColor(v == 0 ? .secondary : color).fontWeight(v == 0 ? .regular : .semibold)
-            .font(.system(size: 12)).blur(radius: privacyMode ? 6 : 0)
-            .frame(width: w, alignment: .leading).padding(.horizontal, 4)
+            .font(.system(size: 12))
+            .blur(radius: privacyMode ? 6 : 0)
+            .frame(maxWidth: .infinity, alignment: .trailing)
     }
 }
 
 struct YearlyTotalsRowView: View {
     let transactions: [Transaction]; let columns: [String]; let privacyMode: Bool
-    let yearW, countW, typeW, amountW, customW: CGFloat
 
     var totalBuys:        Int    { transactions.filter { $0.type == .buy        }.count }
     var totalSells:       Int    { transactions.filter { $0.type == .sell       }.count }
@@ -544,31 +505,34 @@ struct YearlyTotalsRowView: View {
     func colTotal(_ col: String) -> Double { transactions.reduce(0) { $0 + ($1.customFields[col] ?? 0) } }
 
     var body: some View {
-        HStack(spacing: 0) {
-            Text("TOTAL").fontWeight(.bold).italic().frame(width: yearW, alignment: .leading).padding(.horizontal, 4)
-            nc(transactions.count, w: countW)
-            nc(totalBuys,        w: typeW)
-            nc(totalSells,       w: typeW)
-            nc(totalDeposits,    w: typeW + 10)
-            nc(totalWithdrawals, w: typeW + 10)
-            nc(totalDividends,   w: typeW + 10)
-            ec(totalInvested,    w: amountW)
-            ec(totalSold,        w: amountW)
-            ec(totalDeposited,   w: amountW)
-            ec(totalFees,        w: amountW)
-            ForEach(columns, id: \.self) { col in ec(colTotal(col), w: customW) }
+        HStack(spacing: 12) {
+            Text("TOTAL").fontWeight(.bold).italic().frame(width: 50, alignment: .leading)
+            nc(transactions.count)
+            nc(totalBuys)
+            nc(totalSells)
+            nc(totalDeposits)
+            nc(totalWithdrawals)
+            nc(totalDividends)
+            ec(totalInvested)
+            ec(totalSold)
+            ec(totalDeposited)
+            ec(totalFees)
+            ForEach(columns, id: \.self) { col in ec(colTotal(col)) }
         }
-        .padding(.vertical, 10).padding(.horizontal, 8)
+        .padding(.vertical, 10).padding(.horizontal, 16)
         .background(Color(NSColor.windowBackgroundColor).opacity(0.6))
     }
 
-    @ViewBuilder func nc(_ v: Int, w: CGFloat) -> some View {
-        Text("\(v)").fontWeight(.bold).frame(width: w, alignment: .leading).padding(.horizontal, 4)
+    @ViewBuilder func nc(_ v: Int) -> some View {
+        Text("\(v)").fontWeight(.bold)
+            .blur(radius: privacyMode ? 6 : 0)
+            .frame(maxWidth: .infinity, alignment: .trailing)
     }
-    @ViewBuilder func ec(_ v: Double, w: CGFloat) -> some View {
+    @ViewBuilder func ec(_ v: Double) -> some View {
         Text(v == 0 ? "—" : v.formatted(.currency(code: "EUR").precision(.fractionLength(2))))
-            .fontWeight(.bold).font(.system(size: 12)).blur(radius: privacyMode ? 6 : 0)
-            .frame(width: w, alignment: .leading).padding(.horizontal, 4)
+            .fontWeight(.bold).font(.system(size: 12))
+            .blur(radius: privacyMode ? 6 : 0)
+            .frame(maxWidth: .infinity, alignment: .trailing)
     }
 }
 
@@ -585,7 +549,7 @@ struct TransactionsChartsSection: View {
         VStack(alignment: .leading, spacing: 12) {
             Text("Transaction Analytics").font(.title2).fontWeight(.bold).foregroundColor(.secondary)
             HStack(spacing: 24) {
-                TxAnnualCountChart(viewModel: viewModel, expandedChart: $chartToZoom)
+                TxAnnualCountChart(viewModel: viewModel, privacyMode: $privacyMode, expandedChart: $chartToZoom)
                 TxTotalByTypeChart(viewModel: viewModel, privacyMode: $privacyMode, expandedChart: $chartToZoom)
             }
             HStack(spacing: 24) {
@@ -597,11 +561,12 @@ struct TransactionsChartsSection: View {
 }
 
 // =========================================================================
-// MARK: - CHART 1 : Total Transactions per Year (stacked bars)
+// MARK: - CHART 1 : Total Transactions per Year
 // =========================================================================
 
 struct TxAnnualCountChart: View {
     @ObservedObject var viewModel: PortfolioViewModel
+    @Binding var privacyMode: Bool
     var isExpanded: Bool = false
     @Binding var expandedChart: TxChartZoomType?
 
@@ -664,36 +629,46 @@ struct TxAnnualCountChart: View {
                         .position(by: .value("Type", item.type.rawValue))
                         .cornerRadius(3)
                         
-                        // Infobulle Interactive
                         if let h = hoveredYear, h == item.year {
-                            RuleMark(x: .value("Year", h))
-                                .foregroundStyle(.secondary.opacity(0.5)).lineStyle(StrokeStyle(lineWidth: 1, dash: [4]))
-                                .annotation(position: .top) {
-                                    VStack(alignment: .leading, spacing: 4) {
-                                        Text(h).font(.caption.bold())
-                                        Divider()
-                                        ForEach(seriesLabels.filter { !hiddenTypes.contains($0) }, id: \.self) { label in
-                                            let c = data.first { $0.year == h && $0.type.rawValue == label }?.count ?? 0
-                                            HStack {
-                                                Circle().fill(color(for: label)).frame(width: 6, height: 6)
-                                                Text("\(label): \(c)").font(.caption2)
-                                            }
-                                        }
-                                    }.padding(8).background(Color(NSColor.windowBackgroundColor).opacity(0.95)).cornerRadius(8).shadow(radius: 4)
-                                }
+                            RuleMark(x: .value("Year", h)).foregroundStyle(Color.secondary.opacity(0.3)).zIndex(-1)
                         }
                     }
                 }
-                .chartYAxis {
-                    AxisMarks(position: .leading) { v in
-                        AxisGridLine(); AxisTick()
-                        AxisValueLabel { if let i = v.as(Int.self) { Text("\(i)").font(.system(size: 10)) } }
+                .chartOverlay { proxy in
+                    GeometryReader { geometry in
+                        Rectangle().fill(.clear).contentShape(Rectangle())
+                            .onContinuousHover { phase in
+                                switch phase {
+                                case .active(let location):
+                                    if let year: String = proxy.value(atX: location.x) { hoveredYear = year }
+                                case .ended:
+                                    hoveredYear = nil
+                                }
+                            }
+                        
+                        if let h = hoveredYear {
+                            if let xPosition = proxy.position(forX: h) {
+                                VStack(alignment: .leading, spacing: 4) {
+                                    Text(h).font(.caption.bold())
+                                    Divider()
+                                    ForEach(seriesLabels.filter { !hiddenTypes.contains($0) }, id: \.self) { label in
+                                        let c = data.first { $0.year == h && $0.type.rawValue == label }?.count ?? 0
+                                        HStack {
+                                            Circle().fill(color(for: label)).frame(width: 6, height: 6)
+                                            Text("\(label): \(c)").font(.caption2)
+                                                .blur(radius: privacyMode ? 6 : 0)
+                                        }
+                                    }
+                                }
+                                .padding(8).background(Color(NSColor.windowBackgroundColor).opacity(0.95)).cornerRadius(8).shadow(radius: 4)
+                                .position(x: max(60, min(geometry.size.width - 60, xPosition)), y: 50)
+                            }
+                        }
                     }
                 }
-                .chartXAxis {
-                    AxisMarks { v in AxisValueLabel { if let s = v.as(String.self) { Text(s).font(.caption) } } }
-                }
-                .chartXSelection(value: $hoveredYear)
+                .chartLegend(.hidden)
+                .chartYAxis { AxisMarks(position: .leading) { v in AxisGridLine(); AxisTick(); AxisValueLabel { if let i = v.as(Int.self) { Text("\(i)").font(.system(size: 10)) } } } }
+                .chartXAxis { AxisMarks { v in AxisValueLabel { if let s = v.as(String.self) { Text(s).font(.caption) } } } }
             }
             BlueChipWatermark()
         }
@@ -702,7 +677,7 @@ struct TxAnnualCountChart: View {
 }
 
 // =========================================================================
-// MARK: - CHART 2 : Total by Transaction Type (bars + count line)
+// MARK: - CHART 2 : Total by Transaction Type
 // =========================================================================
 
 struct TxTotalByTypeChart: View {
@@ -769,19 +744,6 @@ struct TxTotalByTypeChart: View {
                             )
                             .foregroundStyle(Color.forTransactionType(item.type).opacity(0.75))
                             .cornerRadius(4)
-                            
-                            if let h = hoveredType, h == item.type.rawValue {
-                                RuleMark(x: .value("Type", h))
-                                    .foregroundStyle(.secondary.opacity(0.5)).lineStyle(StrokeStyle(lineWidth: 1, dash: [4]))
-                                    .annotation(position: .top) {
-                                        VStack(alignment: .leading) {
-                                            Text(h).font(.caption.bold())
-                                            Divider()
-                                            Text("Amount: \(item.amount.formatted(.currency(code: "EUR").precision(.fractionLength(0))))").font(.caption2).foregroundColor(Color.forTransactionType(item.type))
-                                            Text("Count: \(item.count)").font(.caption2).foregroundColor(.purple)
-                                        }.padding(8).background(Color(NSColor.windowBackgroundColor).opacity(0.95)).cornerRadius(8).shadow(radius: 4)
-                                    }
-                            }
                         }
                     }
                     if !hiddenSeries.contains("Count") {
@@ -795,7 +757,47 @@ struct TxTotalByTypeChart: View {
                             .symbol { Circle().fill(Color.purple).frame(width: 7, height: 7) }
                         }
                     }
+                    
+                    if let h = hoveredType, let _ = data.first(where: { $0.type.rawValue == h }) {
+                        RuleMark(x: .value("Type", h))
+                            .foregroundStyle(Color.secondary.opacity(0.3))
+                            .zIndex(-1)
+                    }
                 }
+                .chartOverlay { proxy in
+                    GeometryReader { geometry in
+                        Rectangle().fill(.clear).contentShape(Rectangle())
+                            .onContinuousHover { phase in
+                                switch phase {
+                                case .active(let location):
+                                    if let type: String = proxy.value(atX: location.x) { hoveredType = type }
+                                case .ended:
+                                    hoveredType = nil
+                                }
+                            }
+                        
+                        if let h = hoveredType, let item = data.first(where: { $0.type.rawValue == h }) {
+                            if let xPosition = proxy.position(forX: h) {
+                                VStack(alignment: .leading, spacing: 4) {
+                                    Text(h).font(.caption.bold()).foregroundColor(.primary)
+                                    Divider()
+                                    Text("Amount: \(item.amount.formatted(.currency(code: "EUR").precision(.fractionLength(0))))")
+                                        .font(.caption2).foregroundColor(Color.forTransactionType(item.type))
+                                        .blur(radius: privacyMode ? 6 : 0)
+                                    Text("Count: \(item.count)")
+                                        .font(.caption2).foregroundColor(.purple)
+                                        .blur(radius: privacyMode ? 6 : 0)
+                                }
+                                .frame(width: 130) // CONTRAINTE DE LARGEUR AJOUTÉE ICI
+                                .padding(8).background(Color(NSColor.windowBackgroundColor).opacity(0.95)).cornerRadius(8).shadow(radius: 4)
+                                .overlay(RoundedRectangle(cornerRadius: 8).stroke(Color.gray.opacity(0.2), lineWidth: 1))
+                                .position(x: max(75, min(geometry.size.width - 75, xPosition)), y: 40)
+                            }
+                        }
+                    }
+                }
+                .chartYScale(domain: 0...(maxAmount > 0 ? maxAmount * 1.3 : 100))
+                .chartLegend(.hidden)
                 .chartYAxis {
                     AxisMarks(position: .leading) { v in
                         AxisGridLine(); AxisTick()
@@ -806,10 +808,7 @@ struct TxTotalByTypeChart: View {
                         }
                     }
                 }
-                .chartXAxis {
-                    AxisMarks { v in AxisValueLabel { if let s = v.as(String.self) { Text(s).font(.caption) } } }
-                }
-                .chartXSelection(value: $hoveredType)
+                .chartXAxis { AxisMarks { v in AxisValueLabel { if let s = v.as(String.self) { Text(s).font(.caption) } } } }
             }
             BlueChipWatermark()
         }
@@ -822,7 +821,11 @@ struct TxTotalByTypeChart: View {
 }
 
 // =========================================================================
-// MARK: - CHART 3 : Buys over time (bars par transaction)
+// MARK: - CHART 3 : Buys over Time (1 Barre = 1 Transaction Chronologique)
+// =========================================================================
+
+// =========================================================================
+// MARK: - CHART 3 : Buys over Time (1 Barre = 1 Transaction Chronologique)
 // =========================================================================
 
 struct TxBuysOverTimeChart: View {
@@ -833,6 +836,7 @@ struct TxBuysOverTimeChart: View {
 
     struct BuyPoint: Identifiable {
         let id = UUID()
+        let index: Int
         let date: Date
         let amount: Double
         let ticker: String
@@ -843,15 +847,19 @@ struct TxBuysOverTimeChart: View {
     }()
 
     var buys: [BuyPoint] {
-        viewModel.transactions
-            .filter { $0.type == .buy }
-            .sorted { $0.date < $1.date }
-            .map { BuyPoint(date: $0.date, amount: $0.amountEUR, ticker: $0.ticker) }
+        let sorted = viewModel.transactions.filter { $0.type == .buy }.sorted { $0.date < $1.date }
+        return sorted.enumerated().map { (idx, tx) in
+            BuyPoint(index: idx, date: tx.date, amount: tx.amountEUR, ticker: tx.ticker)
+        }
+    }
+    
+    var maxAmount: Double {
+        buys.map { $0.amount }.max() ?? 100
     }
 
-    var trendPoints: [(date: Date, value: Double)] {
+    var trendPoints: [(index: Int, value: Double)] {
         guard buys.count >= 2 else { return [] }
-        let xs = buys.map { $0.date.timeIntervalSince1970 }
+        let xs = buys.map { Double($0.index) }
         let ys = buys.map { $0.amount }
         let n = Double(xs.count)
         let sumX = xs.reduce(0, +); let sumY = ys.reduce(0, +)
@@ -861,19 +869,38 @@ struct TxBuysOverTimeChart: View {
         guard denom != 0 else { return [] }
         let slope = (n * sumXY - sumX * sumY) / denom
         let intercept = (sumY - slope * sumX) / n
+        
         return [buys.first!, buys.last!].map { pt in
-            let y = slope * pt.date.timeIntervalSince1970 + intercept
-            return (date: pt.date, value: max(0, y))
+            let y = slope * Double(pt.index) + intercept
+            return (index: pt.index, value: max(0, y))
         }
     }
 
-    @State private var hoveredDate: Date? = nil
+    @State private var hoveredIndex: Int? = nil
+    @State private var hiddenSeries: Set<String> = []
 
     var body: some View {
         VStack(alignment: .leading, spacing: 8) {
             HStack {
                 if !isExpanded { Text("Buys over Time").font(.headline).foregroundColor(.secondary) }
                 Spacer()
+                
+                HStack(spacing: 12) {
+                    Button(action: { withAnimation { toggleHidden("Amount €") } }) {
+                        HStack(spacing: 4) {
+                            RoundedRectangle(cornerRadius: 2).fill(Color.blue.opacity(0.8)).frame(width: 12, height: 12)
+                            Text("Amount €").font(.caption).foregroundColor(hiddenSeries.contains("Amount €") ? .secondary : .primary)
+                        }
+                    }.buttonStyle(.plain).opacity(hiddenSeries.contains("Amount €") ? 0.4 : 1)
+
+                    Button(action: { withAnimation { toggleHidden("Trend") } }) {
+                        HStack(spacing: 4) {
+                            Rectangle().fill(Color.gray).frame(width: 12, height: 2)
+                            Text("Trend").font(.caption).foregroundColor(hiddenSeries.contains("Trend") ? .secondary : .primary)
+                        }
+                    }.buttonStyle(.plain).opacity(hiddenSeries.contains("Trend") ? 0.4 : 1)
+                }
+                
                 if !isExpanded { Button(action: { expandedChart = .buysOverTime }) { Image(systemName: "plus.magnifyingglass").foregroundColor(.secondary) }.buttonStyle(.plain) }
             }.padding(.bottom, 4)
             
@@ -881,38 +908,69 @@ struct TxBuysOverTimeChart: View {
                 emptyState("No buy transactions yet.")
             } else {
                 Chart {
-                    ForEach(buys) { buy in
-                        BarMark(
-                            x: .value("Date", buy.date, unit: .day),
-                            y: .value("Amount €", buy.amount)
-                        )
-                        .foregroundStyle(Color.blue.opacity(0.7))
-                        .cornerRadius(2)
-                    }
-                    ForEach(trendPoints.indices, id: \.self) { i in
-                        LineMark(
-                            x: .value("Date", trendPoints[i].date, unit: .day),
-                            y: .value("Trend", trendPoints[i].value),
-                            series: .value("Series", "trend")
-                        )
-                        .foregroundStyle(Color.gray.opacity(0.5))
-                        .lineStyle(StrokeStyle(lineWidth: 1.5))
-                        .interpolationMethod(.linear)
+                    if !hiddenSeries.contains("Amount €") {
+                        ForEach(buys) { buy in
+                            BarMark(
+                                x: .value("Tx", buy.index),
+                                y: .value("Amount €", buy.amount)
+                            )
+                            .foregroundStyle(Color.blue.opacity(0.8))
+                            .cornerRadius(2)
+                        }
                     }
                     
-                    if let d = hoveredDate, let buy = buys.min(by: { abs($0.date.timeIntervalSince(d)) < abs($1.date.timeIntervalSince(d)) }) {
-                        RuleMark(x: .value("Date", buy.date, unit: .day))
-                            .foregroundStyle(.secondary.opacity(0.5)).lineStyle(StrokeStyle(lineWidth: 1, dash: [4]))
-                            .annotation(position: .top) {
-                                VStack(alignment: .leading) {
-                                    Text(dateFmt.string(from: buy.date)).font(.caption.bold())
-                                    Divider()
-                                    Text("\(buy.ticker)").font(.caption2.bold()).foregroundColor(.blue)
-                                    Text("\(buy.amount.formatted(.currency(code: "EUR").precision(.fractionLength(0))))").font(.caption2)
-                                }.padding(8).background(Color(NSColor.windowBackgroundColor).opacity(0.95)).cornerRadius(8).shadow(radius: 4)
-                            }
+                    if !hiddenSeries.contains("Trend") {
+                        ForEach(trendPoints, id: \.index) { pt in
+                            LineMark(
+                                x: .value("Tx", pt.index),
+                                y: .value("Trend", pt.value)
+                            )
+                            .foregroundStyle(Color.gray.opacity(0.5))
+                            .lineStyle(StrokeStyle(lineWidth: 1.5))
+                        }
+                    }
+                    
+                    if let h = hoveredIndex, let _ = buys.first(where: { $0.index == h }) {
+                        RuleMark(x: .value("Tx", h))
+                            .foregroundStyle(Color.secondary.opacity(0.4))
+                            .zIndex(-1)
                     }
                 }
+                .chartOverlay { proxy in
+                    GeometryReader { geometry in
+                        Rectangle().fill(.clear).contentShape(Rectangle())
+                            .onContinuousHover { phase in
+                                switch phase {
+                                case .active(let location):
+                                    if let idx: Int = proxy.value(atX: location.x) { hoveredIndex = idx }
+                                case .ended:
+                                    hoveredIndex = nil
+                                }
+                            }
+                        
+                        if let h = hoveredIndex, let buy = buys.first(where: { $0.index == h }) {
+                            if let xPosition = proxy.position(forX: h) {
+                                VStack(alignment: .leading, spacing: 4) {
+                                    Text(dateFmt.string(from: buy.date)).font(.caption.bold()).foregroundColor(.primary)
+                                    Divider()
+                                    Text("\(buy.ticker)").font(.caption2.bold()).foregroundColor(.blue)
+                                    Text("\(buy.amount.formatted(.currency(code: "EUR").precision(.fractionLength(0))))")
+                                        .font(.caption2)
+                                        .blur(radius: privacyMode ? 6 : 0)
+                                }
+                                .frame(width: 100) // CONTRAINTE DE LARGEUR AJOUTÉE ICI
+                                .padding(8)
+                                .background(Color(NSColor.windowBackgroundColor).opacity(0.95))
+                                .cornerRadius(8)
+                                .shadow(radius: 4)
+                                .overlay(RoundedRectangle(cornerRadius: 8).stroke(Color.gray.opacity(0.2), lineWidth: 1))
+                                .position(x: max(60, min(geometry.size.width - 60, xPosition)), y: 40)
+                            }
+                        }
+                    }
+                }
+                .chartYScale(domain: 0...(maxAmount > 0 ? maxAmount * 1.3 : 100))
+                .chartLegend(.hidden)
                 .chartYAxis {
                     AxisMarks(position: .leading) { v in
                         AxisGridLine(); AxisTick()
@@ -920,20 +978,31 @@ struct TxBuysOverTimeChart: View {
                     }
                 }
                 .chartXAxis {
-                    AxisMarks(values: .automatic(desiredCount: 6)) { v in
-                        AxisValueLabel { if let d = v.as(Date.self) { Text(dateFmt.string(from: d)).font(.system(size: 9)) } }
+                    AxisMarks(values: .automatic(desiredCount: min(10, buys.count))) { v in
+                        if let idx = v.as(Int.self), idx >= 0, idx < buys.count {
+                            AxisTick()
+                            AxisValueLabel {
+                                Text(dateFmt.string(from: buys[idx].date))
+                                    .font(.system(size: 9))
+                                    .rotationEffect(.degrees(-45))
+                                    .offset(x: -10, y: 10)
+                            }
+                        }
                     }
                 }
-                .chartXSelection(value: $hoveredDate)
             }
             BlueChipWatermark()
         }
         .padding().frame(minHeight: isExpanded ? 500 : 360, maxHeight: isExpanded ? .infinity : 360).background(Color(NSColor.controlBackgroundColor)).cornerRadius(12).shadow(color: Color.black.opacity(0.05), radius: 2, x: 0, y: 1)
     }
+
+    func toggleHidden(_ key: String) {
+        if hiddenSeries.contains(key) { hiddenSeries.remove(key) } else { hiddenSeries.insert(key) }
+    }
 }
 
 // =========================================================================
-// MARK: - CHART 4 : Tax breakdown donut
+// MARK: - CHART 4 : Tax breakdown donut (Centré Proprement)
 // =========================================================================
 
 struct TxTaxBreakdownChart: View {
@@ -961,84 +1030,74 @@ struct TxTaxBreakdownChart: View {
     }
 
     var grandTotal: Double { slices.reduce(0) { $0 + $1.amount } }
+    
     @State private var selectedAngleValue: Double? = nil
+    @State private var hiddenItems: Set<String> = []
 
+    func color(for name: String) -> Color {
+        if let slice = slices.first(where: { $0.name == name }) { return slice.color }
+        return .gray
+    }
+    
+    var filteredSlices: [TaxSlice] {
+        slices.filter { !hiddenItems.contains($0.name) }
+    }
+    
     func getSelectedSlice(for angle: Double) -> TaxSlice? {
         var cum = 0.0
-        for slice in slices {
+        for slice in filteredSlices {
             cum += slice.amount
             if angle <= cum { return slice }
         }
-        return slices.last
+        return filteredSlices.last
     }
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 8) {
+        VStack {
             HStack {
                 if !isExpanded { Text("Fees & Taxes Breakdown").font(.headline).foregroundColor(.secondary) }
                 Spacer()
                 if !isExpanded { Button(action: { expandedChart = .taxBreakdown }) { Image(systemName: "plus.magnifyingglass").foregroundColor(.secondary) }.buttonStyle(.plain) }
-            }
-            if slices.isEmpty {
-                emptyState("No fees/taxes recorded yet.")
+            }.padding(.bottom, 4)
+            
+            InteractiveLegendView(items: slices.map { $0.name }, colorMap: color, hiddenItems: $hiddenItems).padding(.bottom, 8)
+            
+            if filteredSlices.isEmpty {
+                Spacer(); Text("No fees/taxes recorded yet.").foregroundColor(.secondary); Spacer()
             } else {
-                HStack(spacing: 24) {
-                    // Donut
-                    Chart(slices) { slice in
-                        SectorMark(
-                            angle: .value("Amount", slice.amount),
-                            innerRadius: .ratio(0.55),
-                            angularInset: 2
-                        )
-                        .foregroundStyle(slice.color)
-                        .cornerRadius(4)
-                    }
-                    .frame(width: isExpanded ? 300 : 180, height: isExpanded ? 300 : 180)
-                    .chartAngleSelection(value: $selectedAngleValue)
-                    .chartBackground { proxy in
-                        GeometryReader { geometry in
-                            if let s = selectedAngleValue, let slice = getSelectedSlice(for: s) {
-                                VStack(spacing: 2) {
-                                    Text(slice.name).font(.caption).foregroundColor(.secondary)
-                                    Text(slice.amount.formatted(.currency(code: "EUR").precision(.fractionLength(2))))
-                                        .font(.system(size: 13, weight: .bold))
-                                        .blur(radius: privacyMode ? 4 : 0)
-                                }.position(x: geometry.frame(in: .local).midX, y: geometry.frame(in: .local).midY)
-                            } else {
-                                VStack(spacing: 2) {
-                                    Text("Total").font(.caption).foregroundColor(.secondary)
-                                    Text(grandTotal.formatted(.currency(code: "EUR").precision(.fractionLength(2))))
-                                        .font(.system(size: 13, weight: .bold))
-                                        .blur(radius: privacyMode ? 4 : 0)
-                                }.position(x: geometry.frame(in: .local).midX, y: geometry.frame(in: .local).midY)
-                            }
-                        }
-                    }
-
-                    // Legend + values
-                    VStack(alignment: .leading, spacing: 10) {
-                        ForEach(slices) { slice in
-                            HStack(spacing: 8) {
-                                Circle().fill(slice.color).frame(width: 10, height: 10)
-                                VStack(alignment: .leading, spacing: 1) {
-                                    Text(slice.name).font(.caption).fontWeight(.semibold)
-                                    HStack(spacing: 6) {
-                                        Text(slice.amount.formatted(.currency(code: "EUR").precision(.fractionLength(2))))
-                                            .font(.caption).foregroundColor(.secondary)
-                                            .blur(radius: privacyMode ? 4 : 0)
-                                        if grandTotal > 0 {
-                                            Text(String(format: "%.1f%%", slice.amount / grandTotal * 100))
-                                                .font(.caption2).foregroundColor(.secondary)
-                                        }
-                                    }
-                                }
-                            }
-                        }
-                    }
-                    Spacer()
+                Chart(filteredSlices) { slice in
+                    SectorMark(
+                        angle: .value("Amount", slice.amount),
+                        innerRadius: .ratio(0.65),
+                        angularInset: 1.5
+                    )
+                    .foregroundStyle(slice.color)
+                    .cornerRadius(4)
                 }
+                .chartLegend(.hidden)
+                .chartAngleSelection(value: $selectedAngleValue)
+                .chartBackground { proxy in
+                    GeometryReader { geometry in
+                        if let s = selectedAngleValue, let slice = getSelectedSlice(for: s) {
+                            VStack {
+                                Text(slice.name).font(.headline).foregroundColor(slice.color)
+                                Text(slice.amount.formatted(.currency(code: "EUR").precision(.fractionLength(2))))
+                                    .font(.title3).fontWeight(.bold)
+                                    .blur(radius: privacyMode ? 6 : 0)
+                            }.position(x: geometry.frame(in: .local).midX, y: geometry.frame(in: .local).midY)
+                        } else {
+                            let displayedTotal = filteredSlices.reduce(0) { $0 + $1.amount }
+                            VStack {
+                                Text("Total").font(.subheadline).foregroundColor(.secondary)
+                                Text(displayedTotal.formatted(.currency(code: "EUR").precision(.fractionLength(2))))
+                                    .font(.title2).fontWeight(.bold)
+                                    .blur(radius: privacyMode ? 6 : 0)
+                            }.position(x: geometry.frame(in: .local).midX, y: geometry.frame(in: .local).midY)
+                        }
+                    }
+                }
+                .animation(.easeInOut(duration: 0.2), value: selectedAngleValue)
             }
-            Spacer()
             BlueChipWatermark()
         }
         .padding().frame(minHeight: isExpanded ? 500 : 360, maxHeight: isExpanded ? .infinity : 360).background(Color(NSColor.controlBackgroundColor)).cornerRadius(12).shadow(color: Color.black.opacity(0.05), radius: 2, x: 0, y: 1)
@@ -1065,7 +1124,7 @@ struct TransactionsFullScreenChartView: View {
             
             switch zoomType {
             case .annualCount:
-                TxAnnualCountChart(viewModel: viewModel, isExpanded: true, expandedChart: .constant(nil))
+                TxAnnualCountChart(viewModel: viewModel, privacyMode: $privacyMode, isExpanded: true, expandedChart: .constant(nil))
             case .typeSummary:
                 TxTotalByTypeChart(viewModel: viewModel, privacyMode: $privacyMode, isExpanded: true, expandedChart: .constant(nil))
             case .buysOverTime:
@@ -1178,13 +1237,14 @@ struct AddEditTransactionView: View {
 
             Divider()
             HStack {
-                if isEditing {
-                    Button(role: .destructive) {
-                        viewModel.transactions.removeAll { $0.id == transaction!.id }; dismiss()
-                    } label: { Text("Delete") }
-                }
-                Spacer()
                 Button("Cancel") { dismiss() }.keyboardShortcut(.cancelAction)
+                Spacer()
+                if isEditing {
+                    Button("Delete Transaction") {
+                        viewModel.transactions.removeAll { $0.id == transaction!.id }
+                        dismiss()
+                    }.foregroundColor(.red).padding(.trailing, 16)
+                }
                 Button(isEditing ? "Save" : "Add") { save() }
                     .keyboardShortcut(.defaultAction).buttonStyle(.borderedProminent)
             }.padding()
