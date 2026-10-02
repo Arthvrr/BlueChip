@@ -2,7 +2,7 @@ import SwiftUI
 import Charts
 
 // =========================================================================
-// MARK: - ZOOM ENUM
+// MARK: - ENUMS & HELPERS
 // =========================================================================
 
 enum TxChartZoomType: String, Identifiable {
@@ -10,9 +10,15 @@ enum TxChartZoomType: String, Identifiable {
     var id: String { self.rawValue }
 }
 
-// =========================================================================
-// MARK: - HELPERS
-// =========================================================================
+enum TxTimeFilter: String, CaseIterable, Identifiable {
+    case all = "All Time"
+    case thisMonth = "This Month"
+    case thisQuarter = "This Quarter"
+    case ytd = "Year to Date"
+    case oneYear = "Last 12 Months"
+    case custom = "Custom Range"
+    var id: String { self.rawValue }
+}
 
 extension Color {
     static func forTransactionType(_ type: TransactionType) -> Color {
@@ -43,11 +49,48 @@ struct TransactionsView: View {
     @State private var filterType: TransactionType? = nil
     
     @State private var chartToZoom: TxChartZoomType? = nil
+    
+    @State private var timeFilter: TxTimeFilter = .all
+        
+    @State private var customStartDate: Date = Calendar.current.date(byAdding: .month, value: -1, to: Date()) ?? Date()
+    @State private var customEndDate: Date = Date()
+
+    // NOUVEAU : Logique de filtrage globale appliquée à toute la page
+    var filteredGlobalTransactions: [Transaction] {
+        let now = Date()
+        let cal = Calendar.current
+        
+        switch timeFilter {
+        case .all:
+            return viewModel.transactions
+        case .thisMonth:
+            guard let start = cal.date(from: cal.dateComponents([.year, .month], from: now)) else { return viewModel.transactions }
+            return viewModel.transactions.filter { $0.date >= start }
+        case .thisQuarter:
+            let month = cal.component(.month, from: now)
+            let quarterMonth = ((month - 1) / 3) * 3 + 1
+            var comps = cal.dateComponents([.year], from: now)
+            comps.month = quarterMonth
+            guard let start = cal.date(from: comps) else { return viewModel.transactions }
+            return viewModel.transactions.filter { $0.date >= start }
+        case .ytd:
+            guard let start = cal.date(from: cal.dateComponents([.year], from: now)) else { return viewModel.transactions }
+            return viewModel.transactions.filter { $0.date >= start }
+        case .oneYear:
+            guard let start = cal.date(byAdding: .year, value: -1, to: now) else { return viewModel.transactions }
+            return viewModel.transactions.filter { $0.date >= start }
+            
+        case .custom:
+            let endOfDay = cal.date(bySettingHour: 23, minute: 59, second: 59, of: customEndDate) ?? customEndDate
+            return viewModel.transactions.filter { $0.date >= customStartDate && $0.date <= endOfDay }
+        }
+    }
 
     var body: some View {
         ScrollView(.vertical) {
             VStack(spacing: 24) {
-                TransactionsDashboardSection(viewModel: viewModel, privacyMode: $privacyMode)
+                // Les sous-vues reçoivent maintenant 'filteredGlobalTransactions' au lieu de tout piocher dans le viewModel
+                TransactionsDashboardSection(tx: filteredGlobalTransactions, privacyMode: $privacyMode)
 
                 TransactionsGoalBar(viewModel: viewModel, privacyMode: $privacyMode)
                     .contentShape(Rectangle())
@@ -55,17 +98,21 @@ struct TransactionsView: View {
 
                 TransactionsTableSection(
                     viewModel: viewModel,
+                    globalTransactions: filteredGlobalTransactions,
                     privacyMode: $privacyMode,
                     searchText: $searchText,
                     filterType: $filterType,
+                    timeFilter: $timeFilter,
+                    customStartDate: $customStartDate,
+                    customEndDate: $customEndDate,
                     editingTransaction: $editingTransaction,
                     showAddSheet: $showAddSheet,
-                    showAddColumnSheet: $showAddColumnSheet
+                    showAddColumnSheet: $showAddColumnSheet,
                 )
 
-                TransactionsYearlySummarySection(viewModel: viewModel, privacyMode: $privacyMode)
+                TransactionsYearlySummarySection(viewModel: viewModel, tx: filteredGlobalTransactions, privacyMode: $privacyMode)
 
-                TransactionsChartsSection(viewModel: viewModel, privacyMode: $privacyMode, chartToZoom: $chartToZoom)
+                TransactionsChartsSection(viewModel: viewModel, tx: filteredGlobalTransactions, privacyMode: $privacyMode, chartToZoom: $chartToZoom)
             }
             .padding()
         }
@@ -82,7 +129,7 @@ struct TransactionsView: View {
             AddCustomColumnView(viewModel: viewModel)
         }
         .sheet(item: $chartToZoom) { type in
-            TransactionsFullScreenChartView(zoomType: type, viewModel: viewModel, privacyMode: $privacyMode)
+            TransactionsFullScreenChartView(zoomType: type, viewModel: viewModel, tx: filteredGlobalTransactions, privacyMode: $privacyMode)
         }
     }
 }
@@ -92,10 +139,8 @@ struct TransactionsView: View {
 // =========================================================================
 
 struct TransactionsDashboardSection: View {
-    @ObservedObject var viewModel: PortfolioViewModel
+    let tx: [Transaction] // Reçoit les transactions filtrées
     @Binding var privacyMode: Bool
-
-    var tx: [Transaction] { viewModel.transactions }
 
     var totalDeposited:   Double { tx.filter { $0.type == .deposit    }.reduce(0) { $0 + $1.amountEUR } }
     var totalWithdrawn:   Double { tx.filter { $0.type == .withdrawal }.reduce(0) { $0 + $1.amountEUR } }
@@ -117,7 +162,7 @@ struct TransactionsDashboardSection: View {
                 txCard("Total Sold",         value: totalSold,       color: .orange)
                 txCard("Dividends Received", value: totalDividends,  color: .mint)
                 txCard("Total Fees & Taxes", value: totalCustomFees, color: .red)
-                DashboardCard(title: "Total Transactions", value: "\(tx.count)", titleIcon: nil, privacyMode: $privacyMode)
+                DashboardCard(title: "Transactions Found", value: "\(tx.count)", titleIcon: nil, privacyMode: $privacyMode)
             }
         }
     }
@@ -144,6 +189,7 @@ struct TransactionsGoalBar: View {
     @ObservedObject var viewModel: PortfolioViewModel
     @Binding var privacyMode: Bool
 
+    // La jauge d'objectif garde la logique sur TOUTES les transactions de l'utilisateur
     var txCount: Int   { viewModel.transactions.count }
     var target: Double { viewModel.transactionGoalTarget }
     var progress: Double { target > 0 ? min(Double(txCount) / target, 1) : 0 }
@@ -180,9 +226,13 @@ struct TransactionsGoalBar: View {
 
 struct TransactionsTableSection: View {
     @ObservedObject var viewModel: PortfolioViewModel
+    let globalTransactions: [Transaction]
     @Binding var privacyMode: Bool
     @Binding var searchText: String
     @Binding var filterType: TransactionType?
+    @Binding var timeFilter: TxTimeFilter
+    @Binding var customStartDate: Date
+    @Binding var customEndDate: Date
     @Binding var editingTransaction: Transaction?
     @Binding var showAddSheet: Bool
     @Binding var showAddColumnSheet: Bool
@@ -192,7 +242,7 @@ struct TransactionsTableSection: View {
     }()
 
     var filtered: [Transaction] {
-        var list = viewModel.transactions.sorted { $0.date > $1.date }
+        var list = globalTransactions.sorted { $0.date > $1.date }
         if let f = filterType { list = list.filter { $0.type == f } }
         if !searchText.isEmpty {
             list = list.filter {
@@ -211,6 +261,36 @@ struct TransactionsTableSection: View {
             HStack {
                 Text("Transaction History").font(.title2).fontWeight(.bold).foregroundColor(.secondary)
                 Spacer()
+                
+                Picker("", selection: $timeFilter) {
+                    ForEach(TxTimeFilter.allCases) { filter in
+                        Text(filter.rawValue).tag(filter)
+                    }
+                }
+                .labelsHidden()
+                .frame(width: 140)
+                .padding(4)
+                .background(Color(NSColor.windowBackgroundColor))
+                .cornerRadius(8)
+                
+                // NOUVEAU : Affiche les deux DatePickers si "Custom Range" est sélectionné
+                if timeFilter == .custom {
+                    HStack(spacing: 4) {
+                        DatePicker("", selection: $customStartDate, displayedComponents: .date)
+                            .labelsHidden()
+                            .frame(width: 100)
+                        
+                        Text("-").foregroundColor(.secondary)
+                        
+                        DatePicker("", selection: $customEndDate, displayedComponents: .date)
+                            .labelsHidden()
+                            .frame(width: 100)
+                    }
+                    .padding(4)
+                    .background(Color(NSColor.windowBackgroundColor))
+                    .cornerRadius(8)
+                }
+                
                 ScrollView(.horizontal, showsIndicators: false) {
                     HStack(spacing: 8) {
                         filterChip(nil, label: "All")
@@ -248,7 +328,7 @@ struct TransactionsTableSection: View {
                         if filtered.isEmpty {
                             VStack(spacing: 12) {
                                 Image(systemName: "clock.arrow.circlepath").font(.system(size: 36)).foregroundColor(.secondary)
-                                Text(searchText.isEmpty ? "No transactions yet. Tap + Add to log your first." : "No results for \"\(searchText)\".")
+                                Text(searchText.isEmpty ? "No transactions found in this period." : "No results for \"\(searchText)\".")
                                     .foregroundColor(.secondary)
                             }
                             .frame(maxWidth: .infinity, maxHeight: .infinity).padding(40)
@@ -378,20 +458,21 @@ struct TransactionRowView: View {
 
 struct TransactionsYearlySummarySection: View {
     @ObservedObject var viewModel: PortfolioViewModel
+    let tx: [Transaction]
     @Binding var privacyMode: Bool
 
     var years: [Int] {
-        Array(Set(viewModel.transactions.map { Calendar.current.component(.year, from: $0.date) })).sorted(by: >)
+        Array(Set(tx.map { Calendar.current.component(.year, from: $0.date) })).sorted(by: >)
     }
     func txForYear(_ year: Int) -> [Transaction] {
-        viewModel.transactions.filter { Calendar.current.component(.year, from: $0.date) == year }
+        tx.filter { Calendar.current.component(.year, from: $0.date) == year }
     }
 
     var body: some View {
         VStack(alignment: .leading, spacing: 8) {
             Text("Yearly Summary").font(.title2).fontWeight(.bold).foregroundColor(.secondary)
             if years.isEmpty {
-                Text("No data yet.").foregroundColor(.secondary).padding()
+                Text("No data for this period.").foregroundColor(.secondary).padding()
             } else {
                 GeometryReader { geo in
                     ScrollView(.horizontal, showsIndicators: false) {
@@ -405,7 +486,7 @@ struct TransactionsYearlySummarySection: View {
                                         YearlySummaryRowView(year: year, transactions: txForYear(year), columns: viewModel.transactionCustomColumns, privacyMode: privacyMode)
                                         Divider()
                                     }
-                                    YearlyTotalsRowView(transactions: viewModel.transactions, columns: viewModel.transactionCustomColumns, privacyMode: privacyMode)
+                                    YearlyTotalsRowView(transactions: tx, columns: viewModel.transactionCustomColumns, privacyMode: privacyMode)
                                 }
                             }
                         }
@@ -542,6 +623,7 @@ struct YearlyTotalsRowView: View {
 
 struct TransactionsChartsSection: View {
     @ObservedObject var viewModel: PortfolioViewModel
+    let tx: [Transaction]
     @Binding var privacyMode: Bool
     @Binding var chartToZoom: TxChartZoomType?
 
@@ -549,12 +631,12 @@ struct TransactionsChartsSection: View {
         VStack(alignment: .leading, spacing: 12) {
             Text("Transaction Analytics").font(.title2).fontWeight(.bold).foregroundColor(.secondary)
             HStack(spacing: 24) {
-                TxAnnualCountChart(viewModel: viewModel, privacyMode: $privacyMode, expandedChart: $chartToZoom)
-                TxTotalByTypeChart(viewModel: viewModel, privacyMode: $privacyMode, expandedChart: $chartToZoom)
+                TxAnnualCountChart(viewModel: viewModel, tx: tx, privacyMode: $privacyMode, expandedChart: $chartToZoom)
+                TxTotalByTypeChart(viewModel: viewModel, tx: tx, privacyMode: $privacyMode, expandedChart: $chartToZoom)
             }
             HStack(spacing: 24) {
-                TxBuysOverTimeChart(viewModel: viewModel, privacyMode: $privacyMode, expandedChart: $chartToZoom)
-                TxTaxBreakdownChart(viewModel: viewModel, privacyMode: $privacyMode, expandedChart: $chartToZoom)
+                TxBuysOverTimeChart(viewModel: viewModel, tx: tx, privacyMode: $privacyMode, expandedChart: $chartToZoom)
+                TxTaxBreakdownChart(viewModel: viewModel, tx: tx, privacyMode: $privacyMode, expandedChart: $chartToZoom)
             }
         }
     }
@@ -566,6 +648,7 @@ struct TransactionsChartsSection: View {
 
 struct TxAnnualCountChart: View {
     @ObservedObject var viewModel: PortfolioViewModel
+    let tx: [Transaction]
     @Binding var privacyMode: Bool
     var isExpanded: Bool = false
     @Binding var expandedChart: TxChartZoomType?
@@ -578,8 +661,8 @@ struct TxAnnualCountChart: View {
     }
 
     var years: [Int] {
-        guard !viewModel.transactions.isEmpty else { return [] }
-        let all = viewModel.transactions.map { Calendar.current.component(.year, from: $0.date) }
+        guard !tx.isEmpty else { return [] }
+        let all = tx.map { Calendar.current.component(.year, from: $0.date) }
         let minY = all.min() ?? 2022
         let maxY = all.max() ?? Calendar.current.component(.year, from: Date())
         return Array(minY...maxY)
@@ -589,7 +672,7 @@ struct TxAnnualCountChart: View {
         let stackedTypes: [TransactionType] = [.buy, .sell, .deposit, .withdrawal]
         var items: [AnnualCountItem] = []
         for year in years {
-            let txYear = viewModel.transactions.filter { Calendar.current.component(.year, from: $0.date) == year }
+            let txYear = tx.filter { Calendar.current.component(.year, from: $0.date) == year }
             for type in stackedTypes {
                 let count = txYear.filter { $0.type == type }.count
                 items.append(AnnualCountItem(year: String(year), type: type, count: count))
@@ -617,7 +700,7 @@ struct TxAnnualCountChart: View {
             InteractiveLegendView(items: seriesLabels, colorMap: color, hiddenItems: $hiddenTypes)
             
             if data.isEmpty {
-                emptyState("No transactions yet.")
+                emptyState("No transactions in this period.")
             } else {
                 Chart {
                     ForEach(data.filter { !hiddenTypes.contains($0.type.rawValue) }) { item in
@@ -682,6 +765,7 @@ struct TxAnnualCountChart: View {
 
 struct TxTotalByTypeChart: View {
     @ObservedObject var viewModel: PortfolioViewModel
+    let tx: [Transaction]
     @Binding var privacyMode: Bool
     var isExpanded: Bool = false
     @Binding var expandedChart: TxChartZoomType?
@@ -697,7 +781,7 @@ struct TxTotalByTypeChart: View {
 
     var data: [TypeSummary] {
         displayedTypes.map { t in
-            let filtered = viewModel.transactions.filter { $0.type == t }
+            let filtered = tx.filter { $0.type == t }
             return TypeSummary(type: t, amount: filtered.reduce(0) { $0 + $1.amountEUR }, count: filtered.count)
         }.filter { $0.count > 0 }
     }
@@ -733,7 +817,7 @@ struct TxTotalByTypeChart: View {
             }.padding(.bottom, 4)
 
             if data.isEmpty {
-                emptyState("No transactions yet.")
+                emptyState("No transactions in this period.")
             } else {
                 Chart {
                     if !hiddenSeries.contains("Amount") {
@@ -788,7 +872,7 @@ struct TxTotalByTypeChart: View {
                                         .font(.caption2).foregroundColor(.purple)
                                         .blur(radius: privacyMode ? 6 : 0)
                                 }
-                                .frame(width: 130) // CONTRAINTE DE LARGEUR AJOUTÉE ICI
+                                .frame(width: 130)
                                 .padding(8).background(Color(NSColor.windowBackgroundColor).opacity(0.95)).cornerRadius(8).shadow(radius: 4)
                                 .overlay(RoundedRectangle(cornerRadius: 8).stroke(Color.gray.opacity(0.2), lineWidth: 1))
                                 .position(x: max(75, min(geometry.size.width - 75, xPosition)), y: 40)
@@ -821,15 +905,12 @@ struct TxTotalByTypeChart: View {
 }
 
 // =========================================================================
-// MARK: - CHART 3 : Buys over Time (1 Barre = 1 Transaction Chronologique)
-// =========================================================================
-
-// =========================================================================
-// MARK: - CHART 3 : Buys over Time (1 Barre = 1 Transaction Chronologique)
+// MARK: - CHART 3 : Buys over Time
 // =========================================================================
 
 struct TxBuysOverTimeChart: View {
     @ObservedObject var viewModel: PortfolioViewModel
+    let tx: [Transaction]
     @Binding var privacyMode: Bool
     var isExpanded: Bool = false
     @Binding var expandedChart: TxChartZoomType?
@@ -847,9 +928,9 @@ struct TxBuysOverTimeChart: View {
     }()
 
     var buys: [BuyPoint] {
-        let sorted = viewModel.transactions.filter { $0.type == .buy }.sorted { $0.date < $1.date }
-        return sorted.enumerated().map { (idx, tx) in
-            BuyPoint(index: idx, date: tx.date, amount: tx.amountEUR, ticker: tx.ticker)
+        let sorted = tx.filter { $0.type == .buy }.sorted { $0.date < $1.date }
+        return sorted.enumerated().map { (idx, t) in
+            BuyPoint(index: idx, date: t.date, amount: t.amountEUR, ticker: t.ticker)
         }
     }
     
@@ -905,7 +986,7 @@ struct TxBuysOverTimeChart: View {
             }.padding(.bottom, 4)
             
             if buys.isEmpty {
-                emptyState("No buy transactions yet.")
+                emptyState("No buy transactions in this period.")
             } else {
                 Chart {
                     if !hiddenSeries.contains("Amount €") {
@@ -958,11 +1039,8 @@ struct TxBuysOverTimeChart: View {
                                         .font(.caption2)
                                         .blur(radius: privacyMode ? 6 : 0)
                                 }
-                                .frame(width: 100) // CONTRAINTE DE LARGEUR AJOUTÉE ICI
-                                .padding(8)
-                                .background(Color(NSColor.windowBackgroundColor).opacity(0.95))
-                                .cornerRadius(8)
-                                .shadow(radius: 4)
+                                .frame(width: 100)
+                                .padding(8).background(Color(NSColor.windowBackgroundColor).opacity(0.95)).cornerRadius(8).shadow(radius: 4)
                                 .overlay(RoundedRectangle(cornerRadius: 8).stroke(Color.gray.opacity(0.2), lineWidth: 1))
                                 .position(x: max(60, min(geometry.size.width - 60, xPosition)), y: 40)
                             }
@@ -1002,11 +1080,12 @@ struct TxBuysOverTimeChart: View {
 }
 
 // =========================================================================
-// MARK: - CHART 4 : Tax breakdown donut (Centré Proprement)
+// MARK: - CHART 4 : Tax breakdown donut
 // =========================================================================
 
 struct TxTaxBreakdownChart: View {
     @ObservedObject var viewModel: PortfolioViewModel
+    let tx: [Transaction]
     @Binding var privacyMode: Bool
     var isExpanded: Bool = false
     @Binding var expandedChart: TxChartZoomType?
@@ -1023,7 +1102,7 @@ struct TxTaxBreakdownChart: View {
         guard !cols.isEmpty else { return [] }
         let colors: [Color] = [.blue, .red, .orange, .green, .purple, .teal, .pink]
         return cols.enumerated().compactMap { (idx, col) in
-            let total = viewModel.transactions.reduce(0) { $0 + ($1.customFields[col] ?? 0) }
+            let total = tx.reduce(0) { $0 + ($1.customFields[col] ?? 0) }
             guard total > 0 else { return nil }
             return TaxSlice(name: col, amount: total, color: colors[idx % colors.count])
         }
@@ -1063,7 +1142,7 @@ struct TxTaxBreakdownChart: View {
             InteractiveLegendView(items: slices.map { $0.name }, colorMap: color, hiddenItems: $hiddenItems).padding(.bottom, 8)
             
             if filteredSlices.isEmpty {
-                Spacer(); Text("No fees/taxes recorded yet.").foregroundColor(.secondary); Spacer()
+                Spacer(); Text("No fees/taxes recorded in this period.").foregroundColor(.secondary); Spacer()
             } else {
                 Chart(filteredSlices) { slice in
                     SectorMark(
@@ -1112,6 +1191,7 @@ struct TransactionsFullScreenChartView: View {
     @Environment(\.dismiss) var dismiss
     let zoomType: TxChartZoomType
     @ObservedObject var viewModel: PortfolioViewModel
+    let tx: [Transaction]
     @Binding var privacyMode: Bool
 
     var body: some View {
@@ -1124,13 +1204,13 @@ struct TransactionsFullScreenChartView: View {
             
             switch zoomType {
             case .annualCount:
-                TxAnnualCountChart(viewModel: viewModel, privacyMode: $privacyMode, isExpanded: true, expandedChart: .constant(nil))
+                TxAnnualCountChart(viewModel: viewModel, tx: tx, privacyMode: $privacyMode, isExpanded: true, expandedChart: .constant(nil))
             case .typeSummary:
-                TxTotalByTypeChart(viewModel: viewModel, privacyMode: $privacyMode, isExpanded: true, expandedChart: .constant(nil))
+                TxTotalByTypeChart(viewModel: viewModel, tx: tx, privacyMode: $privacyMode, isExpanded: true, expandedChart: .constant(nil))
             case .buysOverTime:
-                TxBuysOverTimeChart(viewModel: viewModel, privacyMode: $privacyMode, isExpanded: true, expandedChart: .constant(nil))
+                TxBuysOverTimeChart(viewModel: viewModel, tx: tx, privacyMode: $privacyMode, isExpanded: true, expandedChart: .constant(nil))
             case .taxBreakdown:
-                TxTaxBreakdownChart(viewModel: viewModel, privacyMode: $privacyMode, isExpanded: true, expandedChart: .constant(nil))
+                TxTaxBreakdownChart(viewModel: viewModel, tx: tx, privacyMode: $privacyMode, isExpanded: true, expandedChart: .constant(nil))
             }
             
         }.padding(30).frame(minWidth: 900, minHeight: 700)
