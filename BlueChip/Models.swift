@@ -72,7 +72,7 @@ enum DividendGoalType: String, Codable, CaseIterable {
 
 // MARK: - CALENDAR MODELS
 enum CalendarEventType: String, Codable, CaseIterable {
-    case earnings = "Earnings Call"
+    case earnings = "Quarterly Earnings"
     case dividend = "Dividend Payment"
     case exDividend = "Ex-Dividend Date"
     case stockSplit = "Stock Split"
@@ -80,6 +80,8 @@ enum CalendarEventType: String, Codable, CaseIterable {
     case freeShares = "Free Shares"
     case ipo = "IPO"
     case spinOff = "Spin-off"
+    case macro = "Macro"
+    case anniversary = "Anniversary"
     
     var color: Color {
         switch self {
@@ -91,6 +93,8 @@ enum CalendarEventType: String, Codable, CaseIterable {
         case .freeShares: return .yellow
         case .ipo: return .orange
         case .spinOff: return .teal
+        case .macro: return .indigo
+        case .anniversary: return .pink
         }
     }
 }

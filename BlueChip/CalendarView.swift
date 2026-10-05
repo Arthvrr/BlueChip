@@ -1,4 +1,5 @@
 import SwiftUI
+import UniformTypeIdentifiers // NOUVEAU : Requis pour l'export .ical
 
 // =========================================================================
 // MARK: - US MARKET HOLIDAY CALCULATOR
@@ -12,7 +13,6 @@ struct MarketHoliday: Identifiable {
 
 struct USMarketHolidayHelper {
     
-    // Ajustement WE : Samedi -> Vendredi précédent, Dimanche -> Lundi suivant
     static func adjustForWeekend(_ date: Date) -> Date {
         let cal = Calendar.current
         let weekday = cal.component(.weekday, from: date)
@@ -24,7 +24,6 @@ struct USMarketHolidayHelper {
         return date
     }
     
-    // Algorithme de calcul de la date de Pâques
     static func calculateEaster(year: Int) -> Date? {
         let a = year % 19
         let b = year / 100
@@ -64,7 +63,6 @@ struct USMarketHolidayHelper {
         return current
     }
     
-    // Récupération des 10 jours fériés boursiers pour une année donnée
     static func getHolidays(forYear year: Int) -> [MarketHoliday] {
         var holidays: [MarketHoliday] = []
         let cal = Calendar.current
@@ -77,46 +75,15 @@ struct USMarketHolidayHelper {
             }
         }
         
-        // 1. New Year's Day (1er janvier)
         addFixed("New Year's Day", month: 1, day: 1)
-        
-        // 2. MLK Day (3e lundi de janvier)
-        if let mlk = nthWeekday(nth: 3, weekday: 2, month: 1, year: year) {
-            holidays.append(MarketHoliday(name: "Martin Luther King Jr. Day", date: mlk))
-        }
-        
-        // 3. Presidents' Day (3e lundi de février)
-        if let pres = nthWeekday(nth: 3, weekday: 2, month: 2, year: year) {
-            holidays.append(MarketHoliday(name: "Presidents' Day", date: pres))
-        }
-        
-        // 4. Good Friday (Vendredi saint - 2 jours avant Pâques)
-        if let easter = calculateEaster(year: year), let gf = cal.date(byAdding: .day, value: -2, to: easter) {
-            holidays.append(MarketHoliday(name: "Good Friday", date: gf))
-        }
-        
-        // 5. Memorial Day (Dernier lundi de mai)
-        if let mem = lastWeekday(weekday: 2, month: 5, year: year) {
-            holidays.append(MarketHoliday(name: "Memorial Day", date: mem))
-        }
-        
-        // 6. Juneteenth (19 juin)
+        if let mlk = nthWeekday(nth: 3, weekday: 2, month: 1, year: year) { holidays.append(MarketHoliday(name: "Martin Luther King Jr. Day", date: mlk)) }
+        if let pres = nthWeekday(nth: 3, weekday: 2, month: 2, year: year) { holidays.append(MarketHoliday(name: "Presidents' Day", date: pres)) }
+        if let easter = calculateEaster(year: year), let gf = cal.date(byAdding: .day, value: -2, to: easter) { holidays.append(MarketHoliday(name: "Good Friday", date: gf)) }
+        if let mem = lastWeekday(weekday: 2, month: 5, year: year) { holidays.append(MarketHoliday(name: "Memorial Day", date: mem)) }
         addFixed("Juneteenth National Independence Day", month: 6, day: 19)
-        
-        // 7. Independence Day (4 juillet)
         addFixed("Independence Day", month: 7, day: 4)
-        
-        // 8. Labor Day (1er lundi de septembre)
-        if let labor = nthWeekday(nth: 1, weekday: 2, month: 9, year: year) {
-            holidays.append(MarketHoliday(name: "Labor Day", date: labor))
-        }
-        
-        // 9. Thanksgiving Day (4e jeudi de novembre)
-        if let thanksgiving = nthWeekday(nth: 4, weekday: 5, month: 11, year: year) {
-            holidays.append(MarketHoliday(name: "Thanksgiving Day", date: thanksgiving))
-        }
-        
-        // 10. Christmas Day (25 décembre)
+        if let labor = nthWeekday(nth: 1, weekday: 2, month: 9, year: year) { holidays.append(MarketHoliday(name: "Labor Day", date: labor)) }
+        if let thanksgiving = nthWeekday(nth: 4, weekday: 5, month: 11, year: year) { holidays.append(MarketHoliday(name: "Thanksgiving Day", date: thanksgiving)) }
         addFixed("Christmas Day", month: 12, day: 25)
         
         return holidays
@@ -141,7 +108,6 @@ struct CalendarView: View {
     @State private var selectedTypeFilter: CalendarEventType? = nil
     @State private var selectedTickerFilter: String = ""
     
-    // 12 mois glissants
     var months: [Date] {
         let calendar = Calendar.current
         let today = Date()
@@ -149,22 +115,58 @@ struct CalendarView: View {
         return (0..<12).compactMap { calendar.date(byAdding: .month, value: $0, to: currentMonthStart) }
     }
     
-    // Jours fériés pour les années couvertes par les 12 mois glissants
     var marketHolidays: [MarketHoliday] {
         let currentYear = Calendar.current.component(.year, from: Date())
         return USMarketHolidayHelper.getHolidays(forYear: currentYear) + USMarketHolidayHelper.getHolidays(forYear: currentYear + 1)
     }
     
-    // Tickers disponibles (Portefeuille + Watchlist)
     var availableTickers: [String] {
         let pTickers = viewModel.positions.map { $0.ticker }
         let wTickers = viewModel.watchlistItems.map { $0.ticker }
-        return Array(Set(pTickers + wTickers)).sorted()
+        // Ajout de "MARKET" pour les événements macro générés
+        return Array(Set(pTickers + wTickers + ["MARKET"])).sorted()
     }
     
-    // Événements filtrés par la barre de recherche & filtres rapides
+    // NOUVEAU : Moteur de génération des événements automatiques (Macro + Anniversaires)
+    var allVirtualEvents: [CalendarEvent] {
+        var events = viewModel.calendarEvents
+        let currentYear = Calendar.current.component(.year, from: Date())
+        let yearsToScan = [currentYear - 1, currentYear, currentYear + 1]
+        
+        // 1. GÉNÉRATION DES 4 SORCIÈRES (Quadruple Witching)
+        for year in yearsToScan {
+            for month in [3, 6, 9, 12] {
+                // Le 3e Vendredi (weekday = 6)
+                if let witchingDate = USMarketHolidayHelper.nthWeekday(nth: 3, weekday: 6, month: month, year: year) {
+                    events.append(CalendarEvent(id: UUID(), date: witchingDate, type: .macro, ticker: "MARKET", note: "Quadruple Witching Day (Options & Futures Expiration)"))
+                }
+            }
+        }
+        
+        // 2. GÉNÉRATION DES ANNIVERSAIRES D'ACHAT
+        for pos in viewModel.positions {
+            let pDate: Date? = pos.purchaseDate
+            if let purchaseDate = pDate {
+                let purchaseYear = Calendar.current.component(.year, from: purchaseDate)
+                
+                for targetYear in yearsToScan {
+                    let yearsHeld = targetYear - purchaseYear
+                    if yearsHeld > 0 {
+                        var comps = Calendar.current.dateComponents([.month, .day], from: purchaseDate)
+                        comps.year = targetYear
+                        if let annivDate = Calendar.current.date(from: comps) {
+                            events.append(CalendarEvent(id: UUID(), date: annivDate, type: .anniversary, ticker: pos.ticker, note: "Holding for \(yearsHeld) Year(s)! 🎉"))
+                        }
+                    }
+                }
+            }
+        }
+        
+        return events
+    }
+    
     var filteredEvents: [CalendarEvent] {
-        viewModel.calendarEvents.filter { event in
+        allVirtualEvents.filter { event in
             let matchesSearch = searchText.isEmpty ||
                 event.ticker.localizedCaseInsensitiveContains(searchText) ||
                 event.note.localizedCaseInsensitiveContains(searchText) ||
@@ -177,24 +179,35 @@ struct CalendarView: View {
         }
     }
     
-    // 5 prochains événements à venir (parmi filtrés)
     var upcomingEvents: [CalendarEvent] {
         let startOfToday = Calendar.current.startOfDay(for: Date())
         return filteredEvents
-            .filter { $0.date >= startOfToday }
+            .filter { Calendar.current.startOfDay(for: $0.date) >= startOfToday }
             .sorted { $0.date < $1.date }
             .prefix(5)
             .map { $0 }
+    }
+    
+    // Fonction qui détermine si un événement est virtuel (pour bloquer l'édition)
+    func isVirtualEvent(_ event: CalendarEvent) -> Bool {
+        return !viewModel.calendarEvents.contains(where: { $0.id == event.id })
     }
 
     var body: some View {
         ScrollView(.vertical, showsIndicators: true) {
             VStack(spacing: 24) {
                 
-                // HEADER : Titre + Bouton Ajouter
+                // HEADER
                 HStack {
                     Text("Investor Calendar").font(.title).fontWeight(.bold)
                     Spacer()
+                    
+                    // NOUVEAU : Bouton Export iCal
+                    Button(action: exportToICal) {
+                        Label("Export .ical", systemImage: "square.and.arrow.up")
+                    }
+                    .buttonStyle(.bordered)
+                    
                     Button(action: {
                         selectedDate = Date()
                         showAddEventSheet = true
@@ -204,7 +217,6 @@ struct CalendarView: View {
                     .buttonStyle(.borderedProminent)
                 }
                 
-                // 1. BARRE DE RECHERCHE & FILTRES RAPIDES
                 CalendarFiltersSection(
                     searchText: $searchText,
                     selectedTypeFilter: $selectedTypeFilter,
@@ -212,15 +224,14 @@ struct CalendarView: View {
                     availableTickers: availableTickers
                 )
                 
-                // 2. RÉSUMÉ SOUS FORME DE TIRETS (5 PROCHAINS ÉVÉNEMENTS + BADGE TODAY)
                 UpcomingEventsSummarySection(
                     events: upcomingEvents,
+                    isVirtual: isVirtualEvent,
                     onDetail: { event in detailEvent = event },
                     onEdit: { event in editingEvent = event },
                     onDelete: { id in viewModel.calendarEvents.removeAll { $0.id == id } }
                 )
                 
-                // 3. CALENDRIER SUR 12 MOIS GLISSANTS (PLEINE LARGEUR, SCROLL VERTICAL)
                 VStack(spacing: 32) {
                     ForEach(months, id: \.self) { monthDate in
                         FullWidthMonthView(
@@ -228,6 +239,7 @@ struct CalendarView: View {
                             events: filteredEvents,
                             marketHolidays: marketHolidays,
                             selectedDate: $selectedDate,
+                            isVirtual: isVirtualEvent,
                             onAddEvent: { date in
                                 selectedDate = date
                                 showAddEventSheet = true
@@ -253,10 +265,56 @@ struct CalendarView: View {
             AddEditEventSheet(viewModel: viewModel, event: event, initialDate: event.date)
         }
         .sheet(item: $detailEvent) { event in
-            EventDetailSheet(event: event, onEdit: {
+            EventDetailSheet(event: event, isVirtual: isVirtualEvent(event), onEdit: {
                 detailEvent = nil
                 editingEvent = event
             })
+        }
+    }
+    
+    // NOUVEAU : Fonction d'exportation de tous les événements au format .ics standard
+    func exportToICal() {
+        var icalString = """
+        BEGIN:VCALENDAR
+        VERSION:2.0
+        PRODID:-//BlueChip//Portfolio Calendar//EN
+        CALSCALE:GREGORIAN
+        
+        """
+        
+        let df = DateFormatter()
+        df.dateFormat = "yyyyMMdd'T'HHmmss'Z'"
+        df.timeZone = TimeZone(secondsFromGMT: 0)
+        
+        for event in allVirtualEvents {
+            let startStr = df.string(from: event.date)
+            // Événement d'une heure par défaut pour la comptabilité iCal
+            let endStr = df.string(from: event.date.addingTimeInterval(3600))
+            let summary = "[\(event.type.rawValue)] \(event.ticker) - \(event.note)".replacingOccurrences(of: "\n", with: " ")
+            
+            icalString += """
+            BEGIN:VEVENT
+            DTSTAMP:\(startStr)
+            DTSTART:\(startStr)
+            DTEND:\(endStr)
+            SUMMARY:\(summary)
+            END:VEVENT
+            
+            """
+        }
+        
+        icalString += "END:VCALENDAR"
+        
+        let panel = NSSavePanel()
+        panel.allowedContentTypes = [UTType(filenameExtension: "ics")!]
+        panel.nameFieldStringValue = "BlueChip_Calendar.ics"
+        
+        if panel.runModal() == .OK, let url = panel.url {
+            do {
+                try icalString.write(to: url, atomically: true, encoding: .utf8)
+            } catch {
+                print("Failed to export iCal file: \(error)")
+            }
         }
     }
 }
@@ -274,7 +332,6 @@ struct CalendarFiltersSection: View {
     var body: some View {
         VStack(spacing: 12) {
             HStack(spacing: 16) {
-                // Recherche textuelle
                 HStack(spacing: 6) {
                     Image(systemName: "magnifyingglass").foregroundColor(.secondary)
                     TextField("Search ticker, note, event type…", text: $searchText)
@@ -289,7 +346,6 @@ struct CalendarFiltersSection: View {
                 .background(Color(NSColor.windowBackgroundColor))
                 .cornerRadius(8)
                 
-                // Filtre Ticker / Action
                 Picker("Stock:", selection: $selectedTickerFilter) {
                     Text("All Stocks").tag("")
                     ForEach(availableTickers, id: \.self) { t in
@@ -299,7 +355,6 @@ struct CalendarFiltersSection: View {
                 .frame(width: 180)
             }
             
-            // Filtres rapides par Type d'événement (Badges/Puces)
             ScrollView(.horizontal, showsIndicators: false) {
                 HStack(spacing: 8) {
                     Button(action: { selectedTypeFilter = nil }) {
@@ -343,11 +398,12 @@ struct CalendarFiltersSection: View {
 }
 
 // =========================================================================
-// MARK: - RÉSUMÉ DES 5 PROCHAINS ÉVÉNEMENTS (AVEC BADGE TODAY)
+// MARK: - RÉSUMÉ DES 5 PROCHAINS ÉVÉNEMENTS
 // =========================================================================
 
 struct UpcomingEventsSummarySection: View {
     let events: [CalendarEvent]
+    let isVirtual: (CalendarEvent) -> Bool
     let onDetail: (CalendarEvent) -> Void
     let onEdit: (CalendarEvent) -> Void
     let onDelete: (UUID) -> Void
@@ -376,6 +432,7 @@ struct UpcomingEventsSummarySection: View {
                 VStack(alignment: .leading, spacing: 10) {
                     ForEach(events) { event in
                         let isToday = Calendar.current.isDateInToday(event.date)
+                        let virtual = isVirtual(event)
                         
                         HStack(spacing: 12) {
                             Text("•")
@@ -383,7 +440,6 @@ struct UpcomingEventsSummarySection: View {
                                 .fontWeight(.bold)
                                 .foregroundColor(event.type.color)
                             
-                            // BADGE "TODAY" ROUGE SI AUJOURD'HUI
                             if isToday {
                                 Text("TODAY")
                                     .font(.caption2)
@@ -424,19 +480,21 @@ struct UpcomingEventsSummarySection: View {
                             
                             Spacer()
                             
-                            Text("(Click 1x detail / 2x edit)").font(.caption2).foregroundColor(.secondary.opacity(0.6))
-                            
-                            HStack(spacing: 8) {
-                                Button(action: { onDelete(event.id) }) {
-                                    Image(systemName: "trash").font(.caption).foregroundColor(.red.opacity(0.7))
-                                }.buttonStyle(.plain)
+                            if virtual {
+                                Text("(Generated Automatically)").font(.caption2).foregroundColor(.secondary.opacity(0.6))
+                            } else {
+                                Text("(Click 1x detail / 2x edit)").font(.caption2).foregroundColor(.secondary.opacity(0.6))
+                                HStack(spacing: 8) {
+                                    Button(action: { onDelete(event.id) }) {
+                                        Image(systemName: "trash").font(.caption).foregroundColor(.red.opacity(0.7))
+                                    }.buttonStyle(.plain)
+                                }
                             }
                         }
                         .padding(.vertical, 4)
                         .contentShape(Rectangle())
-                        // GESTE : 1x Clic = Détails, 2x Clics = Modifier
                         .onTapGesture(count: 2) {
-                            onEdit(event)
+                            if !virtual { onEdit(event) }
                         }
                         .onTapGesture(count: 1) {
                             onDetail(event)
@@ -457,7 +515,7 @@ struct UpcomingEventsSummarySection: View {
 }
 
 // =========================================================================
-// MARK: - VUE D'UN MOIS PLEINE LARGEUR (AVEC JOURS FÉRIÉS BOURSIERS)
+// MARK: - VUE D'UN MOIS PLEINE LARGEUR
 // =========================================================================
 
 struct FullWidthMonthView: View {
@@ -465,6 +523,7 @@ struct FullWidthMonthView: View {
     let events: [CalendarEvent]
     let marketHolidays: [MarketHoliday]
     @Binding var selectedDate: Date
+    let isVirtual: (CalendarEvent) -> Bool
     let onAddEvent: (Date) -> Void
     let onDetailEvent: (CalendarEvent) -> Void
     let onEditEvent: (CalendarEvent) -> Void
@@ -503,7 +562,6 @@ struct FullWidthMonthView: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 14) {
-            // Titre du mois
             HStack {
                 Text(monthYearTitle)
                     .font(.title2)
@@ -513,7 +571,6 @@ struct FullWidthMonthView: View {
             }
             .padding(.horizontal, 4)
             
-            // En-tête des jours de la semaine
             HStack(spacing: 0) {
                 ForEach(daysOfWeek, id: \.self) { day in
                     Text(day)
@@ -527,7 +584,6 @@ struct FullWidthMonthView: View {
             .background(Color(NSColor.windowBackgroundColor))
             .cornerRadius(8)
             
-            // Grille du mois pleine largeur
             let columns = Array(repeating: GridItem(.flexible(), spacing: 6), count: 7)
             LazyVGrid(columns: columns, spacing: 6) {
                 ForEach(0..<daysInMonth.count, id: \.self) { index in
@@ -540,6 +596,7 @@ struct FullWidthMonthView: View {
                             events: dayEvents,
                             holiday: holiday,
                             isSelected: Calendar.current.isDate(date, inSameDayAs: selectedDate),
+                            isVirtual: isVirtual,
                             onTapDay: {
                                 selectedDate = date
                                 onAddEvent(date)
@@ -561,12 +618,13 @@ struct FullWidthMonthView: View {
     }
 }
 
-// CELLULE D'UN JOUR PLEINE LARGEUR (AVEC JOUR FÉRIÉ BOURSIER)
+// CELLULE D'UN JOUR PLEINE LARGEUR
 struct FullWidthDayCellView: View {
     let date: Date
     let events: [CalendarEvent]
     let holiday: MarketHoliday?
     let isSelected: Bool
+    let isVirtual: (CalendarEvent) -> Bool
     let onTapDay: () -> Void
     let onDetailEvent: (CalendarEvent) -> Void
     let onEditEvent: (CalendarEvent) -> Void
@@ -606,7 +664,6 @@ struct FullWidthDayCellView: View {
             .padding(.horizontal, 4)
             .padding(.top, 4)
             
-            // INDICATEUR JOUR FÉRIÉ BOURSIER US
             if let hol = holiday {
                 HStack(spacing: 2) {
                     Text("🔒 Market Closed")
@@ -617,13 +674,13 @@ struct FullWidthDayCellView: View {
                 .padding(.vertical, 2)
                 .background(Color.red.opacity(0.12))
                 .cornerRadius(4)
-                .help(hol.name) // Tooltip au survol
+                .help(hol.name)
             }
             
-            // Liste des événements dans la cellule
             ScrollView(.vertical, showsIndicators: false) {
                 VStack(spacing: 3) {
                     ForEach(events) { event in
+                        let virtual = isVirtual(event)
                         HStack(spacing: 4) {
                             Circle().fill(event.type.color).frame(width: 5, height: 5)
                             Text(event.ticker)
@@ -636,9 +693,8 @@ struct FullWidthDayCellView: View {
                         .background(event.type.color.opacity(0.18))
                         .cornerRadius(4)
                         .contentShape(Rectangle())
-                        // GESTE : 1x Clic = Détails, 2x Clics = Modifier
                         .onTapGesture(count: 2) {
-                            onEditEvent(event)
+                            if !virtual { onEditEvent(event) }
                         }
                         .onTapGesture(count: 1) {
                             onDetailEvent(event)
@@ -656,12 +712,13 @@ struct FullWidthDayCellView: View {
 }
 
 // =========================================================================
-// MARK: - SHEET FICHE DÉTAILLÉE D'UN ÉVÉNEMENT (CLIC 1X)
+// MARK: - SHEET FICHE DÉTAILLÉE D'UN ÉVÉNEMENT
 // =========================================================================
 
 struct EventDetailSheet: View {
     @Environment(\.dismiss) var dismiss
     let event: CalendarEvent
+    let isVirtual: Bool
     let onEdit: () -> Void
     
     var dateFormatter: DateFormatter = {
@@ -711,10 +768,16 @@ struct EventDetailSheet: View {
             HStack {
                 Button("Close") { dismiss() }.keyboardShortcut(.cancelAction)
                 Spacer()
-                Button(action: onEdit) {
-                    Label("Edit Event", systemImage: "pencil")
+                
+                // Ne propose l'édition que si ce n'est pas un événement autogénéré
+                if !isVirtual {
+                    Button(action: onEdit) {
+                        Label("Edit Event", systemImage: "pencil")
+                    }
+                    .buttonStyle(.borderedProminent)
+                } else {
+                    Text("System Event").font(.caption).foregroundColor(.secondary)
                 }
-                .buttonStyle(.borderedProminent)
             }
         }
         .padding(24)
@@ -723,7 +786,7 @@ struct EventDetailSheet: View {
 }
 
 // =========================================================================
-// MARK: - FORMULAIRE D'AJOUT / ÉDITION (CLIC 2X)
+// MARK: - FORMULAIRE D'AJOUT / ÉDITION
 // =========================================================================
 
 struct AddEditEventSheet: View {
