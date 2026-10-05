@@ -28,20 +28,20 @@ struct BenchmarkView: View {
                     .contentShape(Rectangle())
                     .onTapGesture(count: 2) { showGoalSheet = true }
 
-                BenchmarkTableSection(viewModel: viewModel, showAddIndexSheet: $showAddIndexSheet)
+                BenchmarkTableSection(viewModel: viewModel, privacyMode: $privacyMode, showAddIndexSheet: $showAddIndexSheet)
 
-                BenchmarkChartsSection(viewModel: viewModel, chartToZoom: $chartToZoom)
+                BenchmarkChartsSection(viewModel: viewModel, privacyMode: $privacyMode, chartToZoom: $chartToZoom)
             }
             .padding()
         }
         .sheet(isPresented: $showGoalSheet) { EditBenchmarkGoalView(viewModel: viewModel) }
         .sheet(isPresented: $showAddIndexSheet) { AddBenchmarkIndexView(viewModel: viewModel) }
-        .sheet(item: $chartToZoom) { type in BenchmarkFullScreenChartView(zoomType: type, viewModel: viewModel) }
+        .sheet(item: $chartToZoom) { type in BenchmarkFullScreenChartView(zoomType: type, viewModel: viewModel, privacyMode: $privacyMode) }
     }
 }
 
 // =========================================================================
-// MARK: - GOAL FORM
+// MARK: - GOAL FORM (Amélioré)
 // =========================================================================
 
 struct EditBenchmarkGoalView: View {
@@ -55,17 +55,51 @@ struct EditBenchmarkGoalView: View {
     }
 
     var body: some View {
-        Form {
-            Section(header: Text("Set Benchmark Goal").font(.headline)) {
-                TextField("Outperformance target (%)", value: $targetInput, format: .number)
-            }.padding()
+        VStack(spacing: 0) {
+            HStack {
+                Text("Set Alpha Goal").font(.title2).fontWeight(.bold)
+                Spacer()
+                Button(action: { dismiss() }) {
+                    Image(systemName: "xmark.circle.fill").font(.title2).foregroundColor(.secondary)
+                }.buttonStyle(.plain)
+            }
+            .padding()
+            
+            Divider()
+            
+            VStack(alignment: .leading, spacing: 16) {
+                Text("Define your outperformance target (Alpha). This is the percentage by which you aim to beat your best performing benchmark index.")
+                    .font(.subheadline)
+                    .foregroundColor(.secondary)
+                
+                GroupBox {
+                    HStack {
+                        Text("Target Alpha:")
+                        Spacer()
+                        TextField("e.g. 2.5", value: $targetInput, format: .number)
+                            .textFieldStyle(.roundedBorder)
+                            .frame(width: 80)
+                            .multilineTextAlignment(.trailing)
+                        Text("%").foregroundColor(.secondary)
+                    }
+                }
+            }
+            .padding()
+            
+            Spacer()
+            Divider()
+            
             HStack {
                 Button("Cancel") { dismiss() }.keyboardShortcut(.cancelAction)
                 Spacer()
-                Button("Save") { viewModel.benchmarkGoalTarget = targetInput; dismiss() }
-                    .keyboardShortcut(.defaultAction).buttonStyle(.borderedProminent)
+                Button("Save Goal") {
+                    viewModel.benchmarkGoalTarget = targetInput
+                    dismiss()
+                }
+                .keyboardShortcut(.defaultAction).buttonStyle(.borderedProminent)
             }.padding()
-        }.frame(width: 380).padding()
+        }
+        .frame(width: 400, height: 280)
     }
 }
 
@@ -79,14 +113,40 @@ struct AddBenchmarkIndexView: View {
     @State private var name: String = ""
 
     var body: some View {
-        Form {
-            Section(header: Text("New Index").font(.headline)) {
-                TextField("Index name (e.g. S&P 500, MSCI World…)", text: $name)
-            }.padding()
+        VStack(spacing: 0) {
+            HStack {
+                Text("Add New Index").font(.title2).fontWeight(.bold)
+                Spacer()
+                Button(action: { dismiss() }) {
+                    Image(systemName: "xmark.circle.fill").font(.title2).foregroundColor(.secondary)
+                }.buttonStyle(.plain)
+            }
+            .padding()
+            
+            Divider()
+            
+            VStack(alignment: .leading, spacing: 16) {
+                Text("Add a stock market index to compare your portfolio's performance against it.")
+                    .font(.subheadline)
+                    .foregroundColor(.secondary)
+                
+                GroupBox {
+                    VStack(alignment: .leading, spacing: 8) {
+                        Text("Index Name")
+                        TextField("e.g. S&P 500, MSCI World, Nasdaq 100...", text: $name)
+                            .textFieldStyle(.roundedBorder)
+                    }
+                }
+            }
+            .padding()
+            
+            Spacer()
+            Divider()
+            
             HStack {
                 Button("Cancel") { dismiss() }.keyboardShortcut(.cancelAction)
                 Spacer()
-                Button("Add") {
+                Button("Add Index") {
                     guard !name.trimmingCharacters(in: .whitespaces).isEmpty else { return }
                     viewModel.benchmarkIndices.append(BenchmarkIndex(name: name, returns: [:]))
                     dismiss()
@@ -94,12 +154,13 @@ struct AddBenchmarkIndexView: View {
                 .keyboardShortcut(.defaultAction).buttonStyle(.borderedProminent)
                 .disabled(name.trimmingCharacters(in: .whitespaces).isEmpty)
             }.padding()
-        }.frame(width: 380).padding()
+        }
+        .frame(width: 400, height: 280)
     }
 }
 
 // =========================================================================
-// MARK: - DASHBOARD
+// MARK: - DASHBOARD (Floutage Corrigé)
 // =========================================================================
 
 struct BenchmarkDashboardSection: View {
@@ -109,10 +170,8 @@ struct BenchmarkDashboardSection: View {
     var currentYear: Int { Calendar.current.component(.year, from: Date()) }
     var startYear: Int { viewModel.dividendStartYear }
 
-    // Toutes les années depuis le début, 2022 inclus même si vide
     var allYears: [Int] { Array(startYear...currentYear) }
 
-    // Retours du portefeuille — années sans données = 0% (tu investissais mais sans tracker)
     var portfolioReturns: [Int: Double] {
         var dict: [Int: Double] = [:]
         for year in allYears {
@@ -125,13 +184,12 @@ struct BenchmarkDashboardSection: View {
             if base > 0 {
                 dict[year] = ((effectiveEnd - base) / base) * 100.0
             } else {
-                dict[year] = 0  // 2022 sans données = 0%
+                dict[year] = 0
             }
         }
         return dict
     }
 
-    // Moyenne portfolio sur TOUTES les années (2022 inclus à 0%)
     var portfolioAvgReturn: Double {
         let vals = allYears.map { portfolioReturns[$0] ?? 0 }
         guard !vals.isEmpty else { return 0 }
@@ -140,7 +198,6 @@ struct BenchmarkDashboardSection: View {
 
     var portfolioCurrentYear: Double { portfolioReturns[currentYear] ?? 0 }
 
-    // Meilleur indice sur les mêmes années (allYears, années manquantes = 0%)
     var bestIndex: BenchmarkIndex? {
         viewModel.benchmarkIndices.max { a, b in
             a.averageReturn(years: allYears) < b.averageReturn(years: allYears)
@@ -152,7 +209,6 @@ struct BenchmarkDashboardSection: View {
         return portfolioAvgReturn - best.averageReturn(years: allYears)
     }
 
-    // 10k simulé pour le portefeuille sur toutes les années
     var portfolio10k: Double {
         var value = 10000.0
         for y in allYears { value *= (1 + (portfolioReturns[y] ?? 0) / 100.0) }
@@ -175,7 +231,7 @@ struct BenchmarkDashboardSection: View {
                     Text(portfolioCurrentYear.formatted(.number.precision(.fractionLength(2)).sign(strategy: .always())) + "%")
                         .font(.title2).fontWeight(.bold)
                         .foregroundColor(portfolioCurrentYear >= 0 ? .green : .red)
-                        .blur(radius: privacyMode ? 8 : 0)
+                        .blur(radius: privacyMode ? 6 : 0)
                 }
                 .padding().frame(maxWidth: .infinity, alignment: .leading).frame(height: 110)
                 .background(Color(NSColor.controlBackgroundColor)).cornerRadius(10)
@@ -187,7 +243,7 @@ struct BenchmarkDashboardSection: View {
                     Text(portfolioAvgReturn.formatted(.number.precision(.fractionLength(2)).sign(strategy: .always())) + "%")
                         .font(.title2).fontWeight(.bold)
                         .foregroundColor(portfolioAvgReturn >= 0 ? .green : .red)
-                        .blur(radius: privacyMode ? 8 : 0)
+                        .blur(radius: privacyMode ? 6 : 0)
                 }
                 .padding().frame(maxWidth: .infinity, alignment: .leading).frame(height: 110)
                 .background(Color(NSColor.controlBackgroundColor)).cornerRadius(10)
@@ -198,8 +254,10 @@ struct BenchmarkDashboardSection: View {
                     Text("Best Index (Avg.)").font(.subheadline).foregroundColor(.secondary).lineLimit(1)
                     if let best = bestIndex {
                         Text(best.name).font(.title2).fontWeight(.bold).lineLimit(1).minimumScaleFactor(0.7)
+                            .blur(radius: privacyMode ? 6 : 0) // <-- Ajout ici
                         Text(best.averageReturn(years: allYears).formatted(.number.precision(.fractionLength(2)).sign(strategy: .always())) + "%")
                             .font(.caption).foregroundColor(.secondary)
+                            .blur(radius: privacyMode ? 6 : 0)
                     } else {
                         Text("—").font(.title2).fontWeight(.bold).foregroundColor(.secondary)
                     }
@@ -214,7 +272,7 @@ struct BenchmarkDashboardSection: View {
                     Text(portfolioVsBest.formatted(.number.precision(.fractionLength(2)).sign(strategy: .always())) + "%")
                         .font(.title2).fontWeight(.bold)
                         .foregroundColor(portfolioVsBest >= 0 ? .green : .red)
-                        .blur(radius: privacyMode ? 8 : 0)
+                        .blur(radius: privacyMode ? 6 : 0)
                     Text(portfolioVsBest >= 0 ? "Ahead" : "Behind")
                         .font(.caption).padding(.horizontal, 6).padding(.vertical, 2)
                         .background((portfolioVsBest >= 0 ? Color.green : Color.red).opacity(0.1))
@@ -227,10 +285,10 @@ struct BenchmarkDashboardSection: View {
             }
             HStack(spacing: 16) {
                 // Indices suivis
-                DashboardCard(title: "Indices Tracked", value: "\(viewModel.benchmarkIndices.count)", privacyMode: .constant(false))
+                DashboardCard(title: "Indices Tracked", value: "\(viewModel.benchmarkIndices.count)", titleIcon: nil, privacyMode: $privacyMode)
 
                 // Années suivies
-                DashboardCard(title: "Years Tracked", value: "\(currentYear - startYear + 1)", privacyMode: .constant(false))
+                DashboardCard(title: "Years Tracked", value: "\(currentYear - startYear + 1)", titleIcon: nil, privacyMode: $privacyMode)
 
                 // 10k portefeuille
                 VStack(alignment: .leading, spacing: 4) {
@@ -238,7 +296,7 @@ struct BenchmarkDashboardSection: View {
                     Text(portfolio10k.formatted(.currency(code: "EUR").precision(.fractionLength(0))))
                         .font(.title2).fontWeight(.bold)
                         .foregroundColor(portfolio10k >= 10000 ? .green : .red)
-                        .blur(radius: privacyMode ? 8 : 0)
+                        .blur(radius: privacyMode ? 6 : 0)
                 }
                 .padding().frame(maxWidth: .infinity, alignment: .leading).frame(height: 110)
                 .background(Color(NSColor.controlBackgroundColor)).cornerRadius(10)
@@ -251,7 +309,7 @@ struct BenchmarkDashboardSection: View {
                         Text(best10k.formatted(.currency(code: "EUR").precision(.fractionLength(0))))
                             .font(.title2).fontWeight(.bold)
                             .foregroundColor(best10k >= 10000 ? .green : .red)
-                            .blur(radius: privacyMode ? 8 : 0)
+                            .blur(radius: privacyMode ? 6 : 0)
                         Text(best.name).font(.caption).foregroundColor(.secondary)
                     } else {
                         Text("—").font(.title2).fontWeight(.bold).foregroundColor(.secondary)
@@ -279,8 +337,7 @@ struct BenchmarkGoalProgressBar: View {
 
     var portfolioAvgReturn: Double {
         var vals: [Double] = []
-        let allYears = Array(startYear...currentYear)
-        for year in allYears {
+        for year in activeYears {
             guard let yearData = viewModel.growthYears.first(where: { $0.year == year }) else {
                 vals.append(0); continue
             }
@@ -292,22 +349,42 @@ struct BenchmarkGoalProgressBar: View {
         guard !vals.isEmpty else { return 0 }
         return vals.reduce(0, +) / Double(vals.count)
     }
+    
+    var bestIndexAvgReturn: Double {
+        let best = viewModel.benchmarkIndices.max { a, b in
+            a.averageReturn(years: activeYears) < b.averageReturn(years: activeYears)
+        }
+        return best?.averageReturn(years: activeYears) ?? 0
+    }
+    
+    var alpha: Double {
+        portfolioAvgReturn - bestIndexAvgReturn
+    }
 
+    var target: Double { viewModel.benchmarkGoalTarget }
+    
     var progress: Double {
-        guard viewModel.benchmarkGoalTarget > 0 else { return 0 }
-        return min(max(portfolioAvgReturn / viewModel.benchmarkGoalTarget, 0), 1)
+        guard target > 0 else { return alpha > 0 ? 1 : 0 }
+        return min(max(alpha / target, 0), 1)
     }
 
     var body: some View {
         VStack(alignment: .leading, spacing: 8) {
             HStack {
-                Text("Goal : Avg. Annual Return ≥ \(viewModel.benchmarkGoalTarget.formatted(.number.precision(.fractionLength(1))))%")
-                    .font(.headline)
+                if viewModel.benchmarkIndices.isEmpty {
+                    Text("Goal : Add an index below to track your Outperformance (Alpha)").font(.headline)
+                } else {
+                    Text("Goal : Outperform Best Index by ≥ \(target.formatted(.number.precision(.fractionLength(1))))% (Alpha)")
+                        .font(.headline)
+                }
                 Spacer()
-                Text("\(portfolioAvgReturn.formatted(.number.precision(.fractionLength(2)).sign(strategy: .always())))% / \(viewModel.benchmarkGoalTarget.formatted(.number.precision(.fractionLength(1))))%")
-                    .font(.subheadline).fontWeight(.bold)
-                    .foregroundColor(progress >= 1 ? .green : .primary)
-                    .blur(radius: privacyMode ? 8 : 0)
+                
+                if !viewModel.benchmarkIndices.isEmpty {
+                    Text("Alpha: \(alpha.formatted(.number.precision(.fractionLength(2)).sign(strategy: .always())))% / \(target.formatted(.number.precision(.fractionLength(1))))%")
+                        .font(.subheadline).fontWeight(.bold)
+                        .foregroundColor(progress >= 1 ? .green : .primary)
+                        .blur(radius: privacyMode ? 6 : 0)
+                }
             }
             GeometryReader { geometry in
                 ZStack(alignment: .leading) {
@@ -321,23 +398,23 @@ struct BenchmarkGoalProgressBar: View {
         }
         .padding().background(Color(NSColor.controlBackgroundColor)).cornerRadius(12)
         .shadow(color: Color.black.opacity(0.05), radius: 2, x: 0, y: 1)
-        .help("Double-click to edit your Benchmark Goal")
+        .help("Double-click to edit your Outperformance Goal")
     }
 }
 
 // =========================================================================
-// MARK: - TABLE SECTION
+// MARK: - TABLE SECTION (HAUTEUR DYNAMIQUE ET RESPONSIVE)
 // =========================================================================
 
 struct BenchmarkTableSection: View {
     @ObservedObject var viewModel: PortfolioViewModel
+    @Binding var privacyMode: Bool
     @Binding var showAddIndexSheet: Bool
 
     var currentYear: Int { Calendar.current.component(.year, from: Date()) }
     var startYear: Int { viewModel.dividendStartYear }
     var years: [Int] { Array(startYear...currentYear) }
 
-    // Retours du portefeuille (depuis GrowthYear)
     func portfolioReturn(for year: Int) -> Double? {
         guard let yearData = viewModel.growthYears.first(where: { $0.year == year }) else { return nil }
         let isCurrentYear = year == currentYear
@@ -358,72 +435,64 @@ struct BenchmarkTableSection: View {
             }.padding(.bottom, 4)
 
             VStack(spacing: 0) {
-                // HEADER
-                ScrollView(.horizontal, showsIndicators: false) {
-                    HStack(spacing: 0) {
-                        // Colonne "Year"
-                        Text("Year").fontWeight(.bold)
-                            .frame(width: 60, alignment: .leading)
-                            .padding(.horizontal, 8)
+                // HEADER ALIGNÉ
+                HStack(spacing: 12) {
+                    Text("Year").fontWeight(.bold)
+                        .frame(width: 60, alignment: .leading)
 
-                        // Colonne "Portfolio"
-                        HStack(spacing: 4) {
-                            Circle().fill(Color.blue).frame(width: 8, height: 8)
-                            Text("Portfolio").fontWeight(.bold)
-                        }
-                        .frame(width: 110, alignment: .trailing)
-                        .padding(.horizontal, 8)
-
-                        // Colonnes indices
-                        ForEach(viewModel.benchmarkIndices.indices, id: \.self) { idx in
-                            let index = viewModel.benchmarkIndices[idx]
-                            HStack(spacing: 4) {
-                                Circle().fill(benchmarkColors[idx % benchmarkColors.count]).frame(width: 8, height: 8)
-                                Text(index.name).fontWeight(.bold).lineLimit(1)
-                                Button(action: { viewModel.benchmarkIndices.remove(at: idx) }) {
-                                    Image(systemName: "xmark.circle.fill").foregroundColor(.secondary.opacity(0.5)).font(.caption)
-                                }.buttonStyle(.plain)
-                            }
-                            .frame(width: 140, alignment: .trailing)
-                            .padding(.horizontal, 8)
-                        }
+                    HStack(spacing: 4) {
+                        Circle().fill(Color.blue).frame(width: 8, height: 8)
+                        Text("Portfolio").fontWeight(.bold)
                     }
-                    .font(.subheadline).foregroundColor(.secondary)
-                    .padding(.vertical, 12).padding(.horizontal, 8)
-                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .frame(maxWidth: .infinity, alignment: .center)
+
+                    ForEach(viewModel.benchmarkIndices.indices, id: \.self) { idx in
+                        let index = viewModel.benchmarkIndices[idx]
+                        HStack(spacing: 4) {
+                            Circle().fill(benchmarkColors[idx % benchmarkColors.count]).frame(width: 8, height: 8)
+                            Text(index.name).fontWeight(.bold).lineLimit(1)
+                            Button(action: { viewModel.benchmarkIndices.remove(at: idx) }) {
+                                Image(systemName: "xmark.circle.fill").foregroundColor(.secondary.opacity(0.5)).font(.caption)
+                            }.buttonStyle(.plain)
+                        }
+                        .frame(maxWidth: .infinity, alignment: .center)
+                    }
                 }
+                .font(.subheadline).foregroundColor(.secondary)
+                .padding(.vertical, 12).padding(.horizontal, 16)
                 .background(Color(NSColor.windowBackgroundColor))
+                
                 Divider()
 
-                // ROWS
-                ScrollView {
-                    LazyVStack(spacing: 0) {
-                        ForEach(years, id: \.self) { year in
-                            BenchmarkRowView(
-                                year: year,
-                                portfolioReturn: portfolioReturn(for: year),
-                                viewModel: viewModel,
-                                isCurrentYear: year == currentYear
-                            )
-                            .padding(.horizontal, 16).padding(.vertical, 8)
-                            Divider()
-                        }
-
-                        // Ligne Moyenne
-                        BenchmarkAverageRowView(
-                            years: years,
-                            portfolioReturn: portfolioReturn,
-                            viewModel: viewModel
+                // Lignes de données s'agrandissant naturellement (sans hauteur fixe)
+                VStack(spacing: 0) {
+                    ForEach(years, id: \.self) { year in
+                        BenchmarkRowView(
+                            year: year,
+                            portfolioReturn: portfolioReturn(for: year),
+                            viewModel: viewModel,
+                            isCurrentYear: year == currentYear,
+                            privacyMode: $privacyMode
                         )
                         .padding(.horizontal, 16).padding(.vertical, 10)
+                        Divider()
                     }
+
+                    // Ligne Moyenne
+                    BenchmarkAverageRowView(
+                        years: years,
+                        portfolioReturn: portfolioReturn,
+                        viewModel: viewModel,
+                        privacyMode: $privacyMode
+                    )
+                    .padding(.horizontal, 16).padding(.vertical, 12)
                 }
             }
             .background(Color(NSColor.controlBackgroundColor))
             .cornerRadius(8)
             .overlay(RoundedRectangle(cornerRadius: 8).stroke(Color.gray.opacity(0.2), lineWidth: 1))
         }
-        .frame(height: 420).padding().background(Color(NSColor.controlBackgroundColor)).cornerRadius(12)
+        .padding().background(Color(NSColor.controlBackgroundColor)).cornerRadius(12)
         .shadow(color: Color.black.opacity(0.05), radius: 2, x: 0, y: 1)
     }
 }
@@ -434,6 +503,7 @@ struct BenchmarkRowView: View {
     let portfolioReturn: Double?
     @ObservedObject var viewModel: PortfolioViewModel
     let isCurrentYear: Bool
+    @Binding var privacyMode: Bool
 
     func badge(_ value: Double) -> some View {
         Text(value.formatted(.number.precision(.fractionLength(2)).sign(strategy: .always())) + "%")
@@ -443,29 +513,32 @@ struct BenchmarkRowView: View {
             .foregroundColor(value >= 0 ? .green : .red)
             .cornerRadius(4)
             .font(.system(size: 13))
+            .blur(radius: privacyMode ? 6 : 0)
     }
 
     var body: some View {
-        ScrollView(.horizontal, showsIndicators: false) {
-            HStack(spacing: 0) {
-                // Année
-                
+        HStack(spacing: 12) {
+            Text(String(year))
+                .fontWeight(.bold)
+                .frame(width: 60, alignment: .leading)
 
-                // Portfolio
-                Group {
-                    if let ret = portfolioReturn {
-                        badge(ret)
-                    } else {
-                        Text("—").foregroundColor(.secondary)
-                    }
+            Group {
+                if let ret = portfolioReturn {
+                    badge(ret)
+                } else {
+                    Text("—").foregroundColor(.secondary)
                 }
-                .frame(width: 110, alignment: .trailing).padding(.horizontal, 8)
+            }
+            .frame(maxWidth: .infinity, alignment: .center)
 
-                // Indices — cellules éditables
-                ForEach(viewModel.benchmarkIndices.indices, id: \.self) { idx in
-                    BenchmarkReturnCell(index: $viewModel.benchmarkIndices[idx], year: year, color: benchmarkColors[idx % benchmarkColors.count])
-                        .frame(width: 140, alignment: .trailing).padding(.horizontal, 8)
-                }
+            ForEach(viewModel.benchmarkIndices.indices, id: \.self) { idx in
+                BenchmarkReturnCell(
+                    index: $viewModel.benchmarkIndices[idx],
+                    year: year,
+                    color: benchmarkColors[idx % benchmarkColors.count],
+                    privacyMode: $privacyMode
+                )
+                .frame(maxWidth: .infinity, alignment: .center)
             }
         }
     }
@@ -476,6 +549,7 @@ struct BenchmarkReturnCell: View {
     @Binding var index: BenchmarkIndex
     let year: Int
     let color: Color
+    @Binding var privacyMode: Bool
 
     @State private var editMode = false
     @State private var inputText: String = ""
@@ -487,7 +561,8 @@ struct BenchmarkReturnCell: View {
             if editMode {
                 TextField("0.00", text: $inputText)
                     .textFieldStyle(.roundedBorder)
-                    .frame(width: 90)
+                    .frame(width: 70)
+                    .multilineTextAlignment(.center)
                     .onSubmit { commit() }
                     .onExitCommand { editMode = false }
             } else {
@@ -495,10 +570,10 @@ struct BenchmarkReturnCell: View {
                     Text(val.formatted(.number.precision(.fractionLength(2)).sign(strategy: .always())) + "%")
                         .fontWeight(.bold)
                         .padding(.horizontal, 8).padding(.vertical, 2)
-                        //.background((val >= 0 ? Color.green : Color.red).opacity(0.12))
                         .foregroundColor(color)
                         .cornerRadius(4)
                         .font(.system(size: 13))
+                        .blur(radius: privacyMode ? 6 : 0)
                         .onTapGesture { startEdit() }
                 } else {
                     Text("—")
@@ -525,41 +600,42 @@ struct BenchmarkReturnCell: View {
     }
 }
 
-// MARK: - Ligne Moyenne
+// MARK: - Ligne Moyenne (Couleurs Corrigées)
 struct BenchmarkAverageRowView: View {
     let years: [Int]
     let portfolioReturn: (Int) -> Double?
     @ObservedObject var viewModel: PortfolioViewModel
+    @Binding var privacyMode: Bool
 
     var portfolioAvg: Double {
-        // nil = année sans données (ex: 2022) → comptée comme 0%
         let vals = years.map { portfolioReturn($0) ?? 0 }
         guard !vals.isEmpty else { return 0 }
         return vals.reduce(0, +) / Double(vals.count)
     }
 
     var body: some View {
-        ScrollView(.horizontal, showsIndicators: false) {
-            HStack(spacing: 0) {
-                Text("Avg.").fontWeight(.bold).italic()
-                    .frame(width: 60, alignment: .leading).padding(.horizontal, 8)
+        HStack(spacing: 12) {
+            Text("Avg.").fontWeight(.bold).italic()
+                .frame(width: 60, alignment: .leading)
 
-                // Portfolio avg
-                Text(portfolioAvg.formatted(.number.precision(.fractionLength(2)).sign(strategy: .always())) + "%")
-                    .fontWeight(.bold).foregroundColor(portfolioAvg >= 0 ? .green : .red)
-                    .frame(width: 110, alignment: .trailing).padding(.horizontal, 8)
+            Text(portfolioAvg.formatted(.number.precision(.fractionLength(2)).sign(strategy: .always())) + "%")
+                .fontWeight(.bold).foregroundColor(portfolioAvg >= 0 ? .green : .red)
+                .blur(radius: privacyMode ? 6 : 0)
+                .frame(maxWidth: .infinity, alignment: .center)
 
-                // Indices avg
-                ForEach(viewModel.benchmarkIndices.indices, id: \.self) { idx in
-                    let avg = viewModel.benchmarkIndices[idx].averageReturn(years: years)
-                    Text(avg.formatted(.number.precision(.fractionLength(2)).sign(strategy: .always())) + "%")
-                        .fontWeight(.bold)
-                        .foregroundColor(avg >= 0 ? benchmarkColors[idx % benchmarkColors.count] : .red)
-                        .frame(width: 140, alignment: .trailing).padding(.horizontal, 8)
-                }
+            ForEach(viewModel.benchmarkIndices.indices, id: \.self) { idx in
+                let avg = viewModel.benchmarkIndices[idx].averageReturn(years: years)
+                // CORRECTION : Utilise toujours la couleur assignée à l'indice (ex: orange pour MSCI)
+                let idxColor = benchmarkColors[idx % benchmarkColors.count]
+                
+                Text(avg.formatted(.number.precision(.fractionLength(2)).sign(strategy: .always())) + "%")
+                    .fontWeight(.bold)
+                    .foregroundColor(avg >= 0 ? idxColor : .red)
+                    .blur(radius: privacyMode ? 6 : 0)
+                    .frame(maxWidth: .infinity, alignment: .center)
             }
         }
-        .background(Color(NSColor.windowBackgroundColor).opacity(0.5))
+        .background(Color(NSColor.controlBackgroundColor).opacity(0.5))
     }
 }
 
@@ -569,25 +645,27 @@ struct BenchmarkAverageRowView: View {
 
 struct BenchmarkChartsSection: View {
     @ObservedObject var viewModel: PortfolioViewModel
+    @Binding var privacyMode: Bool
     @Binding var chartToZoom: BenchmarkChartZoomType?
 
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
             Text("Performance Analytics").font(.title2).fontWeight(.bold).foregroundColor(.secondary)
             HStack(spacing: 24) {
-                BenchmarkAnnualBarsChart(viewModel: viewModel, expandedChart: $chartToZoom)
-                BenchmarkGrowth10kChart(viewModel: viewModel, expandedChart: $chartToZoom)
+                BenchmarkAnnualBarsChart(viewModel: viewModel, privacyMode: $privacyMode, expandedChart: $chartToZoom)
+                BenchmarkGrowth10kChart(viewModel: viewModel, privacyMode: $privacyMode, expandedChart: $chartToZoom)
             }
         }
     }
 }
 
 // =========================================================================
-// MARK: - CHART 1 : BARRES ANNUELLES %
+// MARK: - CHART 1 : BARRES ANNUELLES % (Infobulle Compacte)
 // =========================================================================
 
 struct BenchmarkAnnualBarsChart: View {
     @ObservedObject var viewModel: PortfolioViewModel
+    @Binding var privacyMode: Bool
     var isExpanded: Bool = false
     @Binding var expandedChart: BenchmarkChartZoomType?
 
@@ -598,7 +676,7 @@ struct BenchmarkAnnualBarsChart: View {
     struct BarItem: Identifiable {
         let id = UUID()
         let year: Int
-        let label: String   // "Portfolio", index name
+        let label: String
         let value: Double
         let color: Color
     }
@@ -619,9 +697,7 @@ struct BenchmarkAnnualBarsChart: View {
     var items: [BarItem] {
         var result: [BarItem] = []
         for year in years {
-            // Portfolio
             result.append(BarItem(year: year, label: "Portfolio", value: portfolioReturns[year] ?? 0, color: .blue))
-            // Indices
             for (idx, index) in viewModel.benchmarkIndices.enumerated() {
                 result.append(BarItem(year: year, label: index.name, value: index.returns[year] ?? 0, color: benchmarkColors[idx % benchmarkColors.count]))
             }
@@ -659,28 +735,6 @@ struct BenchmarkAnnualBarsChart: View {
                 }
             }
 
-            // Tooltip
-            if let y = hoveredYear, let yr = Int(y) {
-                HStack(spacing: 12) {
-                    Text(String(yr)).fontWeight(.bold)
-                    ForEach(seriesLabels.filter { !hiddenSeries.contains($0) }, id: \.self) { label in
-                        let val: Double = {
-                            if label == "Portfolio" { return portfolioReturns[yr] ?? 0 }
-                            return viewModel.benchmarkIndices.first(where: { $0.name == label })?.returns[yr] ?? 0
-                        }()
-                        HStack(spacing: 4) {
-                            Circle().fill(color(for: label)).frame(width: 7, height: 7)
-                            Text(val.formatted(.number.precision(.fractionLength(2)).sign(strategy: .always())) + "%")
-                                .foregroundColor(val >= 0 ? .green : .red).fontWeight(.semibold)
-                        }
-                    }
-                }
-                .font(.caption)
-                .padding(.horizontal, 8).padding(.vertical, 4)
-                .background(Color(NSColor.windowBackgroundColor)).cornerRadius(6)
-                .transition(.opacity)
-            }
-
             if items.isEmpty {
                 Spacer()
                 Text("Add indices and fill in the table to see this chart.")
@@ -697,21 +751,55 @@ struct BenchmarkAnnualBarsChart: View {
                         .foregroundStyle(item.color.opacity(item.value >= 0 ? 0.7 : 0.5))
                         .position(by: .value("Index", item.label))
                         .cornerRadius(3)
-                        .opacity(hoveredYear == nil || hoveredYear == String(item.year) ? 1.0 : 0.4)
+                        
+                        if let y = hoveredYear, y == String(item.year) {
+                            RuleMark(x: .value("Year", y)).foregroundStyle(Color.secondary.opacity(0.3)).zIndex(-1)
+                        }
                     }
-
-                    // Ligne zéro
-                    RuleMark(y: .value("Zero", 0)).foregroundStyle(Color.secondary.opacity(0.3))
-                        .lineStyle(StrokeStyle(lineWidth: 1))
-
-                    // Règle verticale survol
-                    if let y = hoveredYear {
-                        RuleMark(x: .value("Year", y))
-                            .foregroundStyle(Color.secondary.opacity(0.3))
-                            .lineStyle(StrokeStyle(lineWidth: 1, dash: [4, 3]))
+                    RuleMark(y: .value("Zero", 0)).foregroundStyle(Color.secondary.opacity(0.3)).lineStyle(StrokeStyle(lineWidth: 1))
+                }
+                .chartOverlay { proxy in
+                    GeometryReader { geometry in
+                        Rectangle().fill(.clear).contentShape(Rectangle())
+                            .onContinuousHover { phase in
+                                switch phase {
+                                case .active(let location):
+                                    if let year: String = proxy.value(atX: location.x) { hoveredYear = year }
+                                case .ended:
+                                    hoveredYear = nil
+                                }
+                            }
+                        
+                        if let y = hoveredYear, let yr = Int(y) {
+                            if let xPosition = proxy.position(forX: y) {
+                                VStack(alignment: .leading, spacing: 6) {
+                                    Text(String(yr)).font(.caption.bold())
+                                    Divider()
+                                    ForEach(seriesLabels.filter { !hiddenSeries.contains($0) }, id: \.self) { label in
+                                        let val: Double = {
+                                            if label == "Portfolio" { return portfolioReturns[yr] ?? 0 }
+                                            return viewModel.benchmarkIndices.first(where: { $0.name == label })?.returns[yr] ?? 0
+                                        }()
+                                        HStack(spacing: 4) {
+                                            Circle().fill(color(for: label)).frame(width: 7, height: 7)
+                                            Text(label).font(.caption2).foregroundColor(.secondary)
+                                            Spacer(minLength: 8)
+                                            Text(val.formatted(.number.precision(.fractionLength(2)).sign(strategy: .always())) + "%")
+                                                .font(.caption2.bold())
+                                                .foregroundColor(val >= 0 ? .green : .red)
+                                                .blur(radius: privacyMode ? 6 : 0)
+                                        }
+                                    }
+                                }
+                                .frame(width: 150) // CONTRAINTE AJOUTÉE POUR RÉDUIRE LA LARGEUR
+                                .padding(8).background(Color(NSColor.windowBackgroundColor).opacity(0.95)).cornerRadius(8).shadow(radius: 4)
+                                .overlay(RoundedRectangle(cornerRadius: 8).stroke(Color.gray.opacity(0.2), lineWidth: 1))
+                                .position(x: max(85, min(geometry.size.width - 85, xPosition)), y: 60)
+                            }
+                        }
                     }
                 }
-                .chartXSelection(value: $hoveredYear)
+                .chartLegend(.hidden)
                 .chartYAxis {
                     AxisMarks(position: .leading) { value in
                         AxisGridLine(); AxisTick()
@@ -727,7 +815,6 @@ struct BenchmarkAnnualBarsChart: View {
                         AxisValueLabel { if let s = value.as(String.self) { Text(s).font(.caption) } }
                     }
                 }
-                .animation(.easeInOut(duration: 0.1), value: hoveredYear)
             }
             BlueChipWatermark()
         }
@@ -739,11 +826,12 @@ struct BenchmarkAnnualBarsChart: View {
 }
 
 // =========================================================================
-// MARK: - CHART 2 : SIMULATION 10 000 €
+// MARK: - CHART 2 : SIMULATION 10 000 € (Infobulle Compacte)
 // =========================================================================
 
 struct BenchmarkGrowth10kChart: View {
     @ObservedObject var viewModel: PortfolioViewModel
+    @Binding var privacyMode: Bool
     var isExpanded: Bool = false
     @Binding var expandedChart: BenchmarkChartZoomType?
 
@@ -775,14 +863,12 @@ struct BenchmarkGrowth10kChart: View {
     var lineData: [LinePoint] {
         var result: [LinePoint] = []
 
-        // Portfolio
         var portfolioVal = 10000.0
         for year in years {
             portfolioVal *= (1 + (portfolioReturns[year] ?? 0) / 100.0)
             result.append(LinePoint(year: year, label: "Portfolio", value: portfolioVal, color: .blue))
         }
 
-        // Indices
         for (idx, index) in viewModel.benchmarkIndices.enumerated() {
             var val = 10000.0
             for year in years {
@@ -823,25 +909,6 @@ struct BenchmarkGrowth10kChart: View {
                 }
             }
 
-            // Tooltip
-            if let y = hoveredYear, let yr = Int(y) {
-                HStack(spacing: 12) {
-                    Text(String(yr)).fontWeight(.bold)
-                    ForEach(seriesLabels.filter { !hiddenSeries.contains($0) }, id: \.self) { label in
-                        let val = lineData.first(where: { $0.year == yr && $0.label == label })?.value ?? 0
-                        HStack(spacing: 4) {
-                            Circle().fill(color(for: label)).frame(width: 7, height: 7)
-                            Text(val.formatted(.currency(code: "EUR").precision(.fractionLength(0))))
-                                .foregroundColor(val >= 10000 ? .green : .red).fontWeight(.semibold)
-                        }
-                    }
-                }
-                .font(.caption)
-                .padding(.horizontal, 8).padding(.vertical, 4)
-                .background(Color(NSColor.windowBackgroundColor)).cornerRadius(6)
-                .transition(.opacity)
-            }
-
             if lineData.isEmpty {
                 Spacer()
                 Text("Add indices and fill in the table to see this chart.")
@@ -849,7 +916,6 @@ struct BenchmarkGrowth10kChart: View {
                 Spacer()
             } else {
                 Chart {
-                    // Ligne de référence 10 000 €
                     RuleMark(y: .value("10k", 10000))
                         .foregroundStyle(Color.secondary.opacity(0.25))
                         .lineStyle(StrokeStyle(lineWidth: 1, dash: [5, 4]))
@@ -864,17 +930,51 @@ struct BenchmarkGrowth10kChart: View {
                         .lineStyle(StrokeStyle(lineWidth: point.label == "Portfolio" ? 3 : 2))
                         .interpolationMethod(.monotone)
                         .symbol { Circle().fill(point.color).frame(width: 7, height: 7) }
-                        .opacity(hoveredYear == nil || hoveredYear == String(point.year) ? 1.0 : 0.85)
-                    }
-
-                    // Règle verticale survol
-                    if let y = hoveredYear {
-                        RuleMark(x: .value("Year", y))
-                            .foregroundStyle(Color.secondary.opacity(0.3))
-                            .lineStyle(StrokeStyle(lineWidth: 1, dash: [4, 3]))
+                        
+                        if let y = hoveredYear, y == String(point.year) {
+                            RuleMark(x: .value("Year", y)).foregroundStyle(Color.secondary.opacity(0.3)).zIndex(-1)
+                        }
                     }
                 }
-                .chartXSelection(value: $hoveredYear)
+                .chartOverlay { proxy in
+                    GeometryReader { geometry in
+                        Rectangle().fill(.clear).contentShape(Rectangle())
+                            .onContinuousHover { phase in
+                                switch phase {
+                                case .active(let location):
+                                    if let year: String = proxy.value(atX: location.x) { hoveredYear = year }
+                                case .ended:
+                                    hoveredYear = nil
+                                }
+                            }
+                        
+                        if let y = hoveredYear, let yr = Int(y) {
+                            if let xPosition = proxy.position(forX: y) {
+                                VStack(alignment: .leading, spacing: 6) {
+                                    Text(String(yr)).font(.caption.bold())
+                                    Divider()
+                                    ForEach(seriesLabels.filter { !hiddenSeries.contains($0) }, id: \.self) { label in
+                                        let val = lineData.first(where: { $0.year == yr && $0.label == label })?.value ?? 0
+                                        HStack(spacing: 4) {
+                                            Circle().fill(color(for: label)).frame(width: 7, height: 7)
+                                            Text(label).font(.caption2).foregroundColor(.secondary)
+                                            Spacer(minLength: 8)
+                                            Text(val.formatted(.currency(code: "EUR").precision(.fractionLength(0))))
+                                                .font(.caption2.bold())
+                                                .foregroundColor(val >= 10000 ? .green : .red)
+                                                .blur(radius: privacyMode ? 6 : 0)
+                                        }
+                                    }
+                                }
+                                .frame(width: 150) // CONTRAINTE AJOUTÉE ICI AUSSI
+                                .padding(8).background(Color(NSColor.windowBackgroundColor).opacity(0.95)).cornerRadius(8).shadow(radius: 4)
+                                .overlay(RoundedRectangle(cornerRadius: 8).stroke(Color.gray.opacity(0.2), lineWidth: 1))
+                                .position(x: max(85, min(geometry.size.width - 85, xPosition)), y: 60)
+                            }
+                        }
+                    }
+                }
+                .chartLegend(.hidden)
                 .chartYAxis {
                     AxisMarks(position: .leading) { value in
                         AxisGridLine(); AxisTick()
@@ -890,7 +990,6 @@ struct BenchmarkGrowth10kChart: View {
                         AxisValueLabel { if let s = value.as(String.self) { Text(s).font(.caption) } }
                     }
                 }
-                .animation(.easeInOut(duration: 0.1), value: hoveredYear)
             }
             BlueChipWatermark()
         }
@@ -909,6 +1008,7 @@ struct BenchmarkFullScreenChartView: View {
     @Environment(\.dismiss) var dismiss
     let zoomType: BenchmarkChartZoomType
     @ObservedObject var viewModel: PortfolioViewModel
+    @Binding var privacyMode: Bool
 
     var chartTitle: String {
         switch zoomType {
@@ -927,10 +1027,9 @@ struct BenchmarkFullScreenChartView: View {
                 }.buttonStyle(.plain)
             }
             switch zoomType {
-            case .annualBars: BenchmarkAnnualBarsChart(viewModel: viewModel, isExpanded: true, expandedChart: .constant(nil))
-            case .growth10k:  BenchmarkGrowth10kChart(viewModel: viewModel, isExpanded: true, expandedChart: .constant(nil))
+            case .annualBars: BenchmarkAnnualBarsChart(viewModel: viewModel, privacyMode: $privacyMode, isExpanded: true, expandedChart: .constant(nil))
+            case .growth10k:  BenchmarkGrowth10kChart(viewModel: viewModel, privacyMode: $privacyMode, isExpanded: true, expandedChart: .constant(nil))
             }
         }.padding(30).frame(minWidth: 900, minHeight: 700)
     }
 }
-
