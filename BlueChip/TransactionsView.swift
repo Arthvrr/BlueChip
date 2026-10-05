@@ -27,7 +27,7 @@ extension Color {
         case .withdrawal: return .red
         case .buy:        return .blue
         case .sell:       return .orange
-        case .dividend:   return .mint
+        case .dividend:   return .mint // Gardé au cas où une vieille transaction l'utilise en base de données
         case .other:      return .gray
         }
     }
@@ -55,7 +55,6 @@ struct TransactionsView: View {
     @State private var customStartDate: Date = Calendar.current.date(byAdding: .month, value: -1, to: Date()) ?? Date()
     @State private var customEndDate: Date = Date()
 
-    // NOUVEAU : Logique de filtrage globale appliquée à toute la page
     var filteredGlobalTransactions: [Transaction] {
         let now = Date()
         let cal = Calendar.current
@@ -79,7 +78,6 @@ struct TransactionsView: View {
         case .oneYear:
             guard let start = cal.date(byAdding: .year, value: -1, to: now) else { return viewModel.transactions }
             return viewModel.transactions.filter { $0.date >= start }
-            
         case .custom:
             let endOfDay = cal.date(bySettingHour: 23, minute: 59, second: 59, of: customEndDate) ?? customEndDate
             return viewModel.transactions.filter { $0.date >= customStartDate && $0.date <= endOfDay }
@@ -89,7 +87,6 @@ struct TransactionsView: View {
     var body: some View {
         ScrollView(.vertical) {
             VStack(spacing: 24) {
-                // Les sous-vues reçoivent maintenant 'filteredGlobalTransactions' au lieu de tout piocher dans le viewModel
                 TransactionsDashboardSection(tx: filteredGlobalTransactions, privacyMode: $privacyMode)
 
                 TransactionsGoalBar(viewModel: viewModel, privacyMode: $privacyMode)
@@ -107,7 +104,7 @@ struct TransactionsView: View {
                     customEndDate: $customEndDate,
                     editingTransaction: $editingTransaction,
                     showAddSheet: $showAddSheet,
-                    showAddColumnSheet: $showAddColumnSheet,
+                    showAddColumnSheet: $showAddColumnSheet
                 )
 
                 TransactionsYearlySummarySection(viewModel: viewModel, tx: filteredGlobalTransactions, privacyMode: $privacyMode)
@@ -139,16 +136,17 @@ struct TransactionsView: View {
 // =========================================================================
 
 struct TransactionsDashboardSection: View {
-    let tx: [Transaction] // Reçoit les transactions filtrées
+    let tx: [Transaction]
     @Binding var privacyMode: Bool
 
     var totalDeposited:   Double { tx.filter { $0.type == .deposit    }.reduce(0) { $0 + $1.amountEUR } }
     var totalWithdrawn:   Double { tx.filter { $0.type == .withdrawal }.reduce(0) { $0 + $1.amountEUR } }
     var totalBought:      Double { tx.filter { $0.type == .buy        }.reduce(0) { $0 + $1.amountEUR } }
     var totalSold:        Double { tx.filter { $0.type == .sell       }.reduce(0) { $0 + $1.amountEUR } }
-    var totalDividends:   Double { tx.filter { $0.type == .dividend   }.reduce(0) { $0 + $1.amountEUR } }
     var totalCustomFees:  Double { tx.reduce(0) { $0 + $1.customFields.values.reduce(0, +) } }
+    
     var netCashFlow:      Double { totalDeposited - totalWithdrawn }
+    var netInvested:      Double { totalBought - totalSold } // Remplacement du Dividende
 
     var body: some View {
         VStack(spacing: 16) {
@@ -160,7 +158,7 @@ struct TransactionsDashboardSection: View {
             }
             HStack(spacing: 16) {
                 txCard("Total Sold",         value: totalSold,       color: .orange)
-                txCard("Dividends Received", value: totalDividends,  color: .mint)
+                txCard("Net Invested",       value: netInvested,     color: netInvested >= 0 ? .blue : .orange) // Nouveau widget
                 txCard("Total Fees & Taxes", value: totalCustomFees, color: .red)
                 DashboardCard(title: "Transactions Found", value: "\(tx.count)", titleIcon: nil, privacyMode: $privacyMode)
             }
@@ -189,7 +187,6 @@ struct TransactionsGoalBar: View {
     @ObservedObject var viewModel: PortfolioViewModel
     @Binding var privacyMode: Bool
 
-    // La jauge d'objectif garde la logique sur TOUTES les transactions de l'utilisateur
     var txCount: Int   { viewModel.transactions.count }
     var target: Double { viewModel.transactionGoalTarget }
     var progress: Double { target > 0 ? min(Double(txCount) / target, 1) : 0 }
@@ -273,7 +270,6 @@ struct TransactionsTableSection: View {
                 .background(Color(NSColor.windowBackgroundColor))
                 .cornerRadius(8)
                 
-                // NOUVEAU : Affiche les deux DatePickers si "Custom Range" est sélectionné
                 if timeFilter == .custom {
                     HStack(spacing: 4) {
                         DatePicker("", selection: $customStartDate, displayedComponents: .date)
@@ -294,7 +290,8 @@ struct TransactionsTableSection: View {
                 ScrollView(.horizontal, showsIndicators: false) {
                     HStack(spacing: 8) {
                         filterChip(nil, label: "All")
-                        ForEach(TransactionType.allCases, id: \.self) { type in
+                        // Retire les dividendes des filtres
+                        ForEach(TransactionType.allCases.filter { $0 != .dividend }, id: \.self) { type in
                             filterChip(type, label: type.rawValue)
                         }
                     }
@@ -511,7 +508,6 @@ struct TransactionsYearlySummarySection: View {
             Text("Sells").frame(maxWidth: .infinity, alignment: .trailing)
             Text("Deposits").frame(maxWidth: .infinity, alignment: .trailing)
             Text("Withdrawals").frame(maxWidth: .infinity, alignment: .trailing)
-            Text("Dividends").frame(maxWidth: .infinity, alignment: .trailing)
             Text("Invested €").frame(maxWidth: .infinity, alignment: .trailing)
             Text("Sold €").frame(maxWidth: .infinity, alignment: .trailing)
             Text("Deposited €").frame(maxWidth: .infinity, alignment: .trailing)
@@ -532,7 +528,7 @@ struct YearlySummaryRowView: View {
     var sells:       Int    { transactions.filter { $0.type == .sell       }.count }
     var deposits:    Int    { transactions.filter { $0.type == .deposit    }.count }
     var withdrawals: Int    { transactions.filter { $0.type == .withdrawal }.count }
-    var dividends:   Int    { transactions.filter { $0.type == .dividend   }.count }
+    
     var invested:    Double { transactions.filter { $0.type == .buy        }.reduce(0) { $0 + $1.amountEUR } }
     var sold:        Double { transactions.filter { $0.type == .sell       }.reduce(0) { $0 + $1.amountEUR } }
     var deposited:   Double { transactions.filter { $0.type == .deposit    }.reduce(0) { $0 + $1.amountEUR } }
@@ -547,7 +543,6 @@ struct YearlySummaryRowView: View {
             nc(sells,       color: .orange)
             nc(deposits,    color: .green)
             nc(withdrawals, color: .red)
-            nc(dividends,   color: .mint)
             ec(invested,  color: .blue)
             ec(sold,      color: .orange)
             ec(deposited, color: .green)
@@ -578,7 +573,7 @@ struct YearlyTotalsRowView: View {
     var totalSells:       Int    { transactions.filter { $0.type == .sell       }.count }
     var totalDeposits:    Int    { transactions.filter { $0.type == .deposit    }.count }
     var totalWithdrawals: Int    { transactions.filter { $0.type == .withdrawal }.count }
-    var totalDividends:   Int    { transactions.filter { $0.type == .dividend   }.count }
+    
     var totalInvested:    Double { transactions.filter { $0.type == .buy        }.reduce(0) { $0 + $1.amountEUR } }
     var totalSold:        Double { transactions.filter { $0.type == .sell       }.reduce(0) { $0 + $1.amountEUR } }
     var totalDeposited:   Double { transactions.filter { $0.type == .deposit    }.reduce(0) { $0 + $1.amountEUR } }
@@ -593,7 +588,6 @@ struct YearlyTotalsRowView: View {
             nc(totalSells)
             nc(totalDeposits)
             nc(totalWithdrawals)
-            nc(totalDividends)
             ec(totalInvested)
             ec(totalSold)
             ec(totalDeposited)
@@ -770,7 +764,7 @@ struct TxTotalByTypeChart: View {
     var isExpanded: Bool = false
     @Binding var expandedChart: TxChartZoomType?
 
-    let displayedTypes: [TransactionType] = [.buy, .sell, .deposit, .withdrawal, .dividend]
+    let displayedTypes: [TransactionType] = [.buy, .sell, .deposit, .withdrawal] // Retiré Dividendes
 
     struct TypeSummary: Identifiable {
         let id = UUID()
@@ -1265,7 +1259,8 @@ struct AddEditTransactionView: View {
                     }
                     GroupBox("Transaction Type") {
                         LazyVGrid(columns: Array(repeating: GridItem(.flexible()), count: 3), spacing: 8) {
-                            ForEach(TransactionType.allCases, id: \.self) { t in
+                            // Masque le bouton Dividend du formulaire
+                            ForEach(TransactionType.allCases.filter { $0 != .dividend }, id: \.self) { t in
                                 Button(action: { type = t }) {
                                     HStack(spacing: 6) { Image(systemName: t.icon); Text(t.rawValue) }
                                         .frame(maxWidth: .infinity).padding(.vertical, 8)
