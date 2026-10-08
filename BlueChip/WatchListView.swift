@@ -1,12 +1,14 @@
 import SwiftUI
+import SwiftData
 import Charts
+import Combine // <-- CORRECTION : Requis pour objectWillChange.send()
 
 // =========================================================================
 // MARK: - WATCHLIST DATA MODEL
 // =========================================================================
 
-struct WatchlistItem: Identifiable, Codable {
-    var id: UUID = UUID()
+@Model final class WatchlistItem: Identifiable {
+    @Attribute(.unique) var id: UUID
     var ticker: String
     var currentPrice: Double
     var targetPrice: Double
@@ -16,17 +18,33 @@ struct WatchlistItem: Identifiable, Codable {
     var guruFocusPrice: Double
     var tipRanksPrice: Double
     var peg: Double
-    var currency: String = "EUR"
-    var note: String = ""
+    var currency: String
+    var note: String
     
     var fundamentalValues: [String: Double]?
+    
+    init(id: UUID = UUID(), ticker: String, currentPrice: Double, targetPrice: Double, currentPE: Double, forwardPE: Double, historicalPE10Y: Double, guruFocusPrice: Double, tipRanksPrice: Double, peg: Double, currency: String = "EUR", note: String = "", fundamentalValues: [String: Double]? = nil) {
+        self.id = id
+        self.ticker = ticker
+        self.currentPrice = currentPrice
+        self.targetPrice = targetPrice
+        self.currentPE = currentPE
+        self.forwardPE = forwardPE
+        self.historicalPE10Y = historicalPE10Y
+        self.guruFocusPrice = guruFocusPrice
+        self.tipRanksPrice = tipRanksPrice
+        self.peg = peg
+        self.currency = currency
+        self.note = note
+        self.fundamentalValues = fundamentalValues
+    }
     
     func fairPrice(marginOfSafety: Double) -> Double {
         let avgValuation = (guruFocusPrice + tipRanksPrice) / 2.0
         return avgValuation * (1.0 - (marginOfSafety / 100.0))
     }
     
-    var targetUpsidePercent: Double {
+    @Transient var targetUpsidePercent: Double {
         guard currentPrice > 0 else { return 0 }
         return (targetPrice - currentPrice) / currentPrice
     }
@@ -54,6 +72,7 @@ enum WatchListSortColumn {
 struct WatchListView: View {
     @ObservedObject var viewModel: PortfolioViewModel
     @Binding var privacyMode: Bool
+    @Environment(\.modelContext) private var context
     
     @State private var marginOfSafety: Double = 10.0
     @State private var searchText: String = ""
@@ -92,7 +111,12 @@ struct WatchListView: View {
                     marginOfSafety: marginOfSafety,
                     privacyMode: $privacyMode,
                     onEdit: { editingItem = $0 },
-                    onDelete: { id in viewModel.watchlistItems.removeAll { $0.id == id } }
+                    onDelete: { id in
+                        if let itemToDelete = viewModel.watchlistItems.first(where: { $0.id == id }) {
+                            context.delete(itemToDelete)
+                            viewModel.watchlistItems.removeAll { $0.id == id }
+                        }
+                    }
                 )
                 
                 WatchListChartsSection(
@@ -112,26 +136,10 @@ struct WatchListView: View {
             .padding()
         }
         .sheet(isPresented: $showAddSheet) {
-            AddEditWatchListItemView(
-                item: nil,
-                onSave: { newItem in
-                    viewModel.watchlistItems.append(newItem)
-                },
-                onDelete: nil
-            )
+            AddEditWatchListItemView(viewModel: viewModel, item: nil)
         }
         .sheet(item: $editingItem) { item in
-            AddEditWatchListItemView(
-                item: item,
-                onSave: { updatedItem in
-                    if let idx = viewModel.watchlistItems.firstIndex(where: { $0.id == item.id }) {
-                        viewModel.watchlistItems[idx] = updatedItem
-                    }
-                },
-                onDelete: {
-                    viewModel.watchlistItems.removeAll { $0.id == item.id }
-                }
-            )
+            AddEditWatchListItemView(viewModel: viewModel, item: item)
         }
         .sheet(item: $chartToZoom) { type in
             WatchListFullScreenChartView(
@@ -757,6 +765,7 @@ struct WatchlistLabForm: View {
             viewModel.watchlistItems[itemIndex].fundamentalValues = [:]
         }
         viewModel.watchlistItems[itemIndex].fundamentalValues?[crit.id.uuidString] = value
+        viewModel.objectWillChange.send()
     }
     
     var body: some View {
@@ -777,7 +786,7 @@ struct WatchlistLabForm: View {
                                             set: { setVal(for: crit, value: $0 ? 1.0 : 0.0) }
                                         )).labelsHidden()
                                     } else {
-                                        TextField("0", value: Binding<Double>(
+                                        TextField("0", value: Binding(
                                             get: { getVal(for: crit) },
                                             set: { setVal(for: crit, value: $0) }
                                         ), format: .number)
@@ -1074,9 +1083,9 @@ struct WL_RadarDataPolygon: Shape {
 
 struct AddEditWatchListItemView: View {
     @Environment(\.dismiss) var dismiss
+    @Environment(\.modelContext) private var context // <-- NOUVEAU
+    @ObservedObject var viewModel: PortfolioViewModel
     let item: WatchlistItem?
-    let onSave: (WatchlistItem) -> Void
-    var onDelete: (() -> Void)? = nil
 
     @State private var ticker: String = ""
     @State private var currentPrice: Double = 0.0
@@ -1113,7 +1122,10 @@ struct AddEditWatchListItemView: View {
                 Spacer()
                 if isEditing {
                     Button("Delete Position") {
-                        onDelete?()
+                        if let item = item {
+                            context.delete(item)
+                            viewModel.watchlistItems.removeAll { $0.id == item.id }
+                        }
                         dismiss()
                     }.foregroundColor(.red).padding(.trailing, 16)
                 }
@@ -1133,9 +1145,36 @@ struct AddEditWatchListItemView: View {
     }
 
     func save() {
-        var newItem = item ?? WatchlistItem(ticker: ticker, currentPrice: currentPrice, targetPrice: targetPrice, currentPE: currentPE, forwardPE: forwardPE, historicalPE10Y: historicalPE10Y, guruFocusPrice: guruFocusPrice, tipRanksPrice: tipRanksPrice, peg: peg, currency: currency, note: note)
-        newItem.ticker = ticker.uppercased(); newItem.currentPrice = currentPrice; newItem.targetPrice = targetPrice; newItem.currentPE = currentPE; newItem.forwardPE = forwardPE; newItem.historicalPE10Y = historicalPE10Y; newItem.guruFocusPrice = guruFocusPrice; newItem.tipRanksPrice = tipRanksPrice; newItem.peg = peg; newItem.currency = currency; newItem.note = note
-        onSave(newItem)
+        if isEditing, let evt = item {
+            evt.ticker = ticker.uppercased()
+            evt.currentPrice = currentPrice
+            evt.targetPrice = targetPrice
+            evt.currentPE = currentPE
+            evt.forwardPE = forwardPE
+            evt.historicalPE10Y = historicalPE10Y
+            evt.guruFocusPrice = guruFocusPrice
+            evt.tipRanksPrice = tipRanksPrice
+            evt.peg = peg
+            evt.currency = currency
+            evt.note = note
+            viewModel.objectWillChange.send()
+        } else {
+            let newItem = WatchlistItem(
+                ticker: ticker.uppercased(),
+                currentPrice: currentPrice,
+                targetPrice: targetPrice,
+                currentPE: currentPE,
+                forwardPE: forwardPE,
+                historicalPE10Y: historicalPE10Y,
+                guruFocusPrice: guruFocusPrice,
+                tipRanksPrice: tipRanksPrice,
+                peg: peg,
+                currency: currency,
+                note: note
+            )
+            context.insert(newItem)
+            viewModel.watchlistItems.append(newItem)
+        }
         dismiss()
     }
 }

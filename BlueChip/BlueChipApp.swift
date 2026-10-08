@@ -6,6 +6,7 @@
 //
 
 import SwiftUI
+import SwiftData
 
 @main
 struct BlueChipApp: App {
@@ -14,5 +15,19 @@ struct BlueChipApp: App {
             ContentView()
         }
         .windowStyle(.hiddenTitleBar) // Enlève la barre de titre moche de macOS
+        // NOUVEAU : On initialise la base de données avec tous tes modèles
+        .modelContainer(for: [
+            AppSettings.self,
+            Position.self,
+            DividendYear.self,
+            CalendarEvent.self,
+            BenchmarkIndex.self,
+            Transaction.self,
+            GrowthYear.self,
+            FundamentalCriterion.self,
+            WealthAsset.self,
+            WealthLiability.self,
+            WatchlistItem.self
+        ])
     }
 }

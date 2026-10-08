@@ -1,5 +1,6 @@
 import SwiftUI
 import Charts
+import SwiftData // <-- NOUVEAU
 
 // MARK: - SPECIFIC ZOOM ENUM FOR DIVIDENDS
 enum DividendChartZoomType: String, Identifiable {
@@ -55,7 +56,16 @@ struct EditDividendGoalView: View {
     var body: some View {
         Form {
             Section(header: Text("Set Dividend Goal").font(.headline)) { Picker("Goal Type", selection: $selectedGoal) { ForEach(DividendGoalType.allCases, id: \.self) { type in Text(type.rawValue).tag(type) } }; TextField("Target Amount", value: $targetInput, format: .number) }.padding()
-            HStack { Button("Cancel") { dismiss() }.keyboardShortcut(.cancelAction); Spacer(); Button("Save") { viewModel.dividendGoalType = selectedGoal; viewModel.dividendGoalTarget = targetInput; viewModel.saveData(); dismiss() }.keyboardShortcut(.defaultAction).buttonStyle(.borderedProminent) }.padding()
+            HStack {
+                Button("Cancel") { dismiss() }.keyboardShortcut(.cancelAction)
+                Spacer()
+                Button("Save") {
+                    viewModel.dividendGoalType = selectedGoal
+                    viewModel.dividendGoalTarget = targetInput
+                    // MODIFIÉ : Retrait de viewModel.saveData()
+                    dismiss()
+                }.keyboardShortcut(.defaultAction).buttonStyle(.borderedProminent)
+            }.padding()
         }.frame(width: 380).padding()
     }
 }
@@ -154,14 +164,23 @@ struct DividendsTableSection: View {
                     Text("Total").fontWeight(.bold).frame(width: 80, alignment: .trailing)
                 }.padding(.horizontal, 16).padding(.vertical, 12).background(Color(NSColor.windowBackgroundColor)); Divider()
                 
-                ScrollView { LazyVStack(spacing: 0) { ForEach($viewModel.dividendYears) { $yearData in SpreadsheetRowView(yearData: $yearData, privacyMode: privacyMode).padding(.horizontal, 16).padding(.vertical, 8); Divider() } } }
+                ScrollView {
+                    LazyVStack(spacing: 0) {
+                        // MODIFIÉ : Utilisation de l'objet direct au lieu de '$'
+                        ForEach(viewModel.dividendYears) { yearData in
+                            SpreadsheetRowView(yearData: yearData, privacyMode: privacyMode)
+                                .padding(.horizontal, 16).padding(.vertical, 8)
+                            Divider()
+                        }
+                    }
+                }
             }.background(Color(NSColor.controlBackgroundColor)).cornerRadius(8).overlay(RoundedRectangle(cornerRadius: 8).stroke(Color.gray.opacity(0.2), lineWidth: 1))
         }.frame(height: 380).padding().background(Color(NSColor.controlBackgroundColor)).cornerRadius(12).shadow(color: Color.black.opacity(0.05), radius: 2, x: 0, y: 1)
     }
 }
 
 struct SpreadsheetRowView: View {
-    @Binding var yearData: DividendYear
+    @Bindable var yearData: DividendYear // MODIFIÉ : @Bindable remplace @Binding pour SwiftData
     var privacyMode: Bool
     var body: some View {
         HStack(spacing: 8) {

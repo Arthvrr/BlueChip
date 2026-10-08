@@ -1,5 +1,8 @@
 import SwiftUI
 import Charts
+import SwiftData // <-- NOUVEAU
+import Combine
+import Combine
 
 // MARK: - ZOOM ENUM
 enum BenchmarkChartZoomType: String, Identifiable {
@@ -41,7 +44,7 @@ struct BenchmarkView: View {
 }
 
 // =========================================================================
-// MARK: - GOAL FORM (Amélioré)
+// MARK: - GOAL FORM
 // =========================================================================
 
 struct EditBenchmarkGoalView: View {
@@ -148,7 +151,7 @@ struct AddBenchmarkIndexView: View {
                 Spacer()
                 Button("Add Index") {
                     guard !name.trimmingCharacters(in: .whitespaces).isEmpty else { return }
-                    viewModel.benchmarkIndices.append(BenchmarkIndex(name: name, returns: [:]))
+                    viewModel.addBenchmarkIndex(BenchmarkIndex(name: name, returns: [:]))
                     dismiss()
                 }
                 .keyboardShortcut(.defaultAction).buttonStyle(.borderedProminent)
@@ -160,7 +163,7 @@ struct AddBenchmarkIndexView: View {
 }
 
 // =========================================================================
-// MARK: - DASHBOARD (Floutage Corrigé)
+// MARK: - DASHBOARD
 // =========================================================================
 
 struct BenchmarkDashboardSection: View {
@@ -225,7 +228,6 @@ struct BenchmarkDashboardSection: View {
     var body: some View {
         VStack(spacing: 16) {
             HStack(spacing: 16) {
-                // Retour portefeuille année courante
                 VStack(alignment: .leading, spacing: 4) {
                     Text("Portfolio Return \(currentYear)").font(.subheadline).foregroundColor(.secondary).lineLimit(1)
                     Text(portfolioCurrentYear.formatted(.number.precision(.fractionLength(2)).sign(strategy: .always())) + "%")
@@ -237,7 +239,6 @@ struct BenchmarkDashboardSection: View {
                 .background(Color(NSColor.controlBackgroundColor)).cornerRadius(10)
                 .shadow(color: Color.black.opacity(0.05), radius: 2, x: 0, y: 1)
 
-                // Retour moyen du portefeuille
                 VStack(alignment: .leading, spacing: 4) {
                     Text("Portfolio Avg. Return").font(.subheadline).foregroundColor(.secondary).lineLimit(1)
                     Text(portfolioAvgReturn.formatted(.number.precision(.fractionLength(2)).sign(strategy: .always())) + "%")
@@ -249,12 +250,11 @@ struct BenchmarkDashboardSection: View {
                 .background(Color(NSColor.controlBackgroundColor)).cornerRadius(10)
                 .shadow(color: Color.black.opacity(0.05), radius: 2, x: 0, y: 1)
 
-                // Meilleur indice (avg)
                 VStack(alignment: .leading, spacing: 4) {
                     Text("Best Index (Avg.)").font(.subheadline).foregroundColor(.secondary).lineLimit(1)
                     if let best = bestIndex {
                         Text(best.name).font(.title2).fontWeight(.bold).lineLimit(1).minimumScaleFactor(0.7)
-                            .blur(radius: privacyMode ? 6 : 0) // <-- Ajout ici
+                            .blur(radius: privacyMode ? 6 : 0)
                         Text(best.averageReturn(years: allYears).formatted(.number.precision(.fractionLength(2)).sign(strategy: .always())) + "%")
                             .font(.caption).foregroundColor(.secondary)
                             .blur(radius: privacyMode ? 6 : 0)
@@ -266,7 +266,6 @@ struct BenchmarkDashboardSection: View {
                 .background(Color(NSColor.controlBackgroundColor)).cornerRadius(10)
                 .shadow(color: Color.black.opacity(0.05), radius: 2, x: 0, y: 1)
 
-                // Portfolio vs Best index
                 VStack(alignment: .leading, spacing: 4) {
                     Text("vs Best Index (Avg.)").font(.subheadline).foregroundColor(.secondary).lineLimit(1)
                     Text(portfolioVsBest.formatted(.number.precision(.fractionLength(2)).sign(strategy: .always())) + "%")
@@ -284,13 +283,9 @@ struct BenchmarkDashboardSection: View {
                 .shadow(color: Color.black.opacity(0.05), radius: 2, x: 0, y: 1)
             }
             HStack(spacing: 16) {
-                // Indices suivis
                 DashboardCard(title: "Indices Tracked", value: "\(viewModel.benchmarkIndices.count)", titleIcon: nil, privacyMode: $privacyMode)
-
-                // Années suivies
                 DashboardCard(title: "Years Tracked", value: "\(currentYear - startYear + 1)", titleIcon: nil, privacyMode: $privacyMode)
 
-                // 10k portefeuille
                 VStack(alignment: .leading, spacing: 4) {
                     Text("Portfolio 10k€ Simulation").font(.subheadline).foregroundColor(.secondary).lineLimit(1)
                     Text(portfolio10k.formatted(.currency(code: "EUR").precision(.fractionLength(0))))
@@ -302,7 +297,6 @@ struct BenchmarkDashboardSection: View {
                 .background(Color(NSColor.controlBackgroundColor)).cornerRadius(10)
                 .shadow(color: Color.black.opacity(0.05), radius: 2, x: 0, y: 1)
 
-                // 10k best index
                 VStack(alignment: .leading, spacing: 4) {
                     Text("Best Index 10k€").font(.subheadline).foregroundColor(.secondary).lineLimit(1)
                     if let best = bestIndex {
@@ -403,7 +397,7 @@ struct BenchmarkGoalProgressBar: View {
 }
 
 // =========================================================================
-// MARK: - TABLE SECTION (HAUTEUR DYNAMIQUE ET RESPONSIVE)
+// MARK: - TABLE SECTION
 // =========================================================================
 
 struct BenchmarkTableSection: View {
@@ -435,7 +429,6 @@ struct BenchmarkTableSection: View {
             }.padding(.bottom, 4)
 
             VStack(spacing: 0) {
-                // HEADER ALIGNÉ
                 HStack(spacing: 12) {
                     Text("Year").fontWeight(.bold)
                         .frame(width: 60, alignment: .leading)
@@ -451,7 +444,7 @@ struct BenchmarkTableSection: View {
                         HStack(spacing: 4) {
                             Circle().fill(benchmarkColors[idx % benchmarkColors.count]).frame(width: 8, height: 8)
                             Text(index.name).fontWeight(.bold).lineLimit(1)
-                            Button(action: { viewModel.benchmarkIndices.remove(at: idx) }) {
+                            Button(action: { viewModel.deleteBenchmarkIndex(id: index.id) }) {
                                 Image(systemName: "xmark.circle.fill").foregroundColor(.secondary.opacity(0.5)).font(.caption)
                             }.buttonStyle(.plain)
                         }
@@ -464,7 +457,6 @@ struct BenchmarkTableSection: View {
                 
                 Divider()
 
-                // Lignes de données s'agrandissant naturellement (sans hauteur fixe)
                 VStack(spacing: 0) {
                     ForEach(years, id: \.self) { year in
                         BenchmarkRowView(
@@ -478,7 +470,6 @@ struct BenchmarkTableSection: View {
                         Divider()
                     }
 
-                    // Ligne Moyenne
                     BenchmarkAverageRowView(
                         years: years,
                         portfolioReturn: portfolioReturn,
@@ -533,10 +524,11 @@ struct BenchmarkRowView: View {
 
             ForEach(viewModel.benchmarkIndices.indices, id: \.self) { idx in
                 BenchmarkReturnCell(
-                    index: $viewModel.benchmarkIndices[idx],
+                    index: viewModel.benchmarkIndices[idx],
                     year: year,
                     color: benchmarkColors[idx % benchmarkColors.count],
-                    privacyMode: $privacyMode
+                    privacyMode: $privacyMode,
+                    onUpdate: { viewModel.objectWillChange.send() }
                 )
                 .frame(maxWidth: .infinity, alignment: .center)
             }
@@ -546,10 +538,11 @@ struct BenchmarkRowView: View {
 
 // MARK: - Cellule éditable pour un indice
 struct BenchmarkReturnCell: View {
-    @Binding var index: BenchmarkIndex
+    @Bindable var index: BenchmarkIndex
     let year: Int
     let color: Color
     @Binding var privacyMode: Bool
+    var onUpdate: (() -> Void)? = nil
 
     @State private var editMode = false
     @State private var inputText: String = ""
@@ -596,11 +589,12 @@ struct BenchmarkReturnCell: View {
         } else if inputText.isEmpty {
             index.returns.removeValue(forKey: year)
         }
+        onUpdate?()
         editMode = false
     }
 }
 
-// MARK: - Ligne Moyenne (Couleurs Corrigées)
+// MARK: - Ligne Moyenne
 struct BenchmarkAverageRowView: View {
     let years: [Int]
     let portfolioReturn: (Int) -> Double?
@@ -625,7 +619,6 @@ struct BenchmarkAverageRowView: View {
 
             ForEach(viewModel.benchmarkIndices.indices, id: \.self) { idx in
                 let avg = viewModel.benchmarkIndices[idx].averageReturn(years: years)
-                // CORRECTION : Utilise toujours la couleur assignée à l'indice (ex: orange pour MSCI)
                 let idxColor = benchmarkColors[idx % benchmarkColors.count]
                 
                 Text(avg.formatted(.number.precision(.fractionLength(2)).sign(strategy: .always())) + "%")
@@ -660,7 +653,7 @@ struct BenchmarkChartsSection: View {
 }
 
 // =========================================================================
-// MARK: - CHART 1 : BARRES ANNUELLES % (Infobulle Compacte)
+// MARK: - CHART 1 : BARRES ANNUELLES %
 // =========================================================================
 
 struct BenchmarkAnnualBarsChart: View {
@@ -791,7 +784,7 @@ struct BenchmarkAnnualBarsChart: View {
                                         }
                                     }
                                 }
-                                .frame(width: 150) // CONTRAINTE AJOUTÉE POUR RÉDUIRE LA LARGEUR
+                                .frame(width: 150)
                                 .padding(8).background(Color(NSColor.windowBackgroundColor).opacity(0.95)).cornerRadius(8).shadow(radius: 4)
                                 .overlay(RoundedRectangle(cornerRadius: 8).stroke(Color.gray.opacity(0.2), lineWidth: 1))
                                 .position(x: max(85, min(geometry.size.width - 85, xPosition)), y: 60)
@@ -826,7 +819,7 @@ struct BenchmarkAnnualBarsChart: View {
 }
 
 // =========================================================================
-// MARK: - CHART 2 : SIMULATION 10 000 € (Infobulle Compacte)
+// MARK: - CHART 2 : SIMULATION 10 000 €
 // =========================================================================
 
 struct BenchmarkGrowth10kChart: View {
@@ -966,7 +959,7 @@ struct BenchmarkGrowth10kChart: View {
                                         }
                                     }
                                 }
-                                .frame(width: 150) // CONTRAINTE AJOUTÉE ICI AUSSI
+                                .frame(width: 150)
                                 .padding(8).background(Color(NSColor.windowBackgroundColor).opacity(0.95)).cornerRadius(8).shadow(radius: 4)
                                 .overlay(RoundedRectangle(cornerRadius: 8).stroke(Color.gray.opacity(0.2), lineWidth: 1))
                                 .position(x: max(85, min(geometry.size.width - 85, xPosition)), y: 60)

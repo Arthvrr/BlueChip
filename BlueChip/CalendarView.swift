@@ -1,5 +1,7 @@
 import SwiftUI
 import UniformTypeIdentifiers // NOUVEAU : Requis pour l'export .ical
+import SwiftData // <-- NOUVEAU
+import Combine
 
 // =========================================================================
 // MARK: - US MARKET HOLIDAY CALCULATOR
@@ -97,6 +99,7 @@ struct USMarketHolidayHelper {
 struct CalendarView: View {
     @ObservedObject var viewModel: PortfolioViewModel
     @Binding var privacyMode: Bool
+    @Environment(\.modelContext) private var context // <-- NOUVEAU
     
     @State private var selectedDate: Date = Date()
     @State private var showAddEventSheet: Bool = false
@@ -229,7 +232,13 @@ struct CalendarView: View {
                     isVirtual: isVirtualEvent,
                     onDetail: { event in detailEvent = event },
                     onEdit: { event in editingEvent = event },
-                    onDelete: { id in viewModel.calendarEvents.removeAll { $0.id == id } }
+                    onDelete: { id in
+                        // MODIFIÉ pour SwiftData
+                        if let evtToDelete = viewModel.calendarEvents.first(where: { $0.id == id }) {
+                            context.delete(evtToDelete)
+                            viewModel.calendarEvents.removeAll { $0.id == id }
+                        }
+                    }
                 )
                 
                 VStack(spacing: 32) {
@@ -791,6 +800,7 @@ struct EventDetailSheet: View {
 
 struct AddEditEventSheet: View {
     @Environment(\.dismiss) var dismiss
+    @Environment(\.modelContext) private var context // <-- NOUVEAU
     @ObservedObject var viewModel: PortfolioViewModel
     let event: CalendarEvent?
     let initialDate: Date
@@ -885,17 +895,23 @@ struct AddEditEventSheet: View {
     }
     
     func save() {
-        let newEvent = CalendarEvent(
-            id: event?.id ?? UUID(),
-            date: date,
-            type: type,
-            ticker: ticker.uppercased(),
-            note: note
-        )
-        
-        if isEditing, let idx = viewModel.calendarEvents.firstIndex(where: { $0.id == newEvent.id }) {
-            viewModel.calendarEvents[idx] = newEvent
+        if isEditing, let evt = event {
+            // MODIFIÉ : SwiftData
+            evt.date = date
+            evt.type = type
+            evt.ticker = ticker.uppercased()
+            evt.note = note
+            viewModel.objectWillChange.send()
         } else {
+            let newEvent = CalendarEvent(
+                id: UUID(),
+                date: date,
+                type: type,
+                ticker: ticker.uppercased(),
+                note: note
+            )
+            // MODIFIÉ : SwiftData
+            context.insert(newEvent)
             viewModel.calendarEvents.append(newEvent)
         }
         
@@ -903,7 +919,9 @@ struct AddEditEventSheet: View {
     }
     
     func delete() {
-        if let eventId = event?.id {
+        if let eventId = event?.id, let evtToDelete = viewModel.calendarEvents.first(where: { $0.id == eventId }) {
+            // MODIFIÉ : SwiftData
+            context.delete(evtToDelete)
             viewModel.calendarEvents.removeAll { $0.id == eventId }
         }
         dismiss()

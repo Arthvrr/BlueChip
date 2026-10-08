@@ -1,5 +1,8 @@
 import SwiftUI
+import SwiftData
 import Charts
+import Combine
+import Combine
 
 // =========================================================================
 // MARK: - LOGIQUE DE SCORING INTERNE
@@ -41,6 +44,7 @@ enum FundamentalsChartZoomType: String, Identifiable {
 struct FundamentalsView: View {
     @ObservedObject var viewModel: PortfolioViewModel
     @Binding var privacyMode: Bool
+    @Environment(\.modelContext) private var context // NOUVEAU
     
     @State private var showAddCriterion: Bool = false
     @State private var editingCriterion: FundamentalCriterion? = nil
@@ -61,7 +65,6 @@ struct FundamentalsView: View {
         return .gray.opacity(0.2)
     }
     
-    // Version opaque pour les graphiques empilés
     func solidColor(for section: String) -> Color {
         let sortedSections = Array(Set(viewModel.fundamentalCriteria.map { $0.section })).sorted()
         if let idx = sortedSections.firstIndex(of: section) {
@@ -111,7 +114,6 @@ struct FundamentalsView: View {
         ScrollView(.vertical) {
             VStack(spacing: 24) {
                 
-                // HEADER
                 HStack {
                     Text("Stock Quality Screener").font(.title).fontWeight(.bold)
                     Spacer()
@@ -121,7 +123,6 @@ struct FundamentalsView: View {
                     .buttonStyle(.borderedProminent)
                 }
                 
-                // 1. DASHBOARD (8 CARTES)
                 FundamentalsDashboardSection(
                     viewModel: viewModel,
                     privacyMode: $privacyMode,
@@ -129,7 +130,6 @@ struct FundamentalsView: View {
                     getTotalScore: getTotalScore
                 )
                 
-                // 2. LE SPREADSHEET (TABLEAU)
                 FundamentalsSpreadsheetSection(
                     viewModel: viewModel,
                     groupedCriteria: groupedCriteria,
@@ -140,7 +140,6 @@ struct FundamentalsView: View {
                     onCriterionTap: { crit in editingCriterion = crit }
                 )
                 
-                // 3. GRAPHIQUES (Ligne 1)
                 HStack(alignment: .top, spacing: 24) {
                     FundamentalsTotalScoreChart(
                         viewModel: viewModel,
@@ -160,7 +159,6 @@ struct FundamentalsView: View {
                     )
                 }
                 
-                // 4. GRAPHIQUES (Ligne 2)
                 HStack(alignment: .top, spacing: 24) {
                     FundamentalsQualityMatrixChart(
                         viewModel: viewModel,
@@ -181,7 +179,6 @@ struct FundamentalsView: View {
                     )
                 }
                 
-                // 5. GRAPHIQUES RADAR ET SCORECARD (Ligne 3)
                 HStack(alignment: .top, spacing: 24) {
                     FundamentalsPolarChart(
                         viewModel: viewModel,
@@ -402,7 +399,6 @@ struct FundamentalsSpreadsheetSection: View {
             } else {
                 ScrollView([.horizontal, .vertical], showsIndicators: true) {
                     VStack(spacing: 0) {
-                        // HEADER 1 : SECTIONS
                         HStack(spacing: 0) {
                             Text("INFO").font(.subheadline).fontWeight(.bold).foregroundColor(.secondary).frame(width: colWidthInfo * 3, height: 30)
                                 .background(Color(NSColor.windowBackgroundColor)).border(Color.gray.opacity(0.2), width: 0.5)
@@ -413,7 +409,6 @@ struct FundamentalsSpreadsheetSection: View {
                             }
                         }
                         
-                        // HEADER 2 : CRITÈRES
                         HStack(spacing: 0) {
                             InfoHeaderCell(title: "Ticker", width: colWidthInfo)
                             InfoHeaderCell(title: "Quality", width: colWidthInfo)
@@ -428,7 +423,6 @@ struct FundamentalsSpreadsheetSection: View {
                             }
                         }
                         
-                        // LIGNES : ACTIONS
                         ForEach(viewModel.positions) { pos in
                             HStack(spacing: 0) {
                                 Text(pos.ticker).font(.subheadline).fontWeight(.bold).frame(width: colWidthInfo, height: rowHeight)
@@ -463,7 +457,6 @@ struct FundamentalsSpreadsheetSection: View {
                         
                         Divider()
                         
-                        // LIGNE : MOYENNE PONDÉRÉE DU PORTEFEUILLE
                         HStack(spacing: 0) {
                             Text("WEIGHTED AVG")
                                 .font(.caption).fontWeight(.bold).foregroundColor(.primary)
@@ -801,7 +794,7 @@ struct FundamentalsLineChart: View {
                             LineMark(
                                 x: .value("Section", section),
                                 y: .value("Score (%)", pct),
-                                series: .value("Ticker", pos.ticker) // FIX : Permet de ne pas croiser les lignes !
+                                series: .value("Ticker", pos.ticker)
                             )
                             .foregroundStyle(colorForTicker(pos.ticker))
                             .interpolationMethod(.linear)
@@ -1110,6 +1103,7 @@ struct FundamentalsFullScreenChartView: View {
 struct CriterionFormSheet: View {
     @Environment(\.dismiss) var dismiss
     @ObservedObject var viewModel: PortfolioViewModel
+    @Environment(\.modelContext) private var context // NOUVEAU
     let criterionToEdit: FundamentalCriterion?
     
     @State private var name: String = ""
@@ -1250,6 +1244,7 @@ struct CriterionFormSheet: View {
                 if isEditing {
                     Button(role: .destructive, action: {
                         if let crit = criterionToEdit {
+                            context.delete(crit) // NOUVEAU
                             viewModel.fundamentalCriteria.removeAll { $0.id == crit.id }
                         }
                         dismiss()
@@ -1264,19 +1259,25 @@ struct CriterionFormSheet: View {
                     .keyboardShortcut(.cancelAction)
                 
                 Button(isEditing ? "Save Changes" : "Add Criterion") {
-                    if isEditing, let crit = criterionToEdit, let idx = viewModel.fundamentalCriteria.firstIndex(where: { $0.id == crit.id }) {
-                        viewModel.fundamentalCriteria[idx].name = name
-                        viewModel.fundamentalCriteria[idx].section = sectionStr.isEmpty ? "UNCATEGORIZED" : sectionStr
-                        viewModel.fundamentalCriteria[idx].weight = weight
-                        viewModel.fundamentalCriteria[idx].type = type
-                        viewModel.fundamentalCriteria[idx].isHigherBetter = isHigherBetter
-                        viewModel.fundamentalCriteria[idx].premiumThreshold = premiumThreshold
-                        viewModel.fundamentalCriteria[idx].standardThreshold = standardThreshold
+                    if isEditing, let crit = criterionToEdit {
+                        // Mise à jour de l'objet existant (SwiftData gère automatiquement la sauvegarde)
+                        crit.name = name
+                        crit.section = sectionStr.isEmpty ? "UNCATEGORIZED" : sectionStr
+                        crit.weight = weight
+                        crit.type = type
+                        crit.isHigherBetter = isHigherBetter
+                        crit.premiumThreshold = premiumThreshold
+                        crit.standardThreshold = standardThreshold
+                        
+                        // Force update on UI
+                        viewModel.objectWillChange.send()
                     } else {
+                        // Création et insertion du nouvel objet
                         let newCrit = FundamentalCriterion(
                             id: UUID(), name: name, section: sectionStr.isEmpty ? "UNCATEGORIZED" : sectionStr, weight: weight, type: type,
                             isHigherBetter: isHigherBetter, premiumThreshold: premiumThreshold, standardThreshold: standardThreshold
                         )
+                        context.insert(newCrit) // NOUVEAU
                         viewModel.fundamentalCriteria.append(newCrit)
                     }
                     dismiss()

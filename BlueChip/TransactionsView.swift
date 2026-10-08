@@ -1,5 +1,8 @@
 import SwiftUI
 import Charts
+import SwiftData
+import Combine
+import Combine
 
 // =========================================================================
 // MARK: - ENUMS & HELPERS
@@ -27,7 +30,7 @@ extension Color {
         case .withdrawal: return .red
         case .buy:        return .blue
         case .sell:       return .orange
-        case .dividend:   return .mint // Gardé au cas où une vieille transaction l'utilise en base de données
+        case .dividend:   return .mint
         case .other:      return .gray
         }
     }
@@ -146,7 +149,7 @@ struct TransactionsDashboardSection: View {
     var totalCustomFees:  Double { tx.reduce(0) { $0 + $1.customFields.values.reduce(0, +) } }
     
     var netCashFlow:      Double { totalDeposited - totalWithdrawn }
-    var netInvested:      Double { totalBought - totalSold } // Remplacement du Dividende
+    var netInvested:      Double { totalBought - totalSold }
 
     var body: some View {
         VStack(spacing: 16) {
@@ -158,7 +161,7 @@ struct TransactionsDashboardSection: View {
             }
             HStack(spacing: 16) {
                 txCard("Total Sold",         value: totalSold,       color: .orange)
-                txCard("Net Invested",       value: netInvested,     color: netInvested >= 0 ? .blue : .orange) // Nouveau widget
+                txCard("Net Invested",       value: netInvested,     color: netInvested >= 0 ? .blue : .orange)
                 txCard("Total Fees & Taxes", value: totalCustomFees, color: .red)
                 DashboardCard(title: "Transactions Found", value: "\(tx.count)", titleIcon: nil, privacyMode: $privacyMode)
             }
@@ -290,7 +293,6 @@ struct TransactionsTableSection: View {
                 ScrollView(.horizontal, showsIndicators: false) {
                     HStack(spacing: 8) {
                         filterChip(nil, label: "All")
-                        // Retire les dividendes des filtres
                         ForEach(TransactionType.allCases.filter { $0 != .dividend }, id: \.self) { type in
                             filterChip(type, label: type.rawValue)
                         }
@@ -336,7 +338,7 @@ struct TransactionsTableSection: View {
                                         TransactionRowView(
                                             tx: tx, columns: columns, privacyMode: privacyMode, dateFormatter: dateFormatter,
                                             onEdit: { editingTransaction = tx },
-                                            onDelete: { viewModel.transactions.removeAll { $0.id == tx.id } }
+                                            onDelete: { viewModel.deleteTransaction(id: tx.id) }
                                         )
                                         Divider()
                                     }
@@ -764,7 +766,7 @@ struct TxTotalByTypeChart: View {
     var isExpanded: Bool = false
     @Binding var expandedChart: TxChartZoomType?
 
-    let displayedTypes: [TransactionType] = [.buy, .sell, .deposit, .withdrawal] // Retiré Dividendes
+    let displayedTypes: [TransactionType] = [.buy, .sell, .deposit, .withdrawal]
 
     struct TypeSummary: Identifiable {
         let id = UUID()
@@ -1259,7 +1261,6 @@ struct AddEditTransactionView: View {
                     }
                     GroupBox("Transaction Type") {
                         LazyVGrid(columns: Array(repeating: GridItem(.flexible()), count: 3), spacing: 8) {
-                            // Masque le bouton Dividend du formulaire
                             ForEach(TransactionType.allCases.filter { $0 != .dividend }, id: \.self) { t in
                                 Button(action: { type = t }) {
                                     HStack(spacing: 6) { Image(systemName: t.icon); Text(t.rawValue) }
@@ -1316,7 +1317,7 @@ struct AddEditTransactionView: View {
                 Spacer()
                 if isEditing {
                     Button("Delete Transaction") {
-                        viewModel.transactions.removeAll { $0.id == transaction!.id }
+                        viewModel.deleteTransaction(id: transaction!.id)
                         dismiss()
                     }.foregroundColor(.red).padding(.trailing, 16)
                 }
@@ -1349,8 +1350,10 @@ struct AddEditTransactionView: View {
             viewModel.transactions[idx].ticker = ticker; viewModel.transactions[idx].quantity = qty
             viewModel.transactions[idx].amountEUR = amt; viewModel.transactions[idx].note = note
             viewModel.transactions[idx].customFields = fields
+            viewModel.objectWillChange.send()
         } else {
-            viewModel.transactions.append(Transaction(date: date, type: type, ticker: ticker, quantity: qty, amountEUR: amt, note: note, customFields: fields))
+            let newTx = Transaction(date: date, type: type, ticker: ticker, quantity: qty, amountEUR: amt, note: note, customFields: fields)
+            viewModel.addTransaction(newTx)
         }
         dismiss()
     }

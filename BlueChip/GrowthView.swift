@@ -1,4 +1,5 @@
 import SwiftUI
+import SwiftData // <-- NOUVEAU
 import Charts
 
 // MARK: - SPECIFIC ZOOM ENUM FOR GROWTH
@@ -81,7 +82,7 @@ struct EditGrowthGoalView: View {
                 Button("Save") {
                     viewModel.growthGoalType = selectedGoal
                     viewModel.growthGoalTarget = targetInput
-                    viewModel.saveData()
+                    // MODIFIÉ : Retrait de viewModel.saveData() (SwiftData gère automatiquement)
                     dismiss()
                 }.keyboardShortcut(.defaultAction).buttonStyle(.borderedProminent)
             }.padding()
@@ -102,8 +103,9 @@ struct GrowthDashboardSection: View {
     var currentWallet: Double { viewModel.currentTotalCapital }
     var totalInvested: Double { viewModel.manuallyInvested > 0 ? viewModel.manuallyInvested : viewModel.positionsInvestedSum }
 
-    var allTimeReturnEUR: Double { viewModel.totalROIValue }
-    var allTimeReturnPercent: Double { viewModel.totalROIPercent }
+    // MODIFIÉ : Le calcul prend la valeur totale (Actions + Cash) moins le total investi
+    var allTimeReturnEUR: Double { currentWallet - totalInvested }
+    var allTimeReturnPercent: Double { totalInvested > 0 ? (allTimeReturnEUR / totalInvested) : 0 }
     
     var activeYears: [GrowthYear] {
         viewModel.growthYears.filter { yearData in
@@ -257,10 +259,11 @@ struct GrowthTableSection: View {
                 Divider()
                 ScrollView {
                     LazyVStack(spacing: 0) {
-                        ForEach($viewModel.growthYears) { $yearData in
+                        // MODIFIÉ : On itère directement sur le tableau sans '$' pour SwiftData
+                        ForEach(viewModel.growthYears) { yearData in
                             let isCurrent = (yearData.year == currentYear)
                             GrowthRowView(
-                                yearData: $yearData,
+                                yearData: yearData, // MODIFIÉ
                                 isCurrentYear: isCurrent,
                                 liveWalletValue: viewModel.currentTotalCapital,
                                 cumulativeInvest: cumulativeInvest(for: yearData.year),
@@ -279,7 +282,7 @@ struct GrowthTableSection: View {
 }
 
 struct GrowthRowView: View {
-    @Binding var yearData: GrowthYear
+    @Bindable var yearData: GrowthYear // MODIFIÉ : @Bindable permet à SwiftData de modifier l'objet
     let isCurrentYear: Bool
     let liveWalletValue: Double
     let cumulativeInvest: Double
@@ -890,7 +893,6 @@ struct MoICMultipleChart: View {
     @State private var hoveredYear: String? = nil
     var currentYear: Int { Calendar.current.component(.year, from: Date()) }
     
-    // Le Cadenas chronologique
     var yearsDomain: [String] {
         (viewModel.dividendStartYear...currentYear).map { String($0) }
     }
@@ -901,7 +903,6 @@ struct MoICMultipleChart: View {
         var cumInvested: Double = viewModel.growthYears.first?.startWallet ?? 0
         
         for year in startYear...currentYear {
-            // FIX : On ne bloque plus la boucle si l'année est vide
             let yearData = viewModel.growthYears.first(where: { $0.year == year })
             cumInvested += yearData?.invested ?? 0.0
             
@@ -911,13 +912,11 @@ struct MoICMultipleChart: View {
             } else if let yData = yearData, yData.endWallet > 0 {
                 effectiveEnd = yData.endWallet
             } else {
-                // Si l'année est vide, on simule que le portefeuille n'a ni gagné ni perdu (Flat)
                 effectiveEnd = cumInvested
             }
             
             let multiple = cumInvested > 0 ? (effectiveEnd / cumInvested) : 1.0
             
-            // On ajoute systématiquement l'année pour qu'elle apparaisse
             items.append(MoICSeriesItem(year: year, multiple: multiple))
         }
         return items
@@ -967,7 +966,7 @@ struct MoICMultipleChart: View {
                     if let y = hoveredYear { RuleMark(x: .value("Year", y)).foregroundStyle(Color.secondary.opacity(0.4)).lineStyle(StrokeStyle(lineWidth: 1, dash: [4, 3])) }
                 }
                 .chartXSelection(value: $hoveredYear)
-                .chartXScale(domain: yearsDomain) // FIX : Cadenas chronologique ajouté
+                .chartXScale(domain: yearsDomain)
                 .chartYScale(domain: .automatic(includesZero: false))
                 .chartYAxis { AxisMarks(position: .leading) { value in AxisGridLine(); AxisTick(); AxisValueLabel { if let v = value.as(Double.self) { Text("\(v.formatted(.number.precision(.fractionLength(1))))x").font(.system(size: 10)) } } } }
                 .chartXAxis { AxisMarks { value in AxisValueLabel { if let s = value.as(String.self) { Text(s).font(.caption) } } } }
@@ -991,7 +990,6 @@ struct TippingPointChart: View {
     @State private var hoveredYear: String? = nil
     var currentYear: Int { Calendar.current.component(.year, from: Date()) }
     
-    // Le Cadenas chronologique
     var yearsDomain: [String] {
         (viewModel.dividendStartYear...currentYear).map { String($0) }
     }
@@ -1001,7 +999,6 @@ struct TippingPointChart: View {
         var items: [TippingPointItem] = []
         
         for year in startYear...currentYear {
-            // FIX : On traite l'année même si elle est vide
             let yearData = viewModel.growthYears.first(where: { $0.year == year })
             
             let contributions = yearData?.invested ?? 0.0
@@ -1013,13 +1010,11 @@ struct TippingPointChart: View {
             } else if let yData = yearData, yData.endWallet > 0 {
                 effectiveEnd = yData.endWallet
             } else {
-                // Si l'année est vide, on simule 0 Market Return
                 effectiveEnd = startWallet + contributions
             }
             
             let marketReturn = effectiveEnd - (startWallet + contributions)
             
-            // On ajoute les barres quoiqu'il arrive pour forcer l'affichage de l'année X
             items.append(TippingPointItem(year: year, type: "Contributions", value: contributions))
             items.append(TippingPointItem(year: year, type: "Market Returns", value: marketReturn))
         }
@@ -1072,7 +1067,7 @@ struct TippingPointChart: View {
                     .cornerRadius(4)
                 }
                 .chartXSelection(value: $hoveredYear)
-                .chartXScale(domain: yearsDomain) // FIX : Cadenas chronologique ajouté
+                .chartXScale(domain: yearsDomain)
                 .chartYAxis { AxisMarks(position: .leading) { value in AxisGridLine(); AxisTick(); AxisValueLabel { if let v = value.as(Double.self) { Text(v.formatted(.currency(code: "EUR").notation(.compactName))) } } } }
             }
             HStack { Text("Watch for the year your money works harder than you").font(.caption2).foregroundColor(.secondary); Spacer(); BlueChipWatermark() }
@@ -1090,11 +1085,10 @@ struct CompoundingPieChart: View {
     @Binding var expandedChart: GrowthChartZoomType?
     
     @State private var hiddenItems: Set<String> = []
-    @State private var hoveredYear: String? = nil // Retour au String !
+    @State private var hoveredYear: String? = nil
     
     var currentYear: Int { Calendar.current.component(.year, from: Date()) }
     
-    // Le "Cadenas" magique : on génère la liste exacte des années dans le bon ordre
     var yearsDomain: [String] {
         (viewModel.dividendStartYear...currentYear).map { String($0) }
     }
@@ -1110,7 +1104,7 @@ struct CompoundingPieChart: View {
             let effectiveEnd = (year == currentYear) ? viewModel.currentTotalCapital : yearData.endWallet
             
             if effectiveEnd > 0 {
-                let gains = max(0, effectiveEnd - cumInvested) // On bloque les pertes à 0 pour ce graphe visuel
+                let gains = max(0, effectiveEnd - cumInvested)
                 let totalForPct = cumInvested + gains
                 
                 let pctPrincipal = totalForPct > 0 ? (cumInvested / totalForPct) * 100.0 : 100.0
@@ -1158,7 +1152,7 @@ struct CompoundingPieChart: View {
             } else {
                 Chart(filteredData) { item in
                     BarMark(
-                        x: .value("Year", String(item.year)), // On remet le String pour avoir de belles barres
+                        x: .value("Year", String(item.year)),
                         y: .value("Percentage", item.percentage)
                     )
                     .foregroundStyle(color(for: item.category))
@@ -1170,7 +1164,6 @@ struct CompoundingPieChart: View {
                     }
                 }
                 .chartXSelection(value: $hoveredYear)
-                // LA CORRECTION EST ICI : On force l'axe X à utiliser la liste des années dans l'ordre !
                 .chartXScale(domain: yearsDomain)
                 .chartYAxis { AxisMarks(position: .leading) { value in AxisGridLine(); AxisTick(); AxisValueLabel { if let v = value.as(Double.self) { Text("\(v.formatted(.number.precision(.fractionLength(0))))%") } } } }
             }

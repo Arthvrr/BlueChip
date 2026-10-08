@@ -1,5 +1,7 @@
 import SwiftUI
 import Charts
+import SwiftData // <-- NOUVEAU
+import Combine
 
 struct WealthView: View {
     @ObservedObject var viewModel: PortfolioViewModel
@@ -80,7 +82,8 @@ struct WealthView: View {
                         onAdd: {
                             guard !newAssetName.isEmpty, let invested = newAssetInvested, let current = newAssetCurrent else { return }
                             let newAsset = WealthAsset(name: newAssetName, invested: invested, current: current, isAutoFilled: false)
-                            viewModel.manualWealthAssets.append(newAsset)
+                            // MODIFIÉ : SwiftData
+                            viewModel.addWealthAsset(newAsset)
                             newAssetName = ""
                             newAssetInvested = nil
                             newAssetCurrent = nil
@@ -482,7 +485,10 @@ struct EditWealthAssetSheet: View {
             
             Divider()
             HStack {
-                Button(role: .destructive, action: { viewModel.manualWealthAssets.removeAll { $0.id == assetToEdit.id }; dismiss() }) { Label("Delete", systemImage: "trash") }
+                Button(role: .destructive, action: {
+                    viewModel.deleteWealthAsset(id: assetToEdit.id)
+                    dismiss()
+                }) { Label("Delete", systemImage: "trash") }
                 Spacer()
                 Button("Cancel") { dismiss() }.keyboardShortcut(.cancelAction)
                 Button("Save") {
@@ -490,6 +496,7 @@ struct EditWealthAssetSheet: View {
                         viewModel.manualWealthAssets[idx].name = name
                         viewModel.manualWealthAssets[idx].invested = invested
                         viewModel.manualWealthAssets[idx].current = current
+                        viewModel.objectWillChange.send() // Force UI Update
                     }
                     dismiss()
                 }.keyboardShortcut(.defaultAction).buttonStyle(.borderedProminent).disabled(name.isEmpty)
@@ -519,13 +526,17 @@ struct EditWealthLiabilitySheet: View {
             
             Divider()
             HStack {
-                Button(role: .destructive, action: { viewModel.manualWealthLiabilities.removeAll { $0.id == liabilityToEdit.id }; dismiss() }) { Label("Delete", systemImage: "trash") }
+                Button(role: .destructive, action: {
+                    viewModel.deleteLiability(id: liabilityToEdit.id)
+                    dismiss()
+                }) { Label("Delete", systemImage: "trash") }
                 Spacer()
                 Button("Cancel") { dismiss() }.keyboardShortcut(.cancelAction)
                 Button("Save") {
                     if let idx = viewModel.manualWealthLiabilities.firstIndex(where: { $0.id == liabilityToEdit.id }) {
                         viewModel.manualWealthLiabilities[idx].name = name
                         viewModel.manualWealthLiabilities[idx].amount = amount
+                        viewModel.objectWillChange.send() // Force UI Update
                     }
                     dismiss()
                 }.keyboardShortcut(.defaultAction).buttonStyle(.borderedProminent).tint(.red).disabled(name.isEmpty)

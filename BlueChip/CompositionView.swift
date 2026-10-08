@@ -89,7 +89,13 @@ struct PRUPriceChart: View {
             if filteredData.isEmpty { Spacer(); Text("No data").foregroundColor(.secondary); Spacer() } else {
                 Chart(filteredData) { item in
                     BarMark(x: .value("Ticker", item.ticker), y: .value("Price", item.value)).foregroundStyle(viewModel.color(for: item.ticker).opacity(item.category == "Avg Cost" ? 0.4 : 1.0)).position(by: .value("Category", item.category)).cornerRadius(4)
-                        .annotation(position: .top) { if hoveredTicker == item.ticker { Text(item.value.formatted(.currency(code: "EUR"))).font(.system(size: 9, weight: .bold)).foregroundColor(.secondary).blur(radius: privacyMode ? 6 : 0) } }
+                        .annotation(position: .top) {
+                            if hoveredTicker == item.ticker {
+                                // MODIFIÉ ICI : Code devise passé de "EUR" à "USD"
+                                Text(item.value.formatted(.currency(code: "USD")))
+                                    .font(.system(size: 9, weight: .bold)).foregroundColor(.secondary).blur(radius: privacyMode ? 6 : 0)
+                            }
+                        }
                 }.chartLegend(.hidden).chartXSelection(value: $hoveredTicker)
             }
             BlueChipWatermark()
@@ -513,7 +519,20 @@ struct CompositionTabView: View {
     
     let tableFrameHeight: CGFloat = 340
     
-    // Calcul de l'allocation par devise pour le nouveau graphique
+    // --- NOUVEAUX CALCULS GLOBAUX DE RENTABILITÉ ---
+    var totalInvested: Double {
+        viewModel.manuallyInvested > 0 ? viewModel.manuallyInvested : viewModel.positionsInvestedSum
+    }
+    
+    var trueROIValue: Double {
+        viewModel.currentTotalCapital - totalInvested
+    }
+    
+    var trueROIPercent: Double {
+        totalInvested > 0 ? (trueROIValue / totalInvested) : 0
+    }
+    
+    // Calcul de l'allocation par devise
     var allocationByCurrency: [ChartDataItem] {
         var dict: [String: Double] = [:]
         for pos in viewModel.positions {
@@ -537,9 +556,10 @@ struct CompositionTabView: View {
                     }
                     HStack(spacing: 16) {
                         VStack(alignment: .leading, spacing: 4) {
+                            // MODIFIÉ : Utilise trueROIValue et trueROIPercent
                             Text("Unrealized P/L").font(.subheadline).foregroundColor(.secondary).lineLimit(1)
-                            Text(viewModel.totalROIValue.formatted(.currency(code: "EUR").sign(strategy: .always()))).font(.title2).fontWeight(.bold).foregroundColor(getColor(for: viewModel.totalROIValue)).blur(radius: privacyMode ? 8 : 0)
-                            Text(viewModel.totalROIPercent.formatted(.percent.precision(.fractionLength(2)).sign(strategy: .always()))).font(.caption).padding(.horizontal, 6).padding(.vertical, 2).background(getColor(for: viewModel.totalROIValue).opacity(0.1)).foregroundColor(getColor(for: viewModel.totalROIValue)).cornerRadius(4).blur(radius: privacyMode ? 8 : 0)
+                            Text(trueROIValue.formatted(.currency(code: "EUR").sign(strategy: .always()))).font(.title2).fontWeight(.bold).foregroundColor(getColor(for: trueROIValue)).blur(radius: privacyMode ? 8 : 0)
+                            Text(trueROIPercent.formatted(.percent.precision(.fractionLength(2)).sign(strategy: .always()))).font(.caption).padding(.horizontal, 6).padding(.vertical, 2).background(getColor(for: trueROIValue).opacity(0.1)).foregroundColor(getColor(for: trueROIValue)).cornerRadius(4).blur(radius: privacyMode ? 8 : 0)
                         }.padding().frame(maxWidth: .infinity, alignment: .leading).frame(height: 110).background(Color(NSColor.controlBackgroundColor)).cornerRadius(10).shadow(color: Color.black.opacity(0.05), radius: 2, x: 0, y: 1)
                         
                         DashboardCard(title: "Positions", value: "\(viewModel.positionCount)", privacyMode: $privacyMode)

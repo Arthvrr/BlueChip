@@ -1,5 +1,7 @@
 import SwiftUI
+import SwiftData // <-- NOUVEAU
 import Charts
+import Combine
 
 // =========================================================================
 // MARK: - EXTENSION FOR VALUATION CALCULATIONS
@@ -386,7 +388,7 @@ struct ValuationChartsSection: View {
                 ValuationDiscountHeatmap(viewModel: viewModel, marginOfSafety: marginOfSafety, privacyMode: $privacyMode, expandedChart: $chartToZoom)
             }
             HStack(spacing: 20) {
-                ValuationTargetPriceLineChart(viewModel: viewModel, privacyMode: $privacyMode, expandedChart: $chartToZoom) // GRAPHIQUE CORRIGÉ (Ligne)
+                ValuationTargetPriceLineChart(viewModel: viewModel, privacyMode: $privacyMode, expandedChart: $chartToZoom)
                 ValuationDistributionDonutChart(viewModel: viewModel, marginOfSafety: marginOfSafety, privacyMode: $privacyMode, expandedChart: $chartToZoom)
             }
         }
@@ -1109,7 +1111,10 @@ struct EditValuationSheet: View {
             viewModel.positions[idx].historicalPE10Y = historicalPE10Y
             viewModel.positions[idx].peg = peg
             viewModel.positions[idx].pFcf = pFcf
-            viewModel.saveData()
+            // MODIFIÉ : Retrait de viewModel.saveData()
+            
+            // Force l'UI à se rafraîchir en avertissant le ViewModel du changement interne
+            viewModel.objectWillChange.send()
         }
         dismiss()
     }

@@ -1,4 +1,5 @@
 import SwiftUI
+import SwiftData // <-- NOUVEAU
 import Charts
 
 // =========================================================================
@@ -152,7 +153,10 @@ struct SimulationView: View {
                     let text = abs(qtyDiff) > 0.001 ? (qtyDiff > 0 ? "Added \(qtyDiff.formatted()) shares of \(ticker)\(impactStr)" : "Sold \((-qtyDiff).formatted()) shares of \(ticker)\(impactStr)") : "Modified \(ticker) (Avg Cost or Sector)"
                     
                     diffs.append(SimulationDiff(text: text, type: qtyDiff > 0 ? .add : (qtyDiff < 0 ? .remove : .modify), onUndo: {
-                        if let idx = simulatedPositions.firstIndex(where: { $0.ticker == ticker }) { simulatedPositions[idx] = realPos }
+                        // NOUVEAU FIX : Clonage de realPos pour réinitialiser le Sandbox sans toucher la DB
+                        if let idx = simulatedPositions.firstIndex(where: { $0.ticker == ticker }) {
+                            simulatedPositions[idx] = clonePosition(realPos)
+                        }
                         simulatedCash -= impact // Rembourse ou déduit l'impact du cash
                         tradeCashImpacts[ticker] = 0.0
                     }))
@@ -174,7 +178,8 @@ struct SimulationView: View {
                 let impact = tradeCashImpacts[ticker] ?? 0.0
                 let impactStr = impact != 0 ? " (\(impact > 0 ? "+" : "")\(impact.formatted(.currency(code: "EUR"))))" : ""
                 diffs.append(SimulationDiff(text: "Liquidated position: \(ticker)\(impactStr)", type: .remove, onUndo: {
-                    simulatedPositions.append(realPos)
+                    // NOUVEAU FIX : Clone ajouté au lieu de la vraie référence
+                    simulatedPositions.append(clonePosition(realPos))
                     simulatedCash -= impact
                     tradeCashImpacts[ticker] = 0.0
                 }))
@@ -292,8 +297,20 @@ struct SimulationView: View {
         }
     }
     
+    // NOUVEAU FIX VITAL SWIFTDATA : Clonage en profondeur pour ne pas corrompre la Database
+    private func clonePosition(_ p: Position) -> Position {
+        Position(
+            id: p.id, ticker: p.ticker, quantity: p.quantity, averageCost: p.averageCost,
+            currentPrice: p.currentPrice, currency: p.currency, usdToEurRate: p.usdToEurRate,
+            annualDividendNet: p.annualDividendNet, country: p.country, sector: p.sector,
+            marketCap: p.marketCap, dividendMonths: p.dividendMonths, purchaseDate: p.purchaseDate,
+            dividendGrowth5Y: p.dividendGrowth5Y
+        )
+    }
+
     private func resetSimulation() {
-        simulatedPositions = viewModel.positions.map { $0 }
+        // NOUVEAU FIX : Utilisation du clonage
+        simulatedPositions = viewModel.positions.map { clonePosition($0) }
         simulatedCash = viewModel.availableCash
         manualCashOffset = 0.0
         tradeCashImpacts = [:]
