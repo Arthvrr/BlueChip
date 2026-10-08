@@ -1,9 +1,8 @@
 import SwiftUI
 import Charts
-import PhotosUI // NOUVEAU : Pour l'import d'images
+import PhotosUI
 import SwiftData
 import Combine
-import UniformTypeIdentifiers
 
 enum ChartZoomType: Identifiable {
     case positions, countries, sectors, marketCaps, priceCompare, roiCombo, scatter, capitalStatus, heatmap, dailyRoi, currencies, correlation
@@ -586,22 +585,17 @@ struct CompositionTabView: View {
                 
                 // --- TABLE ---
                 VStack(spacing: 0) {
-                    HStack {
-                        Spacer()
-                        Button(action: { showAddPositionSheet = true }) {
-                            Label("New Position", systemImage: "plus")
-                        }.buttonStyle(.borderedProminent).padding([.top, .trailing], 12)
-                    }
                     
                     Table(viewModel.positions, selection: $selection, sortOrder: $viewModel.sortOrder) {
-                        // MODIFIÉ : TableColumn avec Logo et Nom Complet (Demande 4)
                         TableColumn("Ticker", value: \.ticker) { position in
                             HStack {
                                 if let logoData = position.logoData, let nsImage = NSImage(data: logoData) {
                                     Image(nsImage: nsImage)
                                         .resizable()
-                                        .scaledToFill()
+                                        .scaledToFit()
+                                        .scaleEffect(position.logoScale) // <-- Applique le zoom choisi
                                         .frame(width: 24, height: 24)
+                                        .background(Color.white)
                                         .clipShape(Circle())
                                 } else {
                                     Circle().fill(viewModel.color(for: position.ticker).opacity(0.8))
@@ -628,7 +622,7 @@ struct CompositionTabView: View {
                     }
                     .tableStyle(.inset)
                 }
-                .frame(height: dynamicTableHeight) // Hauteur responsive ! (Demande 3)
+                .frame(height: dynamicTableHeight)
                 .background(Color(NSColor.controlBackgroundColor))
                 .cornerRadius(12)
                 .shadow(color: Color.black.opacity(0.05), radius: 2, x: 0, y: 1)
@@ -666,17 +660,13 @@ struct CompositionTabView: View {
         .sheet(isPresented: $showInvestedSheet) { SimpleNumberEditView(title: "Edit Initial Investment", value: $viewModel.manuallyInvested) }
         .sheet(isPresented: $showGoalSheet) { EditGoalView(viewModel: viewModel) }
         
-        // Ajout Formulaire d'Ajout
         .sheet(isPresented: $showAddPositionSheet) { EditPositionView(viewModel: viewModel, position: nil) }
-        // Édition Position existante
         .sheet(item: $positionToEdit) { position in EditPositionView(viewModel: viewModel, position: position) }
         
         .sheet(item: $chartToZoom) { type in FullScreenChartView(zoomType: type, viewModel: viewModel, privacyMode: $privacyMode) }
     }
     func getColor(for value: Double) -> Color { value >= 0 ? .green : .red }
 }
-
-// N'oublie pas d'ajouter 'import UniformTypeIdentifiers' tout en haut de ton fichier !
 
 // =========================================================================
 // MARK: - FORMULAIRE AJOUT/ÉDITION (STRUCTURÉ & FINDER IMPORT)
@@ -704,9 +694,10 @@ struct EditPositionView: View {
     @State private var dividendGrowth5Y: Double? = nil
     @State private var selectedMonths: Set<Int> = []
     
-    // Importation de fichier (Finder)
+    // Importation de fichier (Finder) et paramètre de Zoom
     @State private var showFileImporter = false
     @State private var logoData: Data? = nil
+    @State private var logoScale: Double = 1.0 // <-- NOUVEAU: Mémorise le zoom
     
     let monthsLabel = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"]
 
@@ -726,14 +717,16 @@ struct EditPositionView: View {
                     GroupBox("Asset Information") {
                         HStack(alignment: .top, spacing: 16) {
                             
-                            // Bouton Logo (Ouvre le Finder)
+                            // Bouton Logo (Ouvre le Finder) + Contrôles Zoom
                             VStack(spacing: 8) {
                                 Button(action: { showFileImporter = true }) {
                                     if let data = logoData, let nsImage = NSImage(data: data) {
                                         Image(nsImage: nsImage)
                                             .resizable()
-                                            .scaledToFill()
+                                            .scaledToFit()
+                                            .scaleEffect(logoScale)
                                             .frame(width: 60, height: 60)
+                                            .background(Color.white)
                                             .clipShape(Circle())
                                             .overlay(Circle().stroke(Color.gray.opacity(0.3), lineWidth: 1))
                                     } else {
@@ -747,13 +740,25 @@ struct EditPositionView: View {
                                 .help("Click to select a logo from Finder")
                                 
                                 if logoData != nil {
-                                    Button("Clear") { logoData = nil }
-                                        .font(.caption2)
-                                        .buttonStyle(.plain)
-                                        .foregroundColor(.red)
+                                    HStack(spacing: 4) {
+                                        Image(systemName: "minus.magnifyingglass").font(.system(size: 8)).foregroundColor(.secondary)
+                                        Slider(value: $logoScale, in: 0.2...3.0)
+                                            .controlSize(.mini)
+                                        Image(systemName: "plus.magnifyingglass").font(.system(size: 8)).foregroundColor(.secondary)
+                                    }
+                                    .frame(width: 70)
+                                    
+                                    Button("Clear") {
+                                        logoData = nil
+                                        logoScale = 1.0
+                                    }
+                                    .font(.caption2)
+                                    .buttonStyle(.plain)
+                                    .foregroundColor(.red)
                                 }
                             }
                             .padding(.top, 4)
+                            .frame(width: 80) // Fixe la largeur de la colonne Image pour aligner le texte à droite
                             
                             // Champs Texte
                             VStack(spacing: 12) {
@@ -862,7 +867,6 @@ struct EditPositionView: View {
         }
         .frame(width: 550, height: 650)
         .onAppear { populate() }
-        // Appel au Finder macOS pour sélectionner l'image
         .fileImporter(
             isPresented: $showFileImporter,
             allowedContentTypes: [.image],
@@ -871,7 +875,6 @@ struct EditPositionView: View {
             switch result {
             case .success(let urls):
                 guard let url = urls.first else { return }
-                // Requis sur Mac pour lire un fichier hors du dossier de l'app
                 if url.startAccessingSecurityScopedResource() {
                     defer { url.stopAccessingSecurityScopedResource() }
                     if let data = try? Data(contentsOf: url) {
@@ -889,6 +892,7 @@ struct EditPositionView: View {
         ticker = pos.ticker
         companyName = pos.companyName
         logoData = pos.logoData
+        logoScale = pos.logoScale // <-- On récupère le zoom sauvegardé
         country = pos.country
         sector = pos.sector
         marketCap = pos.marketCap
@@ -910,6 +914,7 @@ struct EditPositionView: View {
             pos.ticker = ticker.uppercased()
             pos.companyName = companyName
             pos.logoData = logoData
+            pos.logoScale = logoScale
             pos.country = country
             pos.sector = sector
             pos.marketCap = marketCap
@@ -918,7 +923,7 @@ struct EditPositionView: View {
             pos.purchaseDate = purchaseDate
             pos.annualDividendNet = safeDiv
             pos.dividendGrowth5Y = safeGrow
-            pos.dividendMonths = selectedMonths // <-- CORRECTION ICI
+            pos.dividendMonths = selectedMonths // <-- CORRECTION : Assignation directe du Set
             viewModel.objectWillChange.send()
         } else {
             let newPos = Position(
@@ -933,13 +938,13 @@ struct EditPositionView: View {
                 country: country,
                 sector: sector,
                 marketCap: marketCap,
-                dividendMonths: selectedMonths, // <-- CORRECTION ICI
+                dividendMonths: selectedMonths, // <-- CORRECTION : Assignation directe du Set
                 purchaseDate: purchaseDate,
                 dividendGrowth5Y: safeGrow
             )
-            
             newPos.companyName = companyName
             newPos.logoData = logoData
+            newPos.logoScale = logoScale
             
             context.insert(newPos)
             viewModel.positions.append(newPos)
