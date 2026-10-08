@@ -25,10 +25,18 @@ struct ProjectionView: View {
     @ObservedObject var viewModel: PortfolioViewModel
     @Binding var privacyMode: Bool
     
-    // Paramètres réglables
+    // Paramètres réglables (Base)
     @State private var timeHorizonYears: Double = 30
     @State private var customCAGR: Double? = nil
     @State private var customDivGrowth: Double? = nil
+    
+    // NOUVEAUX Paramètres réglables (Avancés)
+    @State private var enableMonthlyContribution: Bool = false
+    @State private var monthlyContributionAmount: Double = 0.0
+    @State private var enableDRIP: Bool = false
+    @State private var enableInflation: Bool = false
+    @State private var inflationRate: Double = 2.0
+    
     @State private var chartToZoom: ProjectionChartZoomType? = nil
     
     // MARK: - CALCULS DES TAUX
@@ -74,6 +82,7 @@ struct ProjectionView: View {
         (customDivGrowth ?? (defaultWeightedDivGrowth * 100)) / 100.0
     }
     
+    // MARK: - ALGORITHME DE PROJECTION (MOTEUR AMÉLIORÉ)
     var projectionSeries: [ProjectionYearData] {
         let startCapital = viewModel.currentTotalCapital
         
@@ -83,31 +92,57 @@ struct ProjectionView: View {
         }
         
         let startInvested = viewModel.manuallyInvested > 0 ? viewModel.manuallyInvested : viewModel.positionsInvestedSum
-        let safeInvested = startInvested > 0 ? startInvested : 1.0
+        
+        // Rendement de dividende initial (utilisé pour simuler le fait que les nouveaux apports achètent des actions qui rapportent ce même rendement moyen)
+        let initialYield = startCapital > 0 ? (startDividend / startCapital) : 0.0
         
         var result: [ProjectionYearData] = []
         var currentCap = startCapital
         var currentDiv = startDividend
         var cumulDiv = 0.0
+        var outOfPocketInvested = startInvested
         
         for i in 0...Int(timeHorizonYears) {
             let yearNum = currentYear + i
-            let gain = currentCap - startInvested
+            
+            // Calcul du facteur de réduction lié à l'inflation
+            let inflationDiscount = enableInflation ? pow(1.0 + (inflationRate / 100.0), Double(i)) : 1.0
+            
+            if i > 0 {
+                // 1. Croissance de la base existante
+                currentCap *= (1.0 + effectiveCAGR)
+                currentDiv *= (1.0 + effectiveDivGrowth)
+                
+                // 2. Ajout de l'épargne mensuelle (Contributions)
+                if enableMonthlyContribution {
+                    let yearlyContrib = monthlyContributionAmount * 12.0
+                    currentCap += yearlyContrib
+                    outOfPocketInvested += yearlyContrib
+                    currentDiv += yearlyContrib * initialYield // Les nouveaux apports génèrent des dividendes
+                }
+                
+                // 3. Réinvestissement des dividendes (DRIP)
+                if enableDRIP {
+                    currentCap += currentDiv
+                    currentDiv += currentDiv * initialYield // Les dividendes réinvestis génèrent eux-mêmes des dividendes l'année suivante
+                }
+            }
+            
+            let gain = currentCap - outOfPocketInvested
             cumulDiv += currentDiv
+            
+            let safeInvested = outOfPocketInvested > 0 ? outOfPocketInvested : 1.0
             
             result.append(ProjectionYearData(
                 yearIndex: i,
                 calendarYear: yearNum,
-                portfolioValue: currentCap,
-                capitalGain: gain,
-                annualDividend: currentDiv,
-                monthlyDividend: currentDiv / 12.0,
-                cumulativeDividends: cumulDiv,
-                projectedYOC: (currentDiv / safeInvested) * 100.0
+                portfolioValue: currentCap / inflationDiscount,
+                capitalGain: gain / inflationDiscount,
+                annualDividend: currentDiv / inflationDiscount,
+                monthlyDividend: (currentDiv / 12.0) / inflationDiscount,
+                cumulativeDividends: cumulDiv / inflationDiscount,
+                projectedYOC: (currentDiv / safeInvested) * 100.0 // Le YOC n'est pas actualisé, c'est un ratio brut
             ))
-            
-            currentCap *= (1.0 + effectiveCAGR)
-            currentDiv *= (1.0 + effectiveDivGrowth)
         }
         return result
     }
@@ -125,10 +160,16 @@ struct ProjectionView: View {
                     horizon: Int(timeHorizonYears)
                 )
                 
+                // Nouvelle section de contrôles améliorée
                 ProjectionControlsSection(
                     timeHorizonYears: $timeHorizonYears,
                     customCAGR: $customCAGR,
                     customDivGrowth: $customDivGrowth,
+                    enableMonthlyContribution: $enableMonthlyContribution,
+                    monthlyContributionAmount: $monthlyContributionAmount,
+                    enableDRIP: $enableDRIP,
+                    enableInflation: $enableInflation,
+                    inflationRate: $inflationRate,
                     defaultCAGR: defaultCAGR * 100,
                     defaultWeightedDivGrowth: defaultWeightedDivGrowth * 100
                 )
@@ -213,13 +254,21 @@ struct ProjectionDashboardSection: View {
 }
 
 // =========================================================================
-// MARK: - CONTRÔLES & SLIDER HORIZON
+// MARK: - CONTRÔLES & SLIDER HORIZON (AMÉLIORÉ)
 // =========================================================================
 
 struct ProjectionControlsSection: View {
     @Binding var timeHorizonYears: Double
     @Binding var customCAGR: Double?
     @Binding var customDivGrowth: Double?
+    
+    // Nouveaux bindings
+    @Binding var enableMonthlyContribution: Bool
+    @Binding var monthlyContributionAmount: Double
+    @Binding var enableDRIP: Bool
+    @Binding var enableInflation: Bool
+    @Binding var inflationRate: Double
+    
     let defaultCAGR: Double
     let defaultWeightedDivGrowth: Double
     
@@ -227,6 +276,7 @@ struct ProjectionControlsSection: View {
         VStack(alignment: .leading, spacing: 16) {
             Text("Projection Parameters & Assumptions").font(.headline).foregroundColor(.secondary)
             
+            // LIGNE 1 : Paramètres classiques (Horizon, CAGR, Div Growth)
             HStack(spacing: 32) {
                 VStack(alignment: .leading, spacing: 8) {
                     HStack {
@@ -270,6 +320,63 @@ struct ProjectionControlsSection: View {
                 }
                 .frame(width: 220)
             }
+            
+            Divider()
+            
+            // LIGNE 2 : Nouveaux leviers (Épargne, DRIP, Inflation)
+            HStack(alignment: .top, spacing: 32) {
+                
+                // Box 1: Contributions Mensuelles
+                VStack(alignment: .leading, spacing: 10) {
+                    Toggle("Monthly Contributions", isOn: $enableMonthlyContribution)
+                        .toggleStyle(.switch)
+                        .font(.subheadline).fontWeight(.semibold)
+                    
+                    if enableMonthlyContribution {
+                        HStack {
+                            TextField("Amount", value: $monthlyContributionAmount, format: .number)
+                                .textFieldStyle(.roundedBorder).frame(width: 80)
+                            Text("€ / month").font(.caption).foregroundColor(.secondary)
+                        }
+                    } else {
+                        Text("Inject fresh cash every month").font(.caption).foregroundColor(.secondary)
+                    }
+                }
+                .frame(maxWidth: .infinity, alignment: .leading)
+                
+                Divider().frame(height: 50)
+                
+                // Box 2: DRIP (Réinvestissement)
+                VStack(alignment: .leading, spacing: 10) {
+                    Toggle("DRIP (Reinvest Dividends)", isOn: $enableDRIP)
+                        .toggleStyle(.switch)
+                        .font(.subheadline).fontWeight(.semibold)
+                    
+                    Text("Dividends buy more shares").font(.caption).foregroundColor(.secondary)
+                }
+                .frame(maxWidth: .infinity, alignment: .leading)
+                
+                Divider().frame(height: 50)
+                
+                // Box 3: Ajustement de l'Inflation
+                VStack(alignment: .leading, spacing: 10) {
+                    Toggle("Adjust for Inflation", isOn: $enableInflation)
+                        .toggleStyle(.switch)
+                        .font(.subheadline).fontWeight(.semibold)
+                    
+                    if enableInflation {
+                        HStack {
+                            TextField("Rate", value: $inflationRate, format: .number)
+                                .textFieldStyle(.roundedBorder).frame(width: 60)
+                            Text("% / year").font(.caption).foregroundColor(.secondary)
+                        }
+                    } else {
+                        Text("Show real purchasing power").font(.caption).foregroundColor(.secondary)
+                    }
+                }
+                .frame(maxWidth: .infinity, alignment: .leading)
+            }
+            
         }
         .padding().background(Color(NSColor.controlBackgroundColor)).cornerRadius(12).shadow(color: Color.black.opacity(0.05), radius: 2, x: 0, y: 1)
     }
@@ -337,7 +444,6 @@ struct CapitalProjectionChart: View {
                 }
             }.padding(.bottom, 4)
             
-            // TOOLTIP EXTRAIT AU-DESSUS DU GRAPHIQUE
             if let item = hoveredItem {
                 HStack(spacing: 16) {
                     Text("Year \(item.yearIndex) (\(String(item.calendarYear)))").fontWeight(.bold)
@@ -431,7 +537,6 @@ struct DividendProjectionChart: View {
                 }
             }.padding(.bottom, 4)
             
-            // TOOLTIP EXTRAIT AU-DESSUS DU GRAPHIQUE
             if let item = hoveredItem {
                 HStack(spacing: 16) {
                     Text("Year \(item.yearIndex) (\(String(item.calendarYear)))").fontWeight(.bold)
@@ -523,7 +628,6 @@ struct CumulativeDividendsChart: View {
                 if !isExpanded { Button(action: { expandedChart = .cumulativeDividends }) { Image(systemName: "plus.magnifyingglass").foregroundColor(.secondary) }.buttonStyle(.plain) }
             }.padding(.bottom, 4)
             
-            // TOOLTIP EXTRAIT AU-DESSUS DU GRAPHIQUE
             if let item = hoveredItem {
                 HStack(spacing: 16) {
                     Text("Year \(item.yearIndex) (\(String(item.calendarYear)))").fontWeight(.bold)
@@ -597,7 +701,6 @@ struct ProjectedYOCChart: View {
                 if !isExpanded { Button(action: { expandedChart = .projectedYOC }) { Image(systemName: "plus.magnifyingglass").foregroundColor(.secondary) }.buttonStyle(.plain) }
             }.padding(.bottom, 4)
             
-            // TOOLTIP EXTRAIT AU-DESSUS DU GRAPHIQUE
             if let item = hoveredItem {
                 HStack(spacing: 16) {
                     Text("Year \(item.yearIndex) (\(String(item.calendarYear)))").fontWeight(.bold)
