@@ -1,5 +1,9 @@
 import SwiftUI
 import Charts
+import PhotosUI // NOUVEAU : Pour l'import d'images
+import SwiftData
+import Combine
+import UniformTypeIdentifiers
 
 enum ChartZoomType: Identifiable {
     case positions, countries, sectors, marketCaps, priceCompare, roiCombo, scatter, capitalStatus, heatmap, dailyRoi, currencies, correlation
@@ -91,7 +95,6 @@ struct PRUPriceChart: View {
                     BarMark(x: .value("Ticker", item.ticker), y: .value("Price", item.value)).foregroundStyle(viewModel.color(for: item.ticker).opacity(item.category == "Avg Cost" ? 0.4 : 1.0)).position(by: .value("Category", item.category)).cornerRadius(4)
                         .annotation(position: .top) {
                             if hoveredTicker == item.ticker {
-                                // MODIFIÉ ICI : Code devise passé de "EUR" à "USD"
                                 Text(item.value.formatted(.currency(code: "USD")))
                                     .font(.system(size: 9, weight: .bold)).foregroundColor(.secondary).blur(radius: privacyMode ? 6 : 0)
                             }
@@ -514,10 +517,12 @@ struct CompositionTabView: View {
     @State private var showCashSheet = false
     @State private var showInvestedSheet = false
     @State private var showGoalSheet = false
-    @State private var positionToEdit: Position? = nil
-    @State private var chartToZoom: ChartZoomType? = nil
     
-    let tableFrameHeight: CGFloat = 340
+    // NOUVEAU: Pour différencier Ajouter / Éditer
+    @State private var showAddPositionSheet = false
+    @State private var positionToEdit: Position? = nil
+    
+    @State private var chartToZoom: ChartZoomType? = nil
     
     // --- NOUVEAUX CALCULS GLOBAUX DE RENTABILITÉ ---
     var totalInvested: Double {
@@ -532,7 +537,7 @@ struct CompositionTabView: View {
         totalInvested > 0 ? (trueROIValue / totalInvested) : 0
     }
     
-    // Calcul de l'allocation par devise
+    // Calcul de l'allocation par devise pour le nouveau graphique
     var allocationByCurrency: [ChartDataItem] {
         var dict: [String: Double] = [:]
         for pos in viewModel.positions {
@@ -541,6 +546,16 @@ struct CompositionTabView: View {
         }
         if viewModel.availableCash > 0 { dict["EUR", default: 0] += viewModel.availableCash }
         return dict.map { ChartDataItem(name: $0.key, value: $0.value) }.sorted { $0.value > $1.value }
+    }
+    
+    // HAUTEUR DYNAMIQUE RESPONSIVE (Demande 3)
+    var dynamicTableHeight: CGFloat {
+        let rowHeight: CGFloat = 36 // Hauteur légèrement augmentée pour le logo et nom d'entreprise
+        let headerHeight: CGFloat = 40
+        let baseHeight: CGFloat = 100 // État vide
+        if viewModel.positions.isEmpty { return baseHeight }
+        let calculated = CGFloat(viewModel.positions.count) * rowHeight + headerHeight + 20
+        return min(max(calculated, 150), 600) // Entre 150pt et 600pt max
     }
     
     var body: some View {
@@ -556,7 +571,6 @@ struct CompositionTabView: View {
                     }
                     HStack(spacing: 16) {
                         VStack(alignment: .leading, spacing: 4) {
-                            // MODIFIÉ : Utilise trueROIValue et trueROIPercent
                             Text("Unrealized P/L").font(.subheadline).foregroundColor(.secondary).lineLimit(1)
                             Text(trueROIValue.formatted(.currency(code: "EUR").sign(strategy: .always()))).font(.title2).fontWeight(.bold).foregroundColor(getColor(for: trueROIValue)).blur(radius: privacyMode ? 8 : 0)
                             Text(trueROIPercent.formatted(.percent.precision(.fractionLength(2)).sign(strategy: .always()))).font(.caption).padding(.horizontal, 6).padding(.vertical, 2).background(getColor(for: trueROIValue).opacity(0.1)).foregroundColor(getColor(for: trueROIValue)).cornerRadius(4).blur(radius: privacyMode ? 8 : 0)
@@ -572,9 +586,36 @@ struct CompositionTabView: View {
                 
                 // --- TABLE ---
                 VStack(spacing: 0) {
+                    HStack {
+                        Spacer()
+                        Button(action: { showAddPositionSheet = true }) {
+                            Label("New Position", systemImage: "plus")
+                        }.buttonStyle(.borderedProminent).padding([.top, .trailing], 12)
+                    }
+                    
                     Table(viewModel.positions, selection: $selection, sortOrder: $viewModel.sortOrder) {
+                        // MODIFIÉ : TableColumn avec Logo et Nom Complet (Demande 4)
                         TableColumn("Ticker", value: \.ticker) { position in
-                            HStack { Circle().fill(viewModel.color(for: position.ticker).opacity(0.8)).frame(width: 24, height: 24).overlay(Text(position.ticker.prefix(1)).font(.caption).fontWeight(.bold).foregroundColor(.white)); Text(position.ticker).font(.system(.body, design: .monospaced)).fontWeight(.bold) }
+                            HStack {
+                                if let logoData = position.logoData, let nsImage = NSImage(data: logoData) {
+                                    Image(nsImage: nsImage)
+                                        .resizable()
+                                        .scaledToFill()
+                                        .frame(width: 24, height: 24)
+                                        .clipShape(Circle())
+                                } else {
+                                    Circle().fill(viewModel.color(for: position.ticker).opacity(0.8))
+                                        .frame(width: 24, height: 24)
+                                        .overlay(Text(position.ticker.prefix(1)).font(.caption).fontWeight(.bold).foregroundColor(.white))
+                                }
+                                
+                                VStack(alignment: .leading, spacing: 2) {
+                                    Text(position.ticker).font(.system(.body, design: .monospaced)).fontWeight(.bold)
+                                    if !position.companyName.isEmpty {
+                                        Text(position.companyName).font(.system(size: 9)).foregroundColor(.secondary).lineLimit(1)
+                                    }
+                                }
+                            }
                             .contentShape(Rectangle()).onTapGesture(count: 2) { positionToEdit = position }.contextMenu { Button(role: .destructive) { viewModel.deletePosition(id: position.id) } label: { Label("Delete", systemImage: "trash") } }
                         }
                         
@@ -587,7 +628,7 @@ struct CompositionTabView: View {
                     }
                     .tableStyle(.inset)
                 }
-                .frame(height: tableFrameHeight)
+                .frame(height: dynamicTableHeight) // Hauteur responsive ! (Demande 3)
                 .background(Color(NSColor.controlBackgroundColor))
                 .cornerRadius(12)
                 .shadow(color: Color.black.opacity(0.05), radius: 2, x: 0, y: 1)
@@ -624,8 +665,285 @@ struct CompositionTabView: View {
         .sheet(isPresented: $showCashSheet) { SimpleNumberEditView(title: "Edit Cash", value: $viewModel.availableCash) }
         .sheet(isPresented: $showInvestedSheet) { SimpleNumberEditView(title: "Edit Initial Investment", value: $viewModel.manuallyInvested) }
         .sheet(isPresented: $showGoalSheet) { EditGoalView(viewModel: viewModel) }
+        
+        // Ajout Formulaire d'Ajout
+        .sheet(isPresented: $showAddPositionSheet) { EditPositionView(viewModel: viewModel, position: nil) }
+        // Édition Position existante
         .sheet(item: $positionToEdit) { position in EditPositionView(viewModel: viewModel, position: position) }
+        
         .sheet(item: $chartToZoom) { type in FullScreenChartView(zoomType: type, viewModel: viewModel, privacyMode: $privacyMode) }
     }
     func getColor(for value: Double) -> Color { value >= 0 ? .green : .red }
+}
+
+// N'oublie pas d'ajouter 'import UniformTypeIdentifiers' tout en haut de ton fichier !
+
+// =========================================================================
+// MARK: - FORMULAIRE AJOUT/ÉDITION (STRUCTURÉ & FINDER IMPORT)
+// =========================================================================
+
+struct EditPositionView: View {
+    @Environment(\.dismiss) var dismiss
+    @Environment(\.modelContext) private var context // SwiftData
+    @ObservedObject var viewModel: PortfolioViewModel
+    
+    let position: Position? // nil = Add, non-nil = Edit
+    var isEditing: Bool { position != nil }
+    
+    @State private var ticker: String = ""
+    @State private var companyName: String = ""
+    @State private var country: String = ""
+    @State private var sector: String = ""
+    @State private var marketCap: String = ""
+    
+    @State private var quantity: Double? = nil
+    @State private var averageCost: Double? = nil
+    @State private var purchaseDate: Date = Date()
+    
+    @State private var annualDividendNet: Double? = nil
+    @State private var dividendGrowth5Y: Double? = nil
+    @State private var selectedMonths: Set<Int> = []
+    
+    // Importation de fichier (Finder)
+    @State private var showFileImporter = false
+    @State private var logoData: Data? = nil
+    
+    let monthsLabel = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"]
+
+    var body: some View {
+        VStack(spacing: 0) {
+            HStack {
+                Text(isEditing ? "Edit Position" : "New Position").font(.title2).fontWeight(.bold)
+                Spacer()
+                Button(action: { dismiss() }) { Image(systemName: "xmark.circle.fill").font(.title2).foregroundColor(.secondary) }.buttonStyle(.plain)
+            }.padding()
+            Divider()
+            
+            ScrollView {
+                VStack(alignment: .leading, spacing: 20) {
+                    
+                    // SECTION LOGO & INFO
+                    GroupBox("Asset Information") {
+                        HStack(alignment: .top, spacing: 16) {
+                            
+                            // Bouton Logo (Ouvre le Finder)
+                            VStack(spacing: 8) {
+                                Button(action: { showFileImporter = true }) {
+                                    if let data = logoData, let nsImage = NSImage(data: data) {
+                                        Image(nsImage: nsImage)
+                                            .resizable()
+                                            .scaledToFill()
+                                            .frame(width: 60, height: 60)
+                                            .clipShape(Circle())
+                                            .overlay(Circle().stroke(Color.gray.opacity(0.3), lineWidth: 1))
+                                    } else {
+                                        Circle().fill(Color.gray.opacity(0.1))
+                                            .frame(width: 60, height: 60)
+                                            .overlay(Image(systemName: "photo").font(.title2).foregroundColor(.secondary))
+                                            .overlay(Circle().stroke(Color.gray.opacity(0.3), lineWidth: 1))
+                                    }
+                                }
+                                .buttonStyle(.plain)
+                                .help("Click to select a logo from Finder")
+                                
+                                if logoData != nil {
+                                    Button("Clear") { logoData = nil }
+                                        .font(.caption2)
+                                        .buttonStyle(.plain)
+                                        .foregroundColor(.red)
+                                }
+                            }
+                            .padding(.top, 4)
+                            
+                            // Champs Texte
+                            VStack(spacing: 12) {
+                                HStack(spacing: 12) {
+                                    VStack(alignment: .leading, spacing: 4) {
+                                        Text("Ticker").font(.caption).foregroundColor(.secondary)
+                                        TextField("e.g., AAPL", text: $ticker).textFieldStyle(.roundedBorder).onChange(of: ticker) { ticker = ticker.uppercased() }
+                                    }
+                                    VStack(alignment: .leading, spacing: 4) {
+                                        Text("Company Name").font(.caption).foregroundColor(.secondary)
+                                        TextField("e.g., Apple Inc.", text: $companyName).textFieldStyle(.roundedBorder)
+                                    }
+                                }
+                                HStack(spacing: 12) {
+                                    VStack(alignment: .leading, spacing: 4) {
+                                        Text("Country").font(.caption).foregroundColor(.secondary)
+                                        TextField("US, FR...", text: $country).textFieldStyle(.roundedBorder)
+                                    }
+                                    VStack(alignment: .leading, spacing: 4) {
+                                        Text("Sector").font(.caption).foregroundColor(.secondary)
+                                        TextField("Technology...", text: $sector).textFieldStyle(.roundedBorder)
+                                    }
+                                    VStack(alignment: .leading, spacing: 4) {
+                                        Text("Market Cap").font(.caption).foregroundColor(.secondary)
+                                        TextField("Mega, Large...", text: $marketCap).textFieldStyle(.roundedBorder)
+                                    }
+                                }
+                            }
+                        }.padding(.vertical, 4)
+                    }
+                    
+                    // SECTION INVESTISSEMENT
+                    GroupBox("Investment Details") {
+                        VStack(spacing: 12) {
+                            HStack(spacing: 12) {
+                                VStack(alignment: .leading, spacing: 4) {
+                                    Text("Quantity").font(.caption).foregroundColor(.secondary)
+                                    TextField("0.0", value: $quantity, format: .number).textFieldStyle(.roundedBorder)
+                                }
+                                VStack(alignment: .leading, spacing: 4) {
+                                    Text("Average Price").font(.caption).foregroundColor(.secondary)
+                                    TextField("0.00", value: $averageCost, format: .number).textFieldStyle(.roundedBorder)
+                                }
+                            }
+                            HStack {
+                                Text("Purchase Date").font(.caption).foregroundColor(.secondary)
+                                Spacer()
+                                DatePicker("", selection: $purchaseDate, displayedComponents: .date).labelsHidden()
+                            }.padding(.top, 4)
+                        }.padding(.vertical, 4)
+                    }
+                    
+                    // SECTION DIVIDENDES
+                    GroupBox("Dividend Data") {
+                        VStack(spacing: 16) {
+                            HStack(spacing: 12) {
+                                VStack(alignment: .leading, spacing: 4) {
+                                    Text("Dividend per Share (€)").font(.caption).foregroundColor(.secondary)
+                                    TextField("0.00", value: $annualDividendNet, format: .number).textFieldStyle(.roundedBorder)
+                                }
+                                VStack(alignment: .leading, spacing: 4) {
+                                    Text("Div Growth per year 5Y (%)").font(.caption).foregroundColor(.secondary)
+                                    TextField("0.0", value: $dividendGrowth5Y, format: .number).textFieldStyle(.roundedBorder)
+                                }
+                            }
+                            
+                            VStack(alignment: .leading, spacing: 8) {
+                                Text("Payout Months:").font(.caption).foregroundColor(.secondary)
+                                LazyVGrid(columns: Array(repeating: GridItem(.flexible()), count: 6), spacing: 8) {
+                                    ForEach(1...12, id: \.self) { m in
+                                        let isSelected = selectedMonths.contains(m)
+                                        Button(action: {
+                                            if isSelected { selectedMonths.remove(m) } else { selectedMonths.insert(m) }
+                                        }) {
+                                            Text(monthsLabel[m-1])
+                                                .font(.caption)
+                                                .frame(maxWidth: .infinity)
+                                                .padding(.vertical, 6)
+                                                .background(isSelected ? Color.blue : Color.gray.opacity(0.15))
+                                                .foregroundColor(isSelected ? .white : .primary)
+                                                .cornerRadius(6)
+                                        }.buttonStyle(.plain)
+                                    }
+                                }
+                            }
+                        }.padding(.vertical, 4)
+                    }
+                }.padding()
+            }
+            
+            Divider()
+            HStack {
+                if isEditing {
+                    Button(role: .destructive) {
+                        if let id = position?.id { viewModel.deletePosition(id: id) }
+                        dismiss()
+                    } label: { Label("Delete", systemImage: "trash") }
+                }
+                Spacer()
+                Button("Cancel") { dismiss() }.keyboardShortcut(.cancelAction)
+                Button(isEditing ? "Save Changes" : "Add Position") { save() }
+                    .keyboardShortcut(.defaultAction)
+                    .buttonStyle(.borderedProminent)
+                    .disabled(ticker.isEmpty)
+            }.padding()
+        }
+        .frame(width: 550, height: 650)
+        .onAppear { populate() }
+        // Appel au Finder macOS pour sélectionner l'image
+        .fileImporter(
+            isPresented: $showFileImporter,
+            allowedContentTypes: [.image],
+            allowsMultipleSelection: false
+        ) { result in
+            switch result {
+            case .success(let urls):
+                guard let url = urls.first else { return }
+                // Requis sur Mac pour lire un fichier hors du dossier de l'app
+                if url.startAccessingSecurityScopedResource() {
+                    defer { url.stopAccessingSecurityScopedResource() }
+                    if let data = try? Data(contentsOf: url) {
+                        logoData = data
+                    }
+                }
+            case .failure(let error):
+                print("Failed to select image: \(error.localizedDescription)")
+            }
+        }
+    }
+    
+    func populate() {
+        guard let pos = position else { return }
+        ticker = pos.ticker
+        companyName = pos.companyName
+        logoData = pos.logoData
+        country = pos.country
+        sector = pos.sector
+        marketCap = pos.marketCap
+        quantity = pos.quantity == 0 ? nil : pos.quantity
+        averageCost = pos.averageCost == 0 ? nil : pos.averageCost
+        purchaseDate = pos.purchaseDate
+        annualDividendNet = pos.annualDividendNet == 0 ? nil : pos.annualDividendNet
+        dividendGrowth5Y = pos.dividendGrowth5Y == 0 ? nil : pos.dividendGrowth5Y
+        selectedMonths = Set(pos.dividendMonths)
+    }
+    
+    func save() {
+        let safeQty = quantity ?? 0.0
+        let safeAvg = averageCost ?? 0.0
+        let safeDiv = annualDividendNet ?? 0.0
+        let safeGrow = dividendGrowth5Y ?? 0.0
+        
+        if isEditing, let pos = position {
+            pos.ticker = ticker.uppercased()
+            pos.companyName = companyName
+            pos.logoData = logoData
+            pos.country = country
+            pos.sector = sector
+            pos.marketCap = marketCap
+            pos.quantity = safeQty
+            pos.averageCost = safeAvg
+            pos.purchaseDate = purchaseDate
+            pos.annualDividendNet = safeDiv
+            pos.dividendGrowth5Y = safeGrow
+            pos.dividendMonths = selectedMonths // <-- CORRECTION ICI
+            viewModel.objectWillChange.send()
+        } else {
+            let newPos = Position(
+                id: UUID(),
+                ticker: ticker.uppercased(),
+                quantity: safeQty,
+                averageCost: safeAvg,
+                currentPrice: 0.0,
+                currency: "EUR",
+                usdToEurRate: 1.0,
+                annualDividendNet: safeDiv,
+                country: country,
+                sector: sector,
+                marketCap: marketCap,
+                dividendMonths: selectedMonths, // <-- CORRECTION ICI
+                purchaseDate: purchaseDate,
+                dividendGrowth5Y: safeGrow
+            )
+            
+            newPos.companyName = companyName
+            newPos.logoData = logoData
+            
+            context.insert(newPos)
+            viewModel.positions.append(newPos)
+        }
+        dismiss()
+    }
 }

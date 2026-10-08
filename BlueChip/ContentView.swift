@@ -76,7 +76,7 @@ struct ContentView: View {
         }
         .background(Color(NSColor.windowBackgroundColor))
         .navigationTitle("")
-        .sheet(isPresented: $showAddSheet) { AddPositionView(viewModel: viewModel) }
+        .sheet(isPresented: $showAddSheet) { EditPositionView(viewModel: viewModel, position: nil) }
         .onAppear {
             // NOUVEAU : Initialise le ViewModel avec SwiftData et lance la migration JSON si nécessaire
             viewModel.initializeData(context: context)
