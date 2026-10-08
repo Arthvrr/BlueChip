@@ -289,8 +289,12 @@ struct RevenueSegment: Identifiable, Codable {
     var premiumThreshold: Double
     var standardThreshold: Double
     
-    init(id: UUID = UUID(), name: String, section: String, weight: Double, type: CriterionType, isHigherBetter: Bool, premiumThreshold: Double, standardThreshold: Double) {
-        self.id = id; self.name = name; self.section = section; self.weight = weight; self.type = type; self.isHigherBetter = isHigherBetter; self.premiumThreshold = premiumThreshold; self.standardThreshold = standardThreshold
+    var referenceLink: String = ""
+    
+    var order: Int = 0
+    
+    init(id: UUID = UUID(), name: String, section: String, weight: Double, type: CriterionType, isHigherBetter: Bool, premiumThreshold: Double, standardThreshold: Double, referenceLink: String = "", order: Int = 0) {
+        self.id = id; self.name = name; self.section = section; self.weight = weight; self.type = type; self.isHigherBetter = isHigherBetter; self.premiumThreshold = premiumThreshold; self.standardThreshold = standardThreshold; self.referenceLink = referenceLink; self.order = order
     }
 }
 

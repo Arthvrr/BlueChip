@@ -2,7 +2,6 @@ import SwiftUI
 import SwiftData
 import Charts
 import Combine
-import Combine
 
 // =========================================================================
 // MARK: - LOGIQUE DE SCORING INTERNE
@@ -44,16 +43,26 @@ enum FundamentalsChartZoomType: String, Identifiable {
 struct FundamentalsView: View {
     @ObservedObject var viewModel: PortfolioViewModel
     @Binding var privacyMode: Bool
-    @Environment(\.modelContext) private var context // NOUVEAU
+    @Environment(\.modelContext) private var context
     
     @State private var showAddCriterion: Bool = false
+    @State private var showReorderSheet: Bool = false // NOUVEAU
     @State private var editingCriterion: FundamentalCriterion? = nil
     @State private var editingCell: (position: Position, criterion: FundamentalCriterion)? = nil
     @State private var chartToZoom: FundamentalsChartZoomType? = nil
     
+    // MODIFIÉ : Utilise la propriété `order` pour trier les sections et les critères
     var groupedCriteria: [(section: String, criteria: [FundamentalCriterion])] {
         let dict = Dictionary(grouping: viewModel.fundamentalCriteria, by: { $0.section })
-        return dict.map { (section: $0.key, criteria: $0.value) }.sorted { $0.section < $1.section }
+        return dict.map { (section: $0.key, criteria: $0.value.sorted(by: {
+            if $0.order == $1.order { return $0.name < $1.name } // Fallback alphabétique
+            return $0.order < $1.order
+        })) }.sorted { group1, group2 in
+            let min1 = group1.criteria.map { $0.order }.min() ?? Int.max
+            let min2 = group2.criteria.map { $0.order }.min() ?? Int.max
+            if min1 == min2 { return group1.section < group2.section }
+            return min1 < min2
+        }
     }
     
     func color(for section: String) -> Color {
@@ -114,9 +123,16 @@ struct FundamentalsView: View {
         ScrollView(.vertical) {
             VStack(spacing: 24) {
                 
-                HStack {
+                HStack(spacing: 12) {
                     Text("Stock Quality Screener").font(.title).fontWeight(.bold)
                     Spacer()
+                    
+                    // NOUVEAU : Bouton pour réorganiser
+                    Button(action: { showReorderSheet = true }) {
+                        Label("Reorder Layout", systemImage: "arrow.up.arrow.down")
+                    }
+                    .buttonStyle(.bordered)
+                    
                     Button(action: { showAddCriterion = true }) {
                         Label("Add Criterion", systemImage: "plus")
                     }
@@ -206,6 +222,9 @@ struct FundamentalsView: View {
         }
         .sheet(item: $editingCriterion) { crit in
             CriterionFormSheet(viewModel: viewModel, criterionToEdit: crit)
+        }
+        .sheet(isPresented: $showReorderSheet) {
+            ReorderScreenerSheet(viewModel: viewModel)
         }
         .sheet(item: Binding<EditingCellWrapper?>(
             get: { editingCell != nil ? EditingCellWrapper(position: editingCell!.position, criterion: editingCell!.criterion) : nil },
@@ -518,6 +537,118 @@ struct FundamentalsSpreadsheetSection: View {
         case .failed: return .red
         case .none: return .secondary
         }
+    }
+}
+
+// =========================================================================
+// MARK: - SHEET : RÉORGANISER LES COLONNES (NOUVEAU)
+// =========================================================================
+
+struct ReorderScreenerSheet: View {
+    @Environment(\.dismiss) var dismiss
+    @ObservedObject var viewModel: PortfolioViewModel
+    
+    // Arrays temporaires pour manipuler l'ordre dans l'interface
+    @State private var sections: [String] = []
+    @State private var criteriaDict: [String: [FundamentalCriterion]] = [:]
+    
+    var body: some View {
+        VStack(spacing: 0) {
+            HStack {
+                Text("Reorder Columns & Criteria").font(.title2).fontWeight(.bold)
+                Spacer()
+                Button("Done") { saveAndDismiss() }
+                    .buttonStyle(.borderedProminent)
+            }
+            .padding(20)
+            
+            Divider()
+            
+            HStack(spacing: 20) {
+                // Colonne de gauche : Réorganiser les catégories
+                VStack(alignment: .leading, spacing: 10) {
+                    Text("1. Categories (Drag to reorder)")
+                        .font(.headline)
+                        .foregroundColor(.secondary)
+                    
+                    List {
+                        ForEach(sections, id: \.self) { sec in
+                            Text(sec).fontWeight(.bold)
+                        }
+                        .onMove { indices, newOffset in
+                            sections.move(fromOffsets: indices, toOffset: newOffset)
+                        }
+                    }
+                    .listStyle(.bordered)
+                    .cornerRadius(8)
+                }
+                
+                // Colonne de droite : Réorganiser les critères
+                VStack(alignment: .leading, spacing: 10) {
+                    Text("2. Criteria (Drag within category)")
+                        .font(.headline)
+                        .foregroundColor(.secondary)
+                    
+                    List {
+                        ForEach(sections, id: \.self) { sec in
+                            Section(header: Text(sec).fontWeight(.bold).foregroundColor(.primary)) {
+                                if let crits = criteriaDict[sec] {
+                                    ForEach(crits) { crit in
+                                        Text(crit.name)
+                                    }
+                                    .onMove { indices, newOffset in
+                                        criteriaDict[sec]?.move(fromOffsets: indices, toOffset: newOffset)
+                                    }
+                                }
+                            }
+                        }
+                    }
+                    .listStyle(.bordered)
+                    .cornerRadius(8)
+                }
+            }
+            .padding(20)
+        }
+        .frame(width: 700, height: 500)
+        .onAppear { setupData() }
+    }
+    
+    func setupData() {
+        let grouped = Dictionary(grouping: viewModel.fundamentalCriteria, by: { $0.section })
+        
+        let sortedGroups = grouped.map { (section: $0.key, criteria: $0.value.sorted(by: {
+            if $0.order == $1.order { return $0.name < $1.name }
+            return $0.order < $1.order
+        })) }.sorted { group1, group2 in
+            let min1 = group1.criteria.map { $0.order }.min() ?? Int.max
+            let min2 = group2.criteria.map { $0.order }.min() ?? Int.max
+            if min1 == min2 { return group1.section < group2.section }
+            return min1 < min2
+        }
+        
+        self.sections = sortedGroups.map { $0.section }
+        var dict: [String: [FundamentalCriterion]] = [:]
+        for group in sortedGroups {
+            dict[group.section] = group.criteria
+        }
+        self.criteriaDict = dict
+    }
+    
+    func saveAndDismiss() {
+        var newOrderIndex = 0
+        for sec in sections {
+            if let crits = criteriaDict[sec] {
+                for crit in crits {
+                    // Retrouver le critère original dans le ViewModel et lui assigner son nouvel ordre global
+                    if let actualCrit = viewModel.fundamentalCriteria.first(where: { $0.id == crit.id }) {
+                        actualCrit.order = newOrderIndex
+                        newOrderIndex += 1
+                    }
+                }
+            }
+        }
+        viewModel.objectWillChange.send()
+        dismiss()
     }
 }
 
@@ -1103,7 +1234,7 @@ struct FundamentalsFullScreenChartView: View {
 struct CriterionFormSheet: View {
     @Environment(\.dismiss) var dismiss
     @ObservedObject var viewModel: PortfolioViewModel
-    @Environment(\.modelContext) private var context // NOUVEAU
+    @Environment(\.modelContext) private var context
     let criterionToEdit: FundamentalCriterion?
     
     @State private var name: String = ""
@@ -1113,6 +1244,7 @@ struct CriterionFormSheet: View {
     @State private var isHigherBetter: Bool = true
     @State private var premiumThreshold: Double = 15.0
     @State private var standardThreshold: Double = 8.0
+    @State private var referenceLink: String = ""
     
     var isEditing: Bool { criterionToEdit != nil }
     
@@ -1171,6 +1303,13 @@ struct CriterionFormSheet: View {
                                     .padding(.top, 4)
                                 }
                             }
+                        }
+                        
+                        VStack(alignment: .leading, spacing: 6) {
+                            Text("Reference Link (Optional)").font(.caption).fontWeight(.bold).foregroundColor(.secondary)
+                            TextField("e.g. https://financecharts.com/stocks/{ticker}/metrics", text: $referenceLink)
+                                .textFieldStyle(.roundedBorder)
+                            Text("Use the `{ticker}` tag to inject the stock ticker automatically.").font(.caption2).foregroundColor(.blue)
                         }
                         
                         HStack(spacing: 16) {
@@ -1244,7 +1383,7 @@ struct CriterionFormSheet: View {
                 if isEditing {
                     Button(role: .destructive, action: {
                         if let crit = criterionToEdit {
-                            context.delete(crit) // NOUVEAU
+                            context.delete(crit)
                             viewModel.fundamentalCriteria.removeAll { $0.id == crit.id }
                         }
                         dismiss()
@@ -1260,7 +1399,6 @@ struct CriterionFormSheet: View {
                 
                 Button(isEditing ? "Save Changes" : "Add Criterion") {
                     if isEditing, let crit = criterionToEdit {
-                        // Mise à jour de l'objet existant (SwiftData gère automatiquement la sauvegarde)
                         crit.name = name
                         crit.section = sectionStr.isEmpty ? "UNCATEGORIZED" : sectionStr
                         crit.weight = weight
@@ -1268,16 +1406,17 @@ struct CriterionFormSheet: View {
                         crit.isHigherBetter = isHigherBetter
                         crit.premiumThreshold = premiumThreshold
                         crit.standardThreshold = standardThreshold
+                        crit.referenceLink = referenceLink
                         
-                        // Force update on UI
                         viewModel.objectWillChange.send()
                     } else {
-                        // Création et insertion du nouvel objet
+                        // NOUVEAU : On assigne dynamiquement l'ordre pour les nouveaux
+                        let newOrder = viewModel.fundamentalCriteria.count
                         let newCrit = FundamentalCriterion(
                             id: UUID(), name: name, section: sectionStr.isEmpty ? "UNCATEGORIZED" : sectionStr, weight: weight, type: type,
-                            isHigherBetter: isHigherBetter, premiumThreshold: premiumThreshold, standardThreshold: standardThreshold
+                            isHigherBetter: isHigherBetter, premiumThreshold: premiumThreshold, standardThreshold: standardThreshold, referenceLink: referenceLink, order: newOrder
                         )
-                        context.insert(newCrit) // NOUVEAU
+                        context.insert(newCrit)
                         viewModel.fundamentalCriteria.append(newCrit)
                     }
                     dismiss()
@@ -1298,6 +1437,7 @@ struct CriterionFormSheet: View {
                 isHigherBetter = crit.isHigherBetter
                 premiumThreshold = crit.premiumThreshold
                 standardThreshold = crit.standardThreshold
+                referenceLink = crit.referenceLink
             }
         }
     }
@@ -1316,6 +1456,14 @@ struct ValueEntrySheet: View {
     @State private var inputValue: Double? = nil
     @State private var boolValue: Bool = false
     
+    var dynamicURL: URL? {
+        if !criterion.referenceLink.isEmpty {
+            let urlString = criterion.referenceLink.replacingOccurrences(of: "{ticker}", with: position.ticker)
+            return URL(string: urlString)
+        }
+        return nil
+    }
+    
     var body: some View {
         VStack(spacing: 0) {
             HStack {
@@ -1327,6 +1475,39 @@ struct ValueEntrySheet: View {
             
             VStack(spacing: 20) {
                 Text(position.ticker).font(.title).fontWeight(.bold).foregroundColor(.blue)
+                
+                if let url = dynamicURL {
+                    // NOUVEAU : Bouton "Open" + Bouton "Copy" côte à côte
+                    HStack(spacing: 8) {
+                        Link(destination: url) {
+                            HStack {
+                                Image(systemName: "safari")
+                                Text("Open Data Source")
+                            }
+                            .font(.subheadline)
+                            .fontWeight(.semibold)
+                            .foregroundColor(.white)
+                            .padding(.horizontal, 16)
+                            .padding(.vertical, 10)
+                            .background(Color.blue)
+                            .cornerRadius(8)
+                        }
+                        
+                        Button(action: {
+                            NSPasteboard.general.clearContents()
+                            NSPasteboard.general.setString(url.absoluteString, forType: .string)
+                        }) {
+                            Image(systemName: "doc.on.clipboard.fill")
+                                .foregroundColor(.blue)
+                                .padding(10)
+                                .background(Color.blue.opacity(0.15))
+                                .cornerRadius(8)
+                        }
+                        .buttonStyle(.plain)
+                        .help("Copy link to clipboard")
+                    }
+                    .padding(.bottom, 4)
+                }
                 
                 if criterion.type == .boolean {
                     Toggle("Is the condition met? (Yes/No)", isOn: $boolValue)
