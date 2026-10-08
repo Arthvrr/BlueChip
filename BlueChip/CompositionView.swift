@@ -18,15 +18,40 @@ struct ModernDonutChart: View {
     @Binding var expandedChart: ChartZoomType?
     @Binding var privacyMode: Bool
     
+    var viewModel: PortfolioViewModel? = nil
+    
     @State private var selectedAngleValue: Double? = nil
     @State private var hiddenItems: Set<String> = []
     
-    func color(for name: String) -> Color {
-        if let idx = data.firstIndex(where: { $0.name == name }) { return palette[idx % palette.count] }
-        return .gray
+    // MODIFIÉ : Tri alphabétique, mais "Cash" est forcé tout à la fin
+    var sortedData: [ChartDataItem] {
+        data.sorted { a, b in
+            if a.name == "Cash" { return false } // 'a' (Cash) va à la fin
+            if b.name == "Cash" { return true }  // 'b' (Cash) va à la fin
+            return a.name < b.name               // Le reste est trié par ordre alphabétique
+        }
     }
     
-    var filteredData: [ChartDataItem] { data.filter { !hiddenItems.contains($0.name) } }
+    var filteredData: [ChartDataItem] {
+        sortedData.filter { !hiddenItems.contains($0.name) }
+    }
+    
+    // MODIFIÉ : Ajout d'une règle spécifique pour la couleur du Cash
+    func color(for name: String) -> Color {
+        // Si c'est le Cash, on force une couleur distincte (ex: jaune)
+        if name == "Cash" {
+            return .yellow
+        }
+        // Si on nous a passé le viewModel ET que le nom correspond à un Ticker connu
+        if let vm = viewModel, vm.positions.contains(where: { $0.ticker == name }) {
+            return vm.color(for: name)
+        }
+        // Sinon, on utilise la palette classique (pour les secteurs, pays, etc.)
+        if let idx = sortedData.firstIndex(where: { $0.name == name }) {
+            return palette[idx % palette.count]
+        }
+        return .gray
+    }
     
     var body: some View {
         VStack {
@@ -35,7 +60,7 @@ struct ModernDonutChart: View {
                 Spacer()
                 if !isExpanded { Button(action: { expandedChart = zoomType }) { Image(systemName: "plus.magnifyingglass").foregroundColor(.secondary) }.buttonStyle(.plain) }
             }.padding(.bottom, 4)
-            InteractiveLegendView(items: data.map { $0.name }, colorMap: color, hiddenItems: $hiddenItems).padding(.bottom, 8)
+            InteractiveLegendView(items: sortedData.map { $0.name }, colorMap: color, hiddenItems: $hiddenItems).padding(.bottom, 8)
             if filteredData.isEmpty { Spacer(); Text("No data").foregroundColor(.secondary); Spacer() } else {
                 Chart(filteredData) { item in SectorMark(angle: .value("Value", item.value), innerRadius: .ratio(0.65), angularInset: 1.5).foregroundStyle(color(for: item.name)).cornerRadius(4) }
                     .chartLegend(.hidden).chartAngleSelection(value: $selectedAngleValue).chartBackground { proxy in
@@ -53,7 +78,15 @@ struct ModernDonutChart: View {
             BlueChipWatermark()
         }.padding().frame(minHeight: 360, maxHeight: isExpanded ? .infinity : 360).background(Color(NSColor.controlBackgroundColor)).cornerRadius(12).shadow(color: Color.black.opacity(0.05), radius: 2, x: 0, y: 1)
     }
-    func findItem(for value: Double) -> ChartDataItem { var cum = 0.0; for item in filteredData { cum += item.value; if value <= cum { return item } }; return filteredData.last! }
+    
+    func findItem(for value: Double) -> ChartDataItem {
+        var cum = 0.0
+        for item in filteredData {
+            cum += item.value
+            if value <= cum { return item }
+        }
+        return filteredData.last!
+    }
 }
 
 struct PRUPriceChart: View {
