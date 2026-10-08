@@ -35,9 +35,15 @@ struct ProjectionView: View {
     
     var currentYear: Int { Calendar.current.component(.year, from: Date()) }
     
+    // Utilise exactement le même calcul CAGR que sur la page Growth
     var defaultCAGR: Double {
         let activeYearsCount = max(1, currentYear - viewModel.dividendStartYear + 1)
-        let allTimeReturnPercent = viewModel.totalROIPercent
+        let totalInvested = viewModel.manuallyInvested > 0 ? viewModel.manuallyInvested : viewModel.positionsInvestedSum
+        let currentWallet = viewModel.currentTotalCapital
+        
+        let allTimeReturnEUR = currentWallet - totalInvested
+        let allTimeReturnPercent = totalInvested > 0 ? (allTimeReturnEUR / totalInvested) : 0
+        
         let calculated = pow(1.0 + max(allTimeReturnPercent, -0.999), 1.0 / Double(activeYearsCount)) - 1.0
         return calculated.isNaN || calculated.isInfinite ? 0.08 : calculated
     }
@@ -46,6 +52,7 @@ struct ProjectionView: View {
         (customCAGR ?? (defaultCAGR * 100)) / 100.0
     }
     
+    // Le fallback est à 0.0% pour ne pas fausser la moyenne pondérée
     var defaultWeightedDivGrowth: Double {
         var totalAnnualDiv: Double = 0
         for pos in viewModel.positions {
@@ -56,7 +63,7 @@ struct ProjectionView: View {
         
         var weightedSum: Double = 0
         for pos in viewModel.positions {
-            let posGrowth = Mirror(reflecting: pos).children.first(where: { $0.label == "dividendGrowth5Y" })?.value as? Double ?? 5.0
+            let posGrowth = pos.dividendGrowth5Y
             weightedSum += (pos.totalDividendEUR * (posGrowth / 100.0))
         }
         
@@ -311,8 +318,12 @@ struct CapitalProjectionChart: View {
     var isExpanded: Bool = false
     @Binding var expandedChart: ProjectionChartZoomType?
     
-    // CHANGEMENT : Index numérique pour le survol
     @State private var hoveredYearIndex: Int? = nil
+
+    var hoveredItem: ProjectionYearData? {
+        guard let idx = hoveredYearIndex else { return nil }
+        return series.first(where: { $0.yearIndex == idx })
+    }
 
     var body: some View {
         let isPrivate = privacyMode
@@ -326,45 +337,52 @@ struct CapitalProjectionChart: View {
                 }
             }.padding(.bottom, 4)
             
-            Chart(series) { item in
-                // CHANGEMENT : Utilisation de yearIndex au lieu de calendarYear
-                AreaMark(
-                    x: .value("Year Index", item.yearIndex),
-                    y: .value("Value", item.portfolioValue)
-                )
-                .foregroundStyle(LinearGradient(colors: [.blue.opacity(0.4), .clear], startPoint: .top, endPoint: .bottom))
-                .interpolationMethod(.monotone)
+            // TOOLTIP EXTRAIT AU-DESSUS DU GRAPHIQUE
+            if let item = hoveredItem {
+                HStack(spacing: 16) {
+                    Text("Year \(item.yearIndex) (\(String(item.calendarYear)))").fontWeight(.bold)
+                    HStack(spacing: 4) {
+                        Circle().fill(Color.blue).frame(width: 7, height: 7)
+                        Text("Portfolio: \(item.portfolioValue.formatted(.currency(code: "EUR").precision(.fractionLength(0))))")
+                            .foregroundColor(.blue).fontWeight(.semibold).blur(radius: isPrivate ? 6 : 0)
+                    }
+                    HStack(spacing: 4) {
+                        Circle().fill(Color.green).frame(width: 7, height: 7)
+                        Text("Gain: \(item.capitalGain.formatted(.currency(code: "EUR").precision(.fractionLength(0)).sign(strategy: .always())))")
+                            .foregroundColor(item.capitalGain >= 0 ? .green : .red).fontWeight(.semibold).blur(radius: isPrivate ? 6 : 0)
+                    }
+                }
+                .font(.caption).padding(.horizontal, 8).padding(.vertical, 4).background(Color(NSColor.windowBackgroundColor)).cornerRadius(6).transition(.opacity)
+            } else {
+                Text("Hover to view").font(.caption).padding(.horizontal, 8).padding(.vertical, 4).foregroundColor(.clear)
+            }
+            
+            Chart {
+                ForEach(series) { item in
+                    AreaMark(
+                        x: .value("Year Index", item.yearIndex),
+                        y: .value("Value", item.portfolioValue)
+                    )
+                    .foregroundStyle(LinearGradient(colors: [.blue.opacity(0.4), .clear], startPoint: .top, endPoint: .bottom))
+                    .interpolationMethod(.monotone)
+                    
+                    LineMark(
+                        x: .value("Year Index", item.yearIndex),
+                        y: .value("Value", item.portfolioValue)
+                    )
+                    .foregroundStyle(Color.blue)
+                    .lineStyle(StrokeStyle(lineWidth: 3))
+                    .interpolationMethod(.monotone)
+                }
                 
-                LineMark(
-                    x: .value("Year Index", item.yearIndex),
-                    y: .value("Value", item.portfolioValue)
-                )
-                .foregroundStyle(Color.blue)
-                .lineStyle(StrokeStyle(lineWidth: 3))
-                .interpolationMethod(.monotone)
-                
-                if let hIdx = hoveredYearIndex, item.yearIndex == hIdx {
+                if let hIdx = hoveredYearIndex {
                     RuleMark(x: .value("Year Index", hIdx))
-                        .foregroundStyle(.secondary.opacity(0.5))
-                        .lineStyle(StrokeStyle(lineWidth: 1, dash: [4]))
-                        .annotation(position: .top) {
-                            VStack(alignment: .leading, spacing: 4) {
-                                // AFFICHAGE DES DEUX : Index + Année
-                                Text("Year \(item.yearIndex) (\(item.calendarYear))").font(.caption.bold())
-                                Divider()
-                                Text("Portfolio: \(item.portfolioValue.formatted(.currency(code: "EUR").precision(.fractionLength(0))))")
-                                    .font(.caption2.bold()).foregroundColor(.blue)
-                                    .blur(radius: isPrivate ? 6 : 0)
-                                Text("Gain: \(item.capitalGain.formatted(.currency(code: "EUR").precision(.fractionLength(0)).sign(strategy: .always())))")
-                                    .font(.caption2).foregroundColor(.green)
-                                    .blur(radius: isPrivate ? 6 : 0)
-                            }
-                            .padding(8).background(Color(NSColor.windowBackgroundColor).opacity(0.95)).cornerRadius(8).shadow(radius: 4)
-                        }
+                        .foregroundStyle(Color.secondary.opacity(0.4))
+                        .lineStyle(StrokeStyle(lineWidth: 1, dash: [4, 3]))
                 }
             }
             .chartLegend(.hidden)
-            .chartXSelection(value: $hoveredYearIndex) // Selection via l'index Int
+            .chartXSelection(value: $hoveredYearIndex)
             .chartYAxis {
                 AxisMarks(position: .leading) { value in
                     AxisGridLine(); AxisTick()
@@ -372,7 +390,6 @@ struct CapitalProjectionChart: View {
                 }
             }
             .chartXAxis {
-                // SwiftUI gère automatiquement les pas (0, 10, 20...)
                 AxisMarks(values: .automatic) { value in
                     if let intVal = value.as(Int.self) { AxisValueLabel { Text("\(intVal)").font(.caption) } }
                 }
@@ -397,6 +414,11 @@ struct DividendProjectionChart: View {
     
     @State private var hoveredYearIndex: Int? = nil
 
+    var hoveredItem: ProjectionYearData? {
+        guard let idx = hoveredYearIndex else { return nil }
+        return series.first(where: { $0.yearIndex == idx })
+    }
+
     var body: some View {
         let isPrivate = privacyMode
         
@@ -409,39 +431,48 @@ struct DividendProjectionChart: View {
                 }
             }.padding(.bottom, 4)
             
-            Chart(series) { item in
-                BarMark(
-                    x: .value("Year Index", item.yearIndex),
-                    y: .value("Dividends", item.annualDividend)
-                )
-                .foregroundStyle(Color.green.opacity(0.7))
-                .cornerRadius(4)
+            // TOOLTIP EXTRAIT AU-DESSUS DU GRAPHIQUE
+            if let item = hoveredItem {
+                HStack(spacing: 16) {
+                    Text("Year \(item.yearIndex) (\(String(item.calendarYear)))").fontWeight(.bold)
+                    HStack(spacing: 4) {
+                        Circle().fill(Color.green).frame(width: 7, height: 7)
+                        Text("Annual Div.: \(item.annualDividend.formatted(.currency(code: "EUR").precision(.fractionLength(0))))")
+                            .foregroundColor(.green).fontWeight(.semibold).blur(radius: isPrivate ? 6 : 0)
+                    }
+                    HStack(spacing: 4) {
+                        Circle().fill(Color.mint).frame(width: 7, height: 7)
+                        Text("Monthly Div.: \(item.monthlyDividend.formatted(.currency(code: "EUR").precision(.fractionLength(0))))/mo")
+                            .foregroundColor(.mint).fontWeight(.semibold).blur(radius: isPrivate ? 6 : 0)
+                    }
+                }
+                .font(.caption).padding(.horizontal, 8).padding(.vertical, 4).background(Color(NSColor.windowBackgroundColor)).cornerRadius(6).transition(.opacity)
+            } else {
+                Text("Hover to view").font(.caption).padding(.horizontal, 8).padding(.vertical, 4).foregroundColor(.clear)
+            }
+            
+            Chart {
+                ForEach(series) { item in
+                    BarMark(
+                        x: .value("Year Index", item.yearIndex),
+                        y: .value("Dividends", item.annualDividend)
+                    )
+                    .foregroundStyle(Color.green.opacity(0.7))
+                    .cornerRadius(4)
+                    
+                    LineMark(
+                        x: .value("Year Index", item.yearIndex),
+                        y: .value("Dividends", item.annualDividend)
+                    )
+                    .foregroundStyle(Color.mint)
+                    .lineStyle(StrokeStyle(lineWidth: 2))
+                    .interpolationMethod(.monotone)
+                }
                 
-                LineMark(
-                    x: .value("Year Index", item.yearIndex),
-                    y: .value("Dividends", item.annualDividend)
-                )
-                .foregroundStyle(Color.mint)
-                .lineStyle(StrokeStyle(lineWidth: 2))
-                .interpolationMethod(.monotone)
-                
-                if let hIdx = hoveredYearIndex, item.yearIndex == hIdx {
+                if let hIdx = hoveredYearIndex {
                     RuleMark(x: .value("Year Index", hIdx))
-                        .foregroundStyle(.secondary.opacity(0.5))
-                        .lineStyle(StrokeStyle(lineWidth: 1, dash: [4]))
-                        .annotation(position: .top) {
-                            VStack(alignment: .leading, spacing: 4) {
-                                Text("Year \(item.yearIndex) (\(item.calendarYear))").font(.caption.bold())
-                                Divider()
-                                Text("Annual Div.: \(item.annualDividend.formatted(.currency(code: "EUR").precision(.fractionLength(0))))")
-                                    .font(.caption2.bold()).foregroundColor(.green)
-                                    .blur(radius: isPrivate ? 6 : 0)
-                                Text("Monthly Div.: \(item.monthlyDividend.formatted(.currency(code: "EUR").precision(.fractionLength(0))))/mo")
-                                    .font(.caption2).foregroundColor(.mint)
-                                    .blur(radius: isPrivate ? 6 : 0)
-                            }
-                            .padding(8).background(Color(NSColor.windowBackgroundColor).opacity(0.95)).cornerRadius(8).shadow(radius: 4)
-                        }
+                        .foregroundStyle(Color.secondary.opacity(0.4))
+                        .lineStyle(StrokeStyle(lineWidth: 1, dash: [4, 3]))
                 }
             }
             .chartLegend(.hidden)
@@ -477,7 +508,14 @@ struct CumulativeDividendsChart: View {
     
     @State private var hoveredYearIndex: Int? = nil
 
+    var hoveredItem: ProjectionYearData? {
+        guard let idx = hoveredYearIndex else { return nil }
+        return series.first(where: { $0.yearIndex == idx })
+    }
+
     var body: some View {
+        let isPrivate = privacyMode
+        
         VStack(alignment: .leading, spacing: 8) {
             HStack {
                 if !isExpanded { Text("Total Cumulative Dividends Collected").font(.headline).foregroundColor(.secondary) }
@@ -485,38 +523,43 @@ struct CumulativeDividendsChart: View {
                 if !isExpanded { Button(action: { expandedChart = .cumulativeDividends }) { Image(systemName: "plus.magnifyingglass").foregroundColor(.secondary) }.buttonStyle(.plain) }
             }.padding(.bottom, 4)
             
-            Chart(series) { item in
-                AreaMark(
-                    x: .value("Year Index", item.yearIndex),
-                    y: .value("Cumul", item.cumulativeDividends)
-                )
-                .foregroundStyle(LinearGradient(colors: [.purple.opacity(0.6), .purple.opacity(0.1)], startPoint: .top, endPoint: .bottom))
-                .interpolationMethod(.monotone)
+            // TOOLTIP EXTRAIT AU-DESSUS DU GRAPHIQUE
+            if let item = hoveredItem {
+                HStack(spacing: 16) {
+                    Text("Year \(item.yearIndex) (\(String(item.calendarYear)))").fontWeight(.bold)
+                    HStack(spacing: 4) {
+                        Circle().fill(Color.purple).frame(width: 7, height: 7)
+                        Text("Total Collected: \(item.cumulativeDividends.formatted(.currency(code: "EUR").precision(.fractionLength(0))))")
+                            .foregroundColor(.purple).fontWeight(.semibold).blur(radius: isPrivate ? 6 : 0)
+                    }
+                }
+                .font(.caption).padding(.horizontal, 8).padding(.vertical, 4).background(Color(NSColor.windowBackgroundColor)).cornerRadius(6).transition(.opacity)
+            } else {
+                Text("Hover to view").font(.caption).padding(.horizontal, 8).padding(.vertical, 4).foregroundColor(.clear)
+            }
+            
+            Chart {
+                ForEach(series) { item in
+                    AreaMark(
+                        x: .value("Year Index", item.yearIndex),
+                        y: .value("Cumul", item.cumulativeDividends)
+                    )
+                    .foregroundStyle(LinearGradient(colors: [.purple.opacity(0.6), .purple.opacity(0.1)], startPoint: .top, endPoint: .bottom))
+                    .interpolationMethod(.monotone)
+                    
+                    LineMark(
+                        x: .value("Year Index", item.yearIndex),
+                        y: .value("Cumul", item.cumulativeDividends)
+                    )
+                    .foregroundStyle(Color.purple)
+                    .lineStyle(StrokeStyle(lineWidth: 3))
+                    .interpolationMethod(.monotone)
+                }
                 
-                LineMark(
-                    x: .value("Year Index", item.yearIndex),
-                    y: .value("Cumul", item.cumulativeDividends)
-                )
-                .foregroundStyle(Color.purple)
-                .lineStyle(StrokeStyle(lineWidth: 3))
-                .interpolationMethod(.monotone)
-                
-                if let hIdx = hoveredYearIndex, item.yearIndex == hIdx {
+                if let hIdx = hoveredYearIndex {
                     RuleMark(x: .value("Year Index", hIdx))
-                        .foregroundStyle(.secondary.opacity(0.5))
-                        .lineStyle(StrokeStyle(lineWidth: 1, dash: [4]))
-                        .annotation(position: .top) {
-                            VStack(alignment: .leading, spacing: 4) {
-                                Text("Year \(item.yearIndex) (\(item.calendarYear))").font(.caption.bold())
-                                Divider()
-                                Text("Total Collected:")
-                                    .font(.caption2).foregroundColor(.secondary)
-                                Text(item.cumulativeDividends.formatted(.currency(code: "EUR").precision(.fractionLength(0))))
-                                    .font(.caption.bold()).foregroundColor(.purple)
-                                    .blur(radius: privacyMode ? 6 : 0)
-                            }
-                            .padding(8).background(Color(NSColor.windowBackgroundColor).opacity(0.95)).cornerRadius(8).shadow(radius: 4)
-                        }
+                        .foregroundStyle(Color.secondary.opacity(0.4))
+                        .lineStyle(StrokeStyle(lineWidth: 1, dash: [4, 3]))
                 }
             }
             .chartLegend(.hidden)
@@ -539,13 +582,35 @@ struct ProjectedYOCChart: View {
     
     @State private var hoveredYearIndex: Int? = nil
 
+    var hoveredItem: ProjectionYearData? {
+        guard let idx = hoveredYearIndex else { return nil }
+        return series.first(where: { $0.yearIndex == idx })
+    }
+
     var body: some View {
+        let isPrivate = privacyMode
+        
         VStack(alignment: .leading, spacing: 8) {
             HStack {
                 if !isExpanded { Text("Projected Yield On Cost (YOC)").font(.headline).foregroundColor(.secondary) }
                 Spacer()
                 if !isExpanded { Button(action: { expandedChart = .projectedYOC }) { Image(systemName: "plus.magnifyingglass").foregroundColor(.secondary) }.buttonStyle(.plain) }
             }.padding(.bottom, 4)
+            
+            // TOOLTIP EXTRAIT AU-DESSUS DU GRAPHIQUE
+            if let item = hoveredItem {
+                HStack(spacing: 16) {
+                    Text("Year \(item.yearIndex) (\(String(item.calendarYear)))").fontWeight(.bold)
+                    HStack(spacing: 4) {
+                        Circle().fill(Color.orange).frame(width: 7, height: 7)
+                        Text("Projected YOC: \(item.projectedYOC.formatted(.number.precision(.fractionLength(1))))%")
+                            .foregroundColor(.orange).fontWeight(.semibold).blur(radius: isPrivate ? 6 : 0)
+                    }
+                }
+                .font(.caption).padding(.horizontal, 8).padding(.vertical, 4).background(Color(NSColor.windowBackgroundColor)).cornerRadius(6).transition(.opacity)
+            } else {
+                Text("Hover to view").font(.caption).padding(.horizontal, 8).padding(.vertical, 4).foregroundColor(.clear)
+            }
             
             Chart {
                 RuleMark(y: .value("100%", 100.0))
@@ -561,24 +626,12 @@ struct ProjectedYOCChart: View {
                     .foregroundStyle(Color.orange)
                     .lineStyle(StrokeStyle(lineWidth: 3))
                     .interpolationMethod(.monotone)
-                    
-                    if let hIdx = hoveredYearIndex, item.yearIndex == hIdx {
-                        RuleMark(x: .value("Year Index", hIdx))
-                            .foregroundStyle(.secondary.opacity(0.5))
-                            .lineStyle(StrokeStyle(lineWidth: 1, dash: [4]))
-                            .annotation(position: .top) {
-                                VStack(alignment: .leading, spacing: 4) {
-                                    Text("Year \(item.yearIndex) (\(item.calendarYear))").font(.caption.bold())
-                                    Divider()
-                                    Text("Projected YOC:")
-                                        .font(.caption2).foregroundColor(.secondary)
-                                    Text("\(item.projectedYOC.formatted(.number.precision(.fractionLength(1))))%")
-                                        .font(.caption.bold()).foregroundColor(.orange)
-                                        .blur(radius: privacyMode ? 6 : 0)
-                                }
-                                .padding(8).background(Color(NSColor.windowBackgroundColor).opacity(0.95)).cornerRadius(8).shadow(radius: 4)
-                            }
-                    }
+                }
+                
+                if let hIdx = hoveredYearIndex {
+                    RuleMark(x: .value("Year Index", hIdx))
+                        .foregroundStyle(Color.secondary.opacity(0.4))
+                        .lineStyle(StrokeStyle(lineWidth: 1, dash: [4, 3]))
                 }
             }
             .chartLegend(.hidden)
