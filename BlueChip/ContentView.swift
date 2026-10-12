@@ -1,5 +1,6 @@
 import SwiftUI
 import SwiftData // <-- NOUVEAU
+import Combine
 
 struct ContentView: View {
     @Environment(\.modelContext) private var context // <-- NOUVEAU : Récupération de la base de données
@@ -23,7 +24,29 @@ struct ContentView: View {
                 .buttonStyle(.plain)
                 .padding(.trailing, 8)
                 
-                Button(action: { Task { await viewModel.refreshPrices() } }) {
+                Button(action: {
+                    Task {
+                        // 1. Mise à jour des prix des actions
+                        await viewModel.refreshPrices()
+                        
+                        // 2. NOUVEAU : Récupération du taux de change en direct (USD -> EUR)
+                        let service = YahooFinanceService()
+                        if let fxData = await service.fetchStockData(for: "EUR=X") {
+                            await MainActor.run {
+                                // On met à jour toutes les positions concernées
+                                for pos in viewModel.positions {
+                                    if pos.currency.uppercased() == "USD" {
+                                        pos.usdToEurRate = fxData.price
+                                    } else if pos.currency.uppercased() == "EUR" {
+                                        pos.usdToEurRate = 1.0
+                                    }
+                                }
+                                // On signale à l'interface de se redessiner
+                                viewModel.objectWillChange.send()
+                            }
+                        }
+                    }
+                }) {
                     if viewModel.isLoading {
                         ProgressView().controlSize(.small)
                     } else {
@@ -33,6 +56,7 @@ struct ContentView: View {
                 .disabled(viewModel.isLoading)
                 .buttonStyle(.bordered)
                 .padding(.trailing, 8)
+
                 
                 Button(action: { showAddSheet = true }) {
                     Label("Add", systemImage: "plus")

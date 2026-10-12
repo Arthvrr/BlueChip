@@ -849,7 +849,7 @@ struct EditPositionView: View {
                         VStack(spacing: 16) {
                             HStack(spacing: 12) {
                                 VStack(alignment: .leading, spacing: 4) {
-                                    Text("Dividend per Share (€)").font(.caption).foregroundColor(.secondary)
+                                    Text("Dividend per Share (\(ticker.isEmpty ? "Original Cur." : "Local"))").font(.caption).foregroundColor(.secondary)
                                     TextField("0.00", value: $annualDividendNet, format: .number).textFieldStyle(.roundedBorder)
                                 }
                                 VStack(alignment: .leading, spacing: 4) {
@@ -879,6 +879,7 @@ struct EditPositionView: View {
                             }
                         }.padding(.vertical, 4)
                     }
+
                 }.padding()
             }
             
@@ -942,9 +943,10 @@ struct EditPositionView: View {
         let safeAvg = averageCost ?? 0.0
         let safeDiv = annualDividendNet ?? 0.0
         let safeGrow = dividendGrowth5Y ?? 0.0
+        let cleanTicker = ticker.trimmingCharacters(in: .whitespacesAndNewlines).uppercased()
         
         if isEditing, let pos = position {
-            pos.ticker = ticker.uppercased()
+            pos.ticker = cleanTicker
             pos.companyName = companyName
             pos.logoData = logoData
             pos.logoScale = logoScale
@@ -956,22 +958,22 @@ struct EditPositionView: View {
             pos.purchaseDate = purchaseDate
             pos.annualDividendNet = safeDiv
             pos.dividendGrowth5Y = safeGrow
-            pos.dividendMonths = selectedMonths // <-- CORRECTION : Assignation directe du Set
+            pos.dividendMonths = selectedMonths
             viewModel.objectWillChange.send()
         } else {
             let newPos = Position(
                 id: UUID(),
-                ticker: ticker.uppercased(),
+                ticker: cleanTicker,
                 quantity: safeQty,
                 averageCost: safeAvg,
                 currentPrice: 0.0,
-                currency: "EUR",
-                usdToEurRate: 1.0,
+                currency: "USD", // Par défaut USD pour actions US/ADR comme TSM
+                usdToEurRate: 0.92,
                 annualDividendNet: safeDiv,
                 country: country,
                 sector: sector,
                 marketCap: marketCap,
-                dividendMonths: selectedMonths, // <-- CORRECTION : Assignation directe du Set
+                dividendMonths: selectedMonths,
                 purchaseDate: purchaseDate,
                 dividendGrowth5Y: safeGrow
             )
@@ -981,7 +983,43 @@ struct EditPositionView: View {
             
             context.insert(newPos)
             viewModel.positions.append(newPos)
+            
+            // Fetch automatique du cours et de la devise réelle dès l'ajout
+            Task {
+                let service = YahooFinanceService()
+                
+                // 1. Récupère le prix de l'action
+                if let data = await service.fetchStockData(for: cleanTicker) {
+                    await MainActor.run {
+                        newPos.currentPrice = data.price
+                        newPos.currency = data.currency
+                    }
+                    
+                    // 2. Si la devise est l'USD, on va chercher le vrai taux de change en direct
+                    if data.currency.uppercased() == "USD" {
+                        // "EUR=X" est le ticker Yahoo Finance pour le taux USD/EUR
+                        if let fxData = await service.fetchStockData(for: "EUR=X") {
+                            await MainActor.run {
+                                newPos.usdToEurRate = fxData.price
+                                viewModel.objectWillChange.send()
+                            }
+                        } else {
+                            await MainActor.run { viewModel.objectWillChange.send() }
+                        }
+                    } else if data.currency.uppercased() == "EUR" {
+                        // Si c'est déjà en Euro, le taux est de 1
+                        await MainActor.run {
+                            newPos.usdToEurRate = 1.0
+                            viewModel.objectWillChange.send()
+                        }
+                    } else {
+                        await MainActor.run { viewModel.objectWillChange.send() }
+                    }
+                }
+            }
+
         }
         dismiss()
     }
+
 }

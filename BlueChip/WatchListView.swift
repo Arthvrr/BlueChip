@@ -66,6 +66,38 @@ enum WatchListSortColumn {
 }
 
 // =========================================================================
+// MARK: - COMPOSANT RÉUTILISABLE POUR LES LIENS
+// =========================================================================
+
+struct DataSourceLinkButton: View {
+    let template: String
+    let ticker: String
+    
+    var body: some View {
+        if !template.isEmpty && !ticker.isEmpty {
+            let urlString = template.replacingOccurrences(of: "{ticker}", with: ticker)
+            if let url = URL(string: urlString) {
+                HStack(spacing: 6) {
+                    Link(destination: url) {
+                        Image(systemName: "safari").foregroundColor(.blue)
+                    }.help("Open link in Safari")
+                    
+                    Button(action: {
+                        NSPasteboard.general.clearContents()
+                        NSPasteboard.general.setString(url.absoluteString, forType: .string)
+                    }) {
+                        Image(systemName: "doc.on.clipboard").foregroundColor(.blue)
+                    }
+                    .buttonStyle(.plain)
+                    .help("Copy link to clipboard")
+                }
+                .padding(.leading, 8)
+            }
+        }
+    }
+}
+
+// =========================================================================
 // MARK: - MAIN WATCHLIST VIEW
 // =========================================================================
 
@@ -746,14 +778,22 @@ struct WatchlistQualityLabSection: View {
     }
 }
 
-// --- SOUS-VUE : FORMULAIRE DE CRITÈRES ---
+// --- SOUS-VUE : FORMULAIRE DE CRITÈRES (AVEC LIENS DYNAMIQUES) ---
 struct WatchlistLabForm: View {
     @ObservedObject var viewModel: PortfolioViewModel
     let itemIndex: Int
     
     var groupedCriteria: [(section: String, criteria: [FundamentalCriterion])] {
         let dict = Dictionary(grouping: viewModel.fundamentalCriteria, by: { $0.section })
-        return dict.map { (section: $0.key, criteria: $0.value) }.sorted { $0.section < $1.section }
+        return dict.map { (section: $0.key, criteria: $0.value.sorted(by: {
+            if $0.order == $1.order { return $0.name < $1.name }
+            return $0.order < $1.order
+        })) }.sorted { group1, group2 in
+            let min1 = group1.criteria.map { $0.order }.min() ?? Int.max
+            let min2 = group2.criteria.map { $0.order }.min() ?? Int.max
+            if min1 == min2 { return group1.section < group2.section }
+            return min1 < min2
+        }
     }
     
     func getVal(for crit: FundamentalCriterion) -> Double {
@@ -775,10 +815,25 @@ struct WatchlistLabForm: View {
                     GroupBox(group.section) {
                         VStack(alignment: .leading, spacing: 10) {
                             ForEach(group.criteria) { crit in
-                                HStack {
+                                HStack(spacing: 8) {
                                     Text(crit.name)
                                         .font(.subheadline)
-                                        .frame(maxWidth: .infinity, alignment: .leading)
+                                    
+                                    // NOUVEAU: Liens dynamiques pour les critères (Labo)
+                                    if !crit.referenceLink.isEmpty && !viewModel.watchlistItems[itemIndex].ticker.isEmpty {
+                                        let urlString = crit.referenceLink.replacingOccurrences(of: "{ticker}", with: viewModel.watchlistItems[itemIndex].ticker)
+                                        if let url = URL(string: urlString) {
+                                            Link(destination: url) { Image(systemName: "safari").foregroundColor(.blue).font(.caption) }
+                                            Button(action: {
+                                                NSPasteboard.general.clearContents()
+                                                NSPasteboard.general.setString(url.absoluteString, forType: .string)
+                                            }) {
+                                                Image(systemName: "doc.on.clipboard").foregroundColor(.blue).font(.caption)
+                                            }.buttonStyle(.plain)
+                                        }
+                                    }
+                                    
+                                    Spacer()
                                     
                                     if crit.type == .boolean {
                                         Toggle("", isOn: Binding<Bool>(
@@ -1099,6 +1154,11 @@ struct AddEditWatchListItemView: View {
     @State private var currency: String = "EUR"
     @State private var note: String = ""
     @State private var isFetching: Bool = false
+    
+    // NOUVEAU : Liens d'information globaux stockés localement
+    @AppStorage("wl_urlGuruFocus") private var urlGuruFocus: String = ""
+    @AppStorage("wl_urlTipRanks") private var urlTipRanks: String = ""
+    @AppStorage("wl_urlValuation") private var urlValuation: String = ""
 
     var isEditing: Bool { item != nil }
 
@@ -1109,10 +1169,79 @@ struct AddEditWatchListItemView: View {
 
             ScrollView {
                 VStack(alignment: .leading, spacing: 16) {
-                    GroupBox("Company Ticker") { HStack { TextField("e.g. AAPL, ASML.AS", text: $ticker).textFieldStyle(.roundedBorder).onChange(of: ticker) { ticker = ticker.uppercased() }; Button(action: fetchYahooData) { HStack(spacing: 4) { Image(systemName: "arrow.clockwise"); Text("Fetch Price") } }.buttonStyle(.borderedProminent).disabled(ticker.isEmpty || isFetching) } }
-                    GroupBox("Price & Targets") { VStack(spacing: 10) { HStack { Text("Current Price:").frame(width: 130, alignment: .leading); TextField("Current Price", value: $currentPrice, format: .number).textFieldStyle(.roundedBorder); TextField("Currency", text: $currency).textFieldStyle(.roundedBorder).frame(width: 60) }; HStack { Text("Target Price:").frame(width: 130, alignment: .leading); TextField("Target Price", value: $targetPrice, format: .number).textFieldStyle(.roundedBorder) }; HStack { Text("GuruFocus Price:").frame(width: 130, alignment: .leading); TextField("GuruFocus Price", value: $guruFocusPrice, format: .number).textFieldStyle(.roundedBorder) }; HStack { Text("TipRanks Price:").frame(width: 130, alignment: .leading); TextField("TipRanks Price", value: $tipRanksPrice, format: .number).textFieldStyle(.roundedBorder) } } }
-                    GroupBox("Valuation Ratios") { VStack(spacing: 10) { HStack { Text("Current PE:").frame(width: 130, alignment: .leading); TextField("Current PE", value: $currentPE, format: .number).textFieldStyle(.roundedBorder) }; HStack { Text("Forward PE:").frame(width: 130, alignment: .leading); TextField("Forward PE", value: $forwardPE, format: .number).textFieldStyle(.roundedBorder) }; HStack { Text("10Y Avg PE:").frame(width: 130, alignment: .leading); TextField("10Y Avg PE", value: $historicalPE10Y, format: .number).textFieldStyle(.roundedBorder) }; HStack { Text("PEG Ratio:").frame(width: 130, alignment: .leading); TextField("PEG Ratio", value: $peg, format: .number).textFieldStyle(.roundedBorder) } } }
+                    GroupBox("Company Ticker") {
+                        HStack {
+                            TextField("e.g. AAPL, ASML.AS", text: $ticker)
+                                .textFieldStyle(.roundedBorder)
+                                .onChange(of: ticker) { ticker = ticker.uppercased() }
+                            Button(action: fetchYahooData) {
+                                HStack(spacing: 4) { Image(systemName: "arrow.clockwise"); Text("Fetch Price") }
+                            }.buttonStyle(.borderedProminent).disabled(ticker.isEmpty || isFetching)
+                        }
+                    }
+                    
+                    GroupBox("Price & Targets") {
+                        VStack(spacing: 10) {
+                            HStack {
+                                Text("Current Price:").frame(width: 130, alignment: .leading)
+                                TextField("Current Price", value: $currentPrice, format: .number).textFieldStyle(.roundedBorder)
+                                TextField("Currency", text: $currency).textFieldStyle(.roundedBorder).frame(width: 60)
+                            }
+                            HStack {
+                                Text("Target Price:").frame(width: 130, alignment: .leading)
+                                TextField("Target Price", value: $targetPrice, format: .number).textFieldStyle(.roundedBorder)
+                            }
+                            HStack {
+                                Text("GuruFocus Price:").frame(width: 130, alignment: .leading)
+                                TextField("GuruFocus Price", value: $guruFocusPrice, format: .number).textFieldStyle(.roundedBorder)
+                                DataSourceLinkButton(template: urlGuruFocus, ticker: ticker)
+                            }
+                            HStack {
+                                Text("TipRanks Price:").frame(width: 130, alignment: .leading)
+                                TextField("TipRanks Price", value: $tipRanksPrice, format: .number).textFieldStyle(.roundedBorder)
+                                DataSourceLinkButton(template: urlTipRanks, ticker: ticker)
+                            }
+                        }
+                    }
+                    
+                    GroupBox {
+                        VStack(spacing: 10) {
+                            HStack { Text("Current PE:").frame(width: 130, alignment: .leading); TextField("Current PE", value: $currentPE, format: .number).textFieldStyle(.roundedBorder) }
+                            HStack { Text("Forward PE:").frame(width: 130, alignment: .leading); TextField("Forward PE", value: $forwardPE, format: .number).textFieldStyle(.roundedBorder) }
+                            HStack { Text("10Y Avg PE:").frame(width: 130, alignment: .leading); TextField("10Y Avg PE", value: $historicalPE10Y, format: .number).textFieldStyle(.roundedBorder) }
+                            HStack { Text("PEG Ratio:").frame(width: 130, alignment: .leading); TextField("PEG Ratio", value: $peg, format: .number).textFieldStyle(.roundedBorder) }
+                        }
+                    } label: {
+                        HStack {
+                            Text("Valuation Ratios")
+                            DataSourceLinkButton(template: urlValuation, ticker: ticker)
+                        }
+                    }
+                    
                     GroupBox("Note / Investment Thesis") { TextField("e.g. Moat, AI Growth, Buy under 150€...", text: $note).textFieldStyle(.roundedBorder) }
+                    
+                    // NOUVEAU : Configuration des liens globaux
+                    DisclosureGroup("⚙️ Configure Global Data Links") {
+                        VStack(alignment: .leading, spacing: 10) {
+                            Text("Use `{ticker}` in the URL. These templates apply to all watchlist stocks.")
+                                .font(.caption)
+                                .foregroundColor(.secondary)
+                            
+                            HStack {
+                                Text("GuruFocus:").frame(width: 100, alignment: .leading).font(.caption)
+                                TextField("https://www.gurufocus.com/stock/{ticker}/summary", text: $urlGuruFocus).textFieldStyle(.roundedBorder)
+                            }
+                            HStack {
+                                Text("TipRanks:").frame(width: 100, alignment: .leading).font(.caption)
+                                TextField("https://www.tipranks.com/stocks/{ticker}/forecast", text: $urlTipRanks).textFieldStyle(.roundedBorder)
+                            }
+                            HStack {
+                                Text("Valuation:").frame(width: 100, alignment: .leading).font(.caption)
+                                TextField("https://financecharts.com/stocks/{ticker}/valuation", text: $urlValuation).textFieldStyle(.roundedBorder)
+                            }
+                        }.padding(.vertical, 8)
+                    }
+                    
                 }.padding()
             }
 
@@ -1131,7 +1260,7 @@ struct AddEditWatchListItemView: View {
                 }
                 Button("Save") { save() }.keyboardShortcut(.defaultAction).buttonStyle(.borderedProminent)
             }.padding()
-        }.frame(width: 480, height: 560).onAppear { populate() }
+        }.frame(width: 480, height: 620).onAppear { populate() }
     }
 
     func populate() {
@@ -1237,3 +1366,4 @@ struct WatchListFullScreenChartView: View {
         }
     }
 }
+
