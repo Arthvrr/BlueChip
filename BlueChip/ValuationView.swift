@@ -1,5 +1,5 @@
 import SwiftUI
-import SwiftData // <-- NOUVEAU
+import SwiftData
 import Charts
 import Combine
 
@@ -44,9 +44,11 @@ extension Position {
 // Zoom Enum for Charts
 enum ValuationChartZoomType: String, Identifiable {
     case priceComparison, peBullet, yieldBarometer, cashMatrix, pegScatter, valuationHeatmap
-    case targetPriceLine, valuationDistribution // NOUVEAUX GRAPHES (Mis à jour en "Line")
+    case targetPriceLine, valuationDistribution
     var id: String { self.rawValue }
 }
+
+
 
 // =========================================================================
 // MARK: - MAIN VALUATION VIEW
@@ -60,6 +62,11 @@ struct ValuationView: View {
     @State private var editingPosition: Position? = nil
     @State private var chartToZoom: ValuationChartZoomType? = nil
     
+    // Liens stockés localement (Identiques à ceux de la Watchlist)
+    @AppStorage("wl_urlGuruFocus") private var urlGuruFocus: String = ""
+    @AppStorage("wl_urlTipRanks") private var urlTipRanks: String = ""
+    @AppStorage("wl_urlValuation") private var urlValuation: String = ""
+    
     var body: some View {
         ScrollView(.vertical) {
             VStack(spacing: 24) {
@@ -71,8 +78,13 @@ struct ValuationView: View {
                     privacyMode: $privacyMode
                 )
                 
-                // 2. CONTROLS (Margin of Safety Slider)
-                ValuationControlsSection(marginOfSafety: $marginOfSafety)
+                // 2. CONTROLS (Margin of Safety Slider + Links Config)
+                ValuationControlsSection(
+                    marginOfSafety: $marginOfSafety,
+                    urlGuruFocus: $urlGuruFocus,
+                    urlTipRanks: $urlTipRanks,
+                    urlValuation: $urlValuation
+                )
                 
                 // 3. PRICE VALUATION TABLE
                 ValuationPriceTableSection(
@@ -102,7 +114,13 @@ struct ValuationView: View {
         .background(Color(NSColor.windowBackgroundColor))
         // EDIT SHEET
         .sheet(item: $editingPosition) { pos in
-            EditValuationSheet(viewModel: viewModel, position: pos)
+            EditValuationSheet(
+                viewModel: viewModel,
+                position: pos,
+                urlGuruFocus: urlGuruFocus,
+                urlTipRanks: urlTipRanks,
+                urlValuation: urlValuation
+            )
         }
         // FULL SCREEN CHARTS
         .sheet(item: $chartToZoom) { type in
@@ -199,17 +217,46 @@ struct ValuationDashboardSection: View {
 struct ValuationControlsSection: View {
     @Binding var marginOfSafety: Double
     
+    // Bindings pour la configuration globale
+    @Binding var urlGuruFocus: String
+    @Binding var urlTipRanks: String
+    @Binding var urlValuation: String
+    
     var body: some View {
-        HStack(spacing: 24) {
-            VStack(alignment: .leading, spacing: 6) {
-                HStack {
-                    Text("Global Margin of Safety:").fontWeight(.semibold)
-                    Text("\(Int(marginOfSafety))%").font(.title3).fontWeight(.bold).foregroundColor(.orange)
-                    Spacer()
+        VStack(spacing: 16) {
+            HStack(spacing: 24) {
+                VStack(alignment: .leading, spacing: 6) {
+                    HStack {
+                        Text("Global Margin of Safety:").fontWeight(.semibold)
+                        Text("\(Int(marginOfSafety))%").font(.title3).fontWeight(.bold).foregroundColor(.orange)
+                        Spacer()
+                    }
+                    Slider(value: $marginOfSafety, in: 0...50, step: 1).tint(.orange)
                 }
-                Slider(value: $marginOfSafety, in: 0...50, step: 1).tint(.orange)
+                .frame(maxWidth: .infinity)
             }
-            .frame(maxWidth: .infinity)
+            
+            // Configuration Globale des liens
+            DisclosureGroup("⚙️ Configure Global Data Links") {
+                VStack(alignment: .leading, spacing: 10) {
+                    Text("Use `{ticker}` in the URL. These templates apply to all your stocks.")
+                        .font(.caption)
+                        .foregroundColor(.secondary)
+                    
+                    HStack {
+                        Text("GuruFocus:").frame(width: 100, alignment: .leading).font(.caption)
+                        TextField("https://www.gurufocus.com/stock/{ticker}/summary", text: $urlGuruFocus).textFieldStyle(.roundedBorder)
+                    }
+                    HStack {
+                        Text("TipRanks:").frame(width: 100, alignment: .leading).font(.caption)
+                        TextField("https://www.tipranks.com/stocks/{ticker}/forecast", text: $urlTipRanks).textFieldStyle(.roundedBorder)
+                    }
+                    HStack {
+                        Text("Valuation:").frame(width: 100, alignment: .leading).font(.caption)
+                        TextField("https://financecharts.com/stocks/{ticker}/valuation", text: $urlValuation).textFieldStyle(.roundedBorder)
+                    }
+                }.padding(.vertical, 8)
+            }
         }
         .padding()
         .background(Color(NSColor.controlBackgroundColor))
@@ -1034,13 +1081,17 @@ struct ValuationDistributionDonutChart: View {
 }
 
 // =========================================================================
-// MARK: - EDIT VALUATION SHEET
+// MARK: - EDIT VALUATION SHEET (MODIFIÉ AVEC LIENS)
 // =========================================================================
 
 struct EditValuationSheet: View {
     @Environment(\.dismiss) var dismiss
     @ObservedObject var viewModel: PortfolioViewModel
     let position: Position
+    
+    let urlGuruFocus: String
+    let urlTipRanks: String
+    let urlValuation: String
     
     @State private var targetPrice: Double? = nil
     @State private var guruFocusPrice: Double? = nil
@@ -1050,6 +1101,26 @@ struct EditValuationSheet: View {
     @State private var historicalPE10Y: Double? = nil
     @State private var peg: Double? = nil
     @State private var pFcf: Double? = nil
+    
+    // Binding customisé pour gérer les champs vides ("") au lieu de "0.0"
+    func bindingForOptional(value: Binding<Double?>) -> Binding<String> {
+        Binding<String>(
+            get: {
+                if let v = value.wrappedValue, v != 0.0 {
+                    // On enlève les ".0" inutiles si c'est un entier
+                    return v.truncatingRemainder(dividingBy: 1) == 0 ? String(format: "%.0f", v) : String(v)
+                }
+                return ""
+            },
+            set: {
+                if let v = Double($0.replacingOccurrences(of: ",", with: ".")) {
+                    value.wrappedValue = v
+                } else {
+                    value.wrappedValue = nil
+                }
+            }
+        )
+    }
     
     var body: some View {
         VStack(spacing: 0) {
@@ -1063,19 +1134,35 @@ struct EditValuationSheet: View {
             Form {
                 GroupBox("Price Targets") {
                     VStack(spacing: 10) {
-                        HStack { Text("Target Price:").frame(width: 130, alignment: .leading); TextField("0.0", value: $targetPrice, format: .number).textFieldStyle(.roundedBorder) }
-                        HStack { Text("GuruFocus Fair Value:").frame(width: 130, alignment: .leading); TextField("0.0", value: $guruFocusPrice, format: .number).textFieldStyle(.roundedBorder) }
-                        HStack { Text("TipRanks Target:").frame(width: 130, alignment: .leading); TextField("0.0", value: $tipRanksPrice, format: .number).textFieldStyle(.roundedBorder) }
+                        HStack {
+                            Text("Target Price:").frame(width: 130, alignment: .leading)
+                            TextField("", text: bindingForOptional(value: $targetPrice)).textFieldStyle(.roundedBorder)
+                        }
+                        HStack {
+                            Text("GuruFocus Fair Value:").frame(width: 130, alignment: .leading)
+                            TextField("", text: bindingForOptional(value: $guruFocusPrice)).textFieldStyle(.roundedBorder)
+                            DataSourceLinkButton(template: urlGuruFocus, ticker: position.ticker)
+                        }
+                        HStack {
+                            Text("TipRanks Target:").frame(width: 130, alignment: .leading)
+                            TextField("", text: bindingForOptional(value: $tipRanksPrice)).textFieldStyle(.roundedBorder)
+                            DataSourceLinkButton(template: urlTipRanks, ticker: position.ticker)
+                        }
                     }
                 }
                 
-                GroupBox("Valuation Multiples & Cash Flow") {
+                GroupBox {
                     VStack(spacing: 10) {
-                        HStack { Text("Current PE:").frame(width: 130, alignment: .leading); TextField("0.0", value: $currentPE, format: .number).textFieldStyle(.roundedBorder) }
-                        HStack { Text("Forward PE:").frame(width: 130, alignment: .leading); TextField("0.0", value: $forwardPE, format: .number).textFieldStyle(.roundedBorder) }
-                        HStack { Text("10Y Avg PE:").frame(width: 130, alignment: .leading); TextField("0.0", value: $historicalPE10Y, format: .number).textFieldStyle(.roundedBorder) }
-                        HStack { Text("PEG Ratio:").frame(width: 130, alignment: .leading); TextField("0.0", value: $peg, format: .number).textFieldStyle(.roundedBorder) }
-                        HStack { Text("P/FCF Ratio:").frame(width: 130, alignment: .leading); TextField("0.0", value: $pFcf, format: .number).textFieldStyle(.roundedBorder) }
+                        HStack { Text("Current PE:").frame(width: 130, alignment: .leading); TextField("", text: bindingForOptional(value: $currentPE)).textFieldStyle(.roundedBorder) }
+                        HStack { Text("Forward PE:").frame(width: 130, alignment: .leading); TextField("", text: bindingForOptional(value: $forwardPE)).textFieldStyle(.roundedBorder) }
+                        HStack { Text("10Y Avg PE:").frame(width: 130, alignment: .leading); TextField("", text: bindingForOptional(value: $historicalPE10Y)).textFieldStyle(.roundedBorder) }
+                        HStack { Text("PEG Ratio:").frame(width: 130, alignment: .leading); TextField("", text: bindingForOptional(value: $peg)).textFieldStyle(.roundedBorder) }
+                        HStack { Text("P/FCF Ratio:").frame(width: 130, alignment: .leading); TextField("", text: bindingForOptional(value: $pFcf)).textFieldStyle(.roundedBorder) }
+                    }
+                } label: {
+                    HStack {
+                        Text("Valuation Multiples & Cash Flow")
+                        DataSourceLinkButton(template: urlValuation, ticker: position.ticker)
                     }
                 }
             }
@@ -1111,9 +1198,7 @@ struct EditValuationSheet: View {
             viewModel.positions[idx].historicalPE10Y = historicalPE10Y
             viewModel.positions[idx].peg = peg
             viewModel.positions[idx].pFcf = pFcf
-            // MODIFIÉ : Retrait de viewModel.saveData()
             
-            // Force l'UI à se rafraîchir en avertissant le ViewModel du changement interne
             viewModel.objectWillChange.send()
         }
         dismiss()
@@ -1165,3 +1250,4 @@ struct ValuationFullScreenChartView: View {
         }
     }
 }
+

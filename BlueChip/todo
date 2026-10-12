@@ -2,13 +2,9 @@ reconnaitre si on ajoute une action qui a le mm ticker pour l'ajouter dans la po
 
 créer plusieurs portefeuille
 
-intégrer notifications calendar (veille + jour même)
-
 faire raccourci claviers
 
 ajouter recherche globale sur l'appli
-
-mettre liens automatiques vers gurufocus et tipranks
 
 mettre mot de passe pour entrer sur l'app
 
@@ -20,7 +16,7 @@ Composition OK
 Fundamentals OK
 Growth OK
 Dividends OK
-Valuation
+Valuation OK
 Projection OK
 Simulation
 WatchList
@@ -29,3 +25,11 @@ Transactions
 Benchmark
 Calendar OK
 Wealth
+
+notifs apple : ce qu'il se passe demain et aujourd'hui calendar, price target se rapproche du prix actuel, goal dépassé, dividende reçu
+
+icone barre des menus : 3 prochains évents, chaque position avec prix actuel + target price, refresh api yahoo finance
+
+fix souci delete position watchlist
+
+page réglages : année de commencement investissements (2022), dark light mode ou automatic
