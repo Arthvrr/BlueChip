@@ -247,14 +247,14 @@ struct SimulationView: View {
                 
                 // 1. POIDS PAR POSITION
                 HStack(spacing: 24) {
-                    SimulationDonutChart(data: viewModel.allocationByPosition, title: "Current Weight by Position", zoomType: .currentPositions, palette: positionColors, privacyMode: $privacyMode, expandedChart: $chartToZoom)
-                    SimulationDonutChart(data: simulatedAllocationByPosition, title: "Simulated Weight by Position", zoomType: .simulatedPositions, palette: positionColors, privacyMode: $privacyMode, expandedChart: $chartToZoom)
+                    SimulationDonutChart(data: viewModel.allocationByPosition, title: "Current Weight by Position", zoomType: .currentPositions, palette: positionColors, privacyMode: $privacyMode, expandedChart: $chartToZoom, viewModel: viewModel)
+                    SimulationDonutChart(data: simulatedAllocationByPosition, title: "Simulated Weight by Position", zoomType: .simulatedPositions, palette: positionColors, privacyMode: $privacyMode, expandedChart: $chartToZoom, viewModel: viewModel)
                 }
                 
                 // 2. SECTEURS RESTAURÉS
                 HStack(spacing: 24) {
-                    SimulationDonutChart(data: viewModel.allocationBySector, title: "Current Sector Allocation", zoomType: .currentSectors, palette: sectorColors, privacyMode: $privacyMode, expandedChart: $chartToZoom)
-                    SimulationDonutChart(data: simulatedAllocationBySector, title: "Simulated Sector Allocation", zoomType: .simulatedSectors, palette: sectorColors, privacyMode: $privacyMode, expandedChart: $chartToZoom)
+                    SimulationDonutChart(data: viewModel.allocationBySector, title: "Current Sector Allocation", zoomType: .currentSectors, palette: sectorColors, privacyMode: $privacyMode, expandedChart: $chartToZoom, viewModel: viewModel)
+                    SimulationDonutChart(data: simulatedAllocationBySector, title: "Simulated Sector Allocation", zoomType: .simulatedSectors, palette: sectorColors, privacyMode: $privacyMode, expandedChart: $chartToZoom, viewModel: viewModel)
                 }
                 
                 // 3. BAR CHARTS (COULEURS CORRIGÉES)
@@ -265,8 +265,8 @@ struct SimulationView: View {
                 
                 // 4. CASH ALLOCATION ET DIVIDENDES SIMULÉS
                 HStack(spacing: 24) {
-                    SimulationDonutChart(data: cashAllocationData, title: "Simulated Cash Investments", zoomType: .cashAllocation, palette: marketCapColors, privacyMode: $privacyMode, expandedChart: $chartToZoom)
-                    SimulationDonutChart(data: simulatedDividendsByPosition, title: "Simulated Dividends by Position", zoomType: .simulatedDividends, palette: positionColors, privacyMode: $privacyMode, expandedChart: $chartToZoom)
+                    SimulationDonutChart(data: cashAllocationData, title: "Simulated Cash Investments", zoomType: .cashAllocation, palette: marketCapColors, privacyMode: $privacyMode, expandedChart: $chartToZoom, viewModel: viewModel)
+                    SimulationDonutChart(data: simulatedDividendsByPosition, title: "Simulated Dividends by Position", zoomType: .simulatedDividends, palette: positionColors, privacyMode: $privacyMode, expandedChart: $chartToZoom, viewModel: viewModel)
                 }
             }
             .padding()
@@ -275,6 +275,7 @@ struct SimulationView: View {
         .sheet(item: $chartToZoom) { type in
             SimulationFullScreenChartView(
                 zoomType: type,
+                viewModel: viewModel,
                 currentPosData: viewModel.allocationByPosition,
                 simPosData: simulatedAllocationByPosition,
                 currentSecData: viewModel.allocationBySector,
@@ -460,14 +461,64 @@ struct SimulatedPortfolioTable: View {
 // =========================================================================
 
 struct SimulationDonutChart: View {
-    let data: [ChartDataItem]; let title: String; let zoomType: SimulationChartZoomType; let palette: [Color]
+    let data: [ChartDataItem]
+    let title: String
+    let zoomType: SimulationChartZoomType
+    let palette: [Color]
     @Binding var privacyMode: Bool
     var isExpanded: Bool = false
     @Binding var expandedChart: SimulationChartZoomType?
     
-    @State private var selectedAngleValue: Double? = nil; @State private var hiddenItems: Set<String> = []
-    func color(for name: String) -> Color { if let idx = data.firstIndex(where: { $0.name == name }) { return palette[idx % palette.count] }; return .gray }
-    var filteredData: [ChartDataItem] { data.filter { !hiddenItems.contains($0.name) } }
+    // NOUVEAU : Le viewModel pour récupérer les couleurs universelles
+    var viewModel: PortfolioViewModel? = nil
+    
+    @State private var selectedAngleValue: Double? = nil
+    @State private var hiddenItems: Set<String> = []
+    
+    // NOUVEAU : Tri alphabétique avec le Cash forcé à la fin
+    var sortedData: [ChartDataItem] {
+        data.sorted { a, b in
+            if a.name == "Cash" || a.name == "Remaining Cash" { return false }
+            if b.name == "Cash" || b.name == "Remaining Cash" { return true }
+            return a.name < b.name
+        }
+    }
+    
+    var filteredData: [ChartDataItem] { sortedData.filter { !hiddenItems.contains($0.name) } }
+    
+    // NOUVEAU : Logique de couleur synchronisée avec gris pour les simulations
+    func color(for name: String) -> Color {
+        if name == "Cash" || name == "Remaining Cash" {
+            return .teal // Couleur unique pour le Cash
+        }
+        
+        // Nettoie l'étiquette "(Invested)" pour retrouver le Ticker pur
+        let cleanName = name.replacingOccurrences(of: " (Invested)", with: "")
+        
+        if let vm = viewModel {
+            // 1. Si l'action existe dans le vrai portefeuille : on prend sa couleur officielle
+            if vm.positions.contains(where: { $0.ticker == cleanName }) {
+                return vm.color(for: cleanName)
+            }
+            
+            // 2. Si c'est un Ticker purement simulé (absent du vrai portefeuille)
+            if zoomType == .simulatedPositions || zoomType == .simulatedDividends || zoomType == .cashAllocation {
+                // On utilise des nuances de gris pour bien montrer que c'est fictif (et les différencier entre elles)
+                let neutralColors: [Color] = [.gray, .secondary, .gray.opacity(0.7), .gray.opacity(0.4)]
+                if let idx = sortedData.firstIndex(where: { $0.name == name }) {
+                    return neutralColors[idx % neutralColors.count]
+                }
+                return .gray
+            }
+        }
+        
+        // 3. Fallback normal pour le reste (Secteurs, etc.)
+        if let idx = sortedData.firstIndex(where: { $0.name == name }) {
+            return palette[idx % palette.count]
+        }
+        return .gray
+    }
+
     
     var body: some View {
         VStack {
@@ -476,7 +527,7 @@ struct SimulationDonutChart: View {
                 Spacer()
                 if !isExpanded { Button(action: { expandedChart = zoomType }) { Image(systemName: "plus.magnifyingglass").foregroundColor(.secondary) }.buttonStyle(.plain) }
             }.padding(.bottom, 4)
-            InteractiveLegendView(items: data.map { $0.name }, colorMap: color, hiddenItems: $hiddenItems).padding(.bottom, 8)
+            InteractiveLegendView(items: sortedData.map { $0.name }, colorMap: color, hiddenItems: $hiddenItems).padding(.bottom, 8)
             if filteredData.isEmpty { Spacer(); Text("No data / No investments made").foregroundColor(.secondary); Spacer() } else {
                 Chart(filteredData) { item in SectorMark(angle: .value("Value", item.value), innerRadius: .ratio(0.65), angularInset: 1.5).foregroundStyle(color(for: item.name)).cornerRadius(4) }
                 .chartLegend(.hidden).chartAngleSelection(value: $selectedAngleValue)
@@ -497,6 +548,7 @@ struct SimulationDonutChart: View {
     }
     func findItem(for value: Double) -> ChartDataItem { var cum = 0.0; for item in filteredData { cum += item.value; if value <= cum { return item } }; return filteredData.last! }
 }
+
 
 struct SimulationBarChart: View {
     let data: [ChartDataItem]; let title: String; let zoomType: SimulationChartZoomType; let isEuro: Bool
@@ -547,6 +599,8 @@ struct SimulationFullScreenChartView: View {
     @Environment(\.dismiss) var dismiss
     let zoomType: SimulationChartZoomType
     
+    @ObservedObject var viewModel: PortfolioViewModel
+    
     let currentPosData: [ChartDataItem]
     let simPosData: [ChartDataItem]
     let currentSecData: [ChartDataItem]
@@ -566,14 +620,14 @@ struct SimulationFullScreenChartView: View {
             }
             
             switch zoomType {
-            case .currentPositions: SimulationDonutChart(data: currentPosData, title: titleForZoom, zoomType: zoomType, palette: positionColors, privacyMode: $privacyMode, isExpanded: true, expandedChart: .constant(nil))
-            case .simulatedPositions: SimulationDonutChart(data: simPosData, title: titleForZoom, zoomType: zoomType, palette: positionColors, privacyMode: $privacyMode, isExpanded: true, expandedChart: .constant(nil))
-            case .currentSectors: SimulationDonutChart(data: currentSecData, title: titleForZoom, zoomType: zoomType, palette: sectorColors, privacyMode: $privacyMode, isExpanded: true, expandedChart: .constant(nil))
-            case .simulatedSectors: SimulationDonutChart(data: simSecData, title: titleForZoom, zoomType: zoomType, palette: sectorColors, privacyMode: $privacyMode, isExpanded: true, expandedChart: .constant(nil))
-            case .cashAllocation: SimulationDonutChart(data: cashAllocData, title: titleForZoom, zoomType: zoomType, palette: marketCapColors, privacyMode: $privacyMode, isExpanded: true, expandedChart: .constant(nil))
+            case .currentPositions: SimulationDonutChart(data: currentPosData, title: titleForZoom, zoomType: zoomType, palette: positionColors, privacyMode: $privacyMode, isExpanded: true, expandedChart: .constant(nil), viewModel: viewModel)
+            case .simulatedPositions: SimulationDonutChart(data: simPosData, title: titleForZoom, zoomType: zoomType, palette: positionColors, privacyMode: $privacyMode, isExpanded: true, expandedChart: .constant(nil), viewModel: viewModel)
+            case .currentSectors: SimulationDonutChart(data: currentSecData, title: titleForZoom, zoomType: zoomType, palette: sectorColors, privacyMode: $privacyMode, isExpanded: true, expandedChart: .constant(nil), viewModel: viewModel)
+            case .simulatedSectors: SimulationDonutChart(data: simSecData, title: titleForZoom, zoomType: zoomType, palette: sectorColors, privacyMode: $privacyMode, isExpanded: true, expandedChart: .constant(nil), viewModel: viewModel)
+            case .cashAllocation: SimulationDonutChart(data: cashAllocData, title: titleForZoom, zoomType: zoomType, palette: marketCapColors, privacyMode: $privacyMode, isExpanded: true, expandedChart: .constant(nil), viewModel: viewModel)
             case .totalValueCompare: SimulationBarChart(data: totalValData, title: titleForZoom, zoomType: zoomType, isEuro: true, colorCurrent: .blue, colorSimulated: .purple, privacyMode: $privacyMode, isExpanded: true, expandedChart: .constant(nil))
             case .yieldImpact: SimulationBarChart(data: yieldData, title: titleForZoom, zoomType: zoomType, isEuro: false, colorCurrent: .orange, colorSimulated: .green, privacyMode: $privacyMode, isExpanded: true, expandedChart: .constant(nil))
-            case .simulatedDividends: SimulationDonutChart(data: simDivData, title: titleForZoom, zoomType: zoomType, palette: positionColors, privacyMode: $privacyMode, isExpanded: true, expandedChart: .constant(nil))
+            case .simulatedDividends: SimulationDonutChart(data: simDivData, title: titleForZoom, zoomType: zoomType, palette: positionColors, privacyMode: $privacyMode, isExpanded: true, expandedChart: .constant(nil), viewModel: viewModel)
             }
         }.padding(30).frame(minWidth: 900, minHeight: 700)
     }

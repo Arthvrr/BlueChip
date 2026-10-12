@@ -797,69 +797,78 @@ struct WatchlistLabForm: View {
     }
     
     func getVal(for crit: FundamentalCriterion) -> Double {
+        // NOUVEAU : On vérifie que l'index existe toujours
+        guard viewModel.watchlistItems.indices.contains(itemIndex) else { return 0.0 }
         return viewModel.watchlistItems[itemIndex].fundamentalValues?[crit.id.uuidString] ?? 0.0
     }
     
     func setVal(for crit: FundamentalCriterion, value: Double) {
+        // NOUVEAU : On vérifie que l'index existe toujours
+        guard viewModel.watchlistItems.indices.contains(itemIndex) else { return }
+        
         if viewModel.watchlistItems[itemIndex].fundamentalValues == nil {
             viewModel.watchlistItems[itemIndex].fundamentalValues = [:]
         }
         viewModel.watchlistItems[itemIndex].fundamentalValues?[crit.id.uuidString] = value
         viewModel.objectWillChange.send()
     }
+
     
     var body: some View {
         ScrollView(.vertical, showsIndicators: true) {
-            VStack(alignment: .leading, spacing: 16) {
-                ForEach(groupedCriteria, id: \.section) { group in
-                    GroupBox(group.section) {
-                        VStack(alignment: .leading, spacing: 10) {
-                            ForEach(group.criteria) { crit in
-                                HStack(spacing: 8) {
-                                    Text(crit.name)
-                                        .font(.subheadline)
-                                    
-                                    // NOUVEAU: Liens dynamiques pour les critères (Labo)
-                                    if !crit.referenceLink.isEmpty && !viewModel.watchlistItems[itemIndex].ticker.isEmpty {
-                                        let urlString = crit.referenceLink.replacingOccurrences(of: "{ticker}", with: viewModel.watchlistItems[itemIndex].ticker)
-                                        if let url = URL(string: urlString) {
-                                            Link(destination: url) { Image(systemName: "safari").foregroundColor(.blue).font(.caption) }
-                                            Button(action: {
-                                                NSPasteboard.general.clearContents()
-                                                NSPasteboard.general.setString(url.absoluteString, forType: .string)
-                                            }) {
-                                                Image(systemName: "doc.on.clipboard").foregroundColor(.blue).font(.caption)
-                                            }.buttonStyle(.plain)
-                                        }
-                                    }
-                                    
-                                    Spacer()
-                                    
-                                    if crit.type == .boolean {
-                                        Toggle("", isOn: Binding<Bool>(
-                                            get: { getVal(for: crit) == 1.0 },
-                                            set: { setVal(for: crit, value: $0 ? 1.0 : 0.0) }
-                                        )).labelsHidden()
-                                    } else {
-                                        TextField("0", value: Binding(
-                                            get: { getVal(for: crit) },
-                                            set: { setVal(for: crit, value: $0) }
-                                        ), format: .number)
-                                        .textFieldStyle(.roundedBorder)
-                                        .frame(width: 80)
+            if viewModel.watchlistItems.indices.contains(itemIndex) {
+                
+                VStack(alignment: .leading, spacing: 16) {
+                    ForEach(groupedCriteria, id: \.section) { group in
+                        GroupBox(group.section) {
+                            VStack(alignment: .leading, spacing: 10) {
+                                ForEach(group.criteria) { crit in
+                                    HStack(spacing: 8) {
+                                        Text(crit.name)
+                                            .font(.subheadline)
                                         
-                                        if crit.type == .percentage {
-                                            Text("%").font(.caption).foregroundColor(.secondary)
+                                        // NOUVEAU: Liens dynamiques pour les critères (Labo)
+                                        if !crit.referenceLink.isEmpty && !viewModel.watchlistItems[itemIndex].ticker.isEmpty {
+                                            let urlString = crit.referenceLink.replacingOccurrences(of: "{ticker}", with: viewModel.watchlistItems[itemIndex].ticker)
+                                            if let url = URL(string: urlString) {
+                                                Link(destination: url) { Image(systemName: "safari").foregroundColor(.blue).font(.caption) }
+                                                Button(action: {
+                                                    NSPasteboard.general.clearContents()
+                                                    NSPasteboard.general.setString(url.absoluteString, forType: .string)
+                                                }) {
+                                                    Image(systemName: "doc.on.clipboard").foregroundColor(.blue).font(.caption)
+                                                }.buttonStyle(.plain)
+                                            }
+                                        }
+                                        
+                                        Spacer()
+                                        
+                                        if crit.type == .boolean {
+                                            Toggle("", isOn: Binding<Bool>(
+                                                get: { getVal(for: crit) == 1.0 },
+                                                set: { setVal(for: crit, value: $0 ? 1.0 : 0.0) }
+                                            )).labelsHidden()
+                                        } else {
+                                            TextField("0", value: Binding(
+                                                get: { getVal(for: crit) },
+                                                set: { setVal(for: crit, value: $0) }
+                                            ), format: .number)
+                                            .textFieldStyle(.roundedBorder)
+                                            .frame(width: 80)
+                                            
+                                            if crit.type == .percentage {
+                                                Text("%").font(.caption).foregroundColor(.secondary)
+                                            }
                                         }
                                     }
                                 }
                             }
+                            .padding(.vertical, 4)
                         }
-                        .padding(.vertical, 4)
                     }
                 }
+                .padding(.trailing, 8)
             }
-            .padding(.trailing, 8)
         }
         .frame(maxHeight: 500)
     }
@@ -876,6 +885,9 @@ struct WatchlistLabScoreChart: View {
     @State private var hoveredTarget: String? = nil
     
     var analyzedScore: Double {
+        // NOUVEAU : Sécurité de l'index
+        guard viewModel.watchlistItems.indices.contains(itemIndex) else { return 0.0 }
+        
         var total = 0.0
         for crit in viewModel.fundamentalCriteria {
             if let val = viewModel.watchlistItems[itemIndex].fundamentalValues?[crit.id.uuidString] {
@@ -884,6 +896,7 @@ struct WatchlistLabScoreChart: View {
         }
         return total
     }
+
     
     var portfolioWeightedScore: Double {
         let totalVal = viewModel.positions.reduce(0) { $0 + $1.currentValueEUR }
@@ -906,7 +919,7 @@ struct WatchlistLabScoreChart: View {
     }
     
     var body: some View {
-        let tickerStr = viewModel.watchlistItems[itemIndex].ticker
+        let tickerStr = viewModel.watchlistItems.indices.contains(itemIndex) ? viewModel.watchlistItems[itemIndex].ticker : ""
         
         VStack(alignment: .leading, spacing: 8) {
             HStack {
@@ -986,7 +999,10 @@ struct WatchlistLabRadarChart: View {
     
     @State private var hiddenTickers: Set<String> = []
     
-    var analyzedTicker: String { viewModel.watchlistItems[itemIndex].ticker }
+    var analyzedTicker: String {
+        viewModel.watchlistItems.indices.contains(itemIndex) ? viewModel.watchlistItems[itemIndex].ticker : ""
+    }
+
     
     var allTickers: [String] {
         var list = viewModel.positions.map { $0.ticker }
@@ -1011,7 +1027,9 @@ struct WatchlistLabRadarChart: View {
         var total = 0.0
         if ticker == analyzedTicker {
             for crit in crits {
-                if let val = viewModel.watchlistItems[itemIndex].fundamentalValues?[crit.id.uuidString] {
+                // NOUVEAU : On vérifie que l'index existe toujours avant de lire les valeurs
+                if viewModel.watchlistItems.indices.contains(itemIndex),
+                   let val = viewModel.watchlistItems[itemIndex].fundamentalValues?[crit.id.uuidString] {
                     total += ScoreEngine.getScoreStatus(value: val, criterion: crit).points
                 }
             }
@@ -1024,6 +1042,7 @@ struct WatchlistLabRadarChart: View {
         }
         return total / maxScore
     }
+
     
     var body: some View {
         VStack(alignment: .leading, spacing: 8) {

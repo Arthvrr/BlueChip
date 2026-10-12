@@ -36,22 +36,21 @@ struct ModernDonutChart: View {
         sortedData.filter { !hiddenItems.contains($0.name) }
     }
     
-    // MODIFIÉ : Ajout d'une règle spécifique pour la couleur du Cash
+    // MODIFIÉ : Nouvelle couleur pour le Cash
     func color(for name: String) -> Color {
-        // Si c'est le Cash, on force une couleur distincte (ex: jaune)
-        if name == "Cash" {
-            return .yellow
+        // On remplace .yellow par .teal pour éviter le doublon avec Visa
+        if name == "Cash" || name == "Remaining Cash" {
+            return Color(red: 0.76, green: 0.84, blue: 0.18)
         }
-        // Si on nous a passé le viewModel ET que le nom correspond à un Ticker connu
         if let vm = viewModel, vm.positions.contains(where: { $0.ticker == name }) {
             return vm.color(for: name)
         }
-        // Sinon, on utilise la palette classique (pour les secteurs, pays, etc.)
         if let idx = sortedData.firstIndex(where: { $0.name == name }) {
             return palette[idx % palette.count]
         }
         return .gray
     }
+
     
     var body: some View {
         VStack {
