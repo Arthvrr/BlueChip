@@ -751,6 +751,8 @@ struct WatchlistQualityLabSection: View {
                     VStack(spacing: 24) {
                         WatchlistLabForm(viewModel: viewModel, itemIndex: idx)
                         
+                        WatchlistLabComparison(viewModel: viewModel, itemIndex: idx)
+                        
                         HStack(alignment: .top, spacing: 24) {
                             WatchlistLabScoreChart(viewModel: viewModel, itemIndex: idx, privacyMode: $privacyMode, expandedChart: $chartToZoom)
                             WatchlistLabRadarChart(viewModel: viewModel, itemIndex: idx, privacyMode: $privacyMode, expandedChart: $chartToZoom)
@@ -821,58 +823,161 @@ struct WatchlistLabForm: View {
                 VStack(alignment: .leading, spacing: 16) {
                     ForEach(groupedCriteria, id: \.section) { group in
                         GroupBox(group.section) {
-                            VStack(alignment: .leading, spacing: 10) {
+                            
+                            // NOUVEAU : HStack pour aligner les critères en colonnes (1/x largeur)
+                            HStack(alignment: .top, spacing: 16) {
                                 ForEach(group.criteria) { crit in
-                                    HStack(spacing: 8) {
-                                        Text(crit.name)
-                                            .font(.subheadline)
-                                        
-                                        // NOUVEAU: Liens dynamiques pour les critères (Labo)
-                                        if !crit.referenceLink.isEmpty && !viewModel.watchlistItems[itemIndex].ticker.isEmpty {
-                                            let urlString = crit.referenceLink.replacingOccurrences(of: "{ticker}", with: viewModel.watchlistItems[itemIndex].ticker)
-                                            if let url = URL(string: urlString) {
-                                                Link(destination: url) { Image(systemName: "safari").foregroundColor(.blue).font(.caption) }
-                                                Button(action: {
-                                                    NSPasteboard.general.clearContents()
-                                                    NSPasteboard.general.setString(url.absoluteString, forType: .string)
-                                                }) {
-                                                    Image(systemName: "doc.on.clipboard").foregroundColor(.blue).font(.caption)
-                                                }.buttonStyle(.plain)
+                                    
+                                    VStack(alignment: .leading, spacing: 8) {
+                                        // En-tête du critère (Nom + Liens)
+                                        HStack(spacing: 8) {
+                                            Text(crit.name)
+                                                .font(.subheadline)
+                                                .fontWeight(.medium)
+                                                .lineLimit(1)
+                                            
+                                            if !crit.referenceLink.isEmpty && !viewModel.watchlistItems[itemIndex].ticker.isEmpty {
+                                                let urlString = crit.referenceLink.replacingOccurrences(of: "{ticker}", with: viewModel.watchlistItems[itemIndex].ticker)
+                                                if let url = URL(string: urlString) {
+                                                    Link(destination: url) { Image(systemName: "safari").foregroundColor(.blue).font(.caption) }
+                                                    Button(action: {
+                                                        NSPasteboard.general.clearContents()
+                                                        NSPasteboard.general.setString(url.absoluteString, forType: .string)
+                                                    }) {
+                                                        Image(systemName: "doc.on.clipboard").foregroundColor(.blue).font(.caption)
+                                                    }.buttonStyle(.plain)
+                                                }
                                             }
                                         }
                                         
-                                        Spacer()
-                                        
+                                        // Champ de saisie
                                         if crit.type == .boolean {
                                             Toggle("", isOn: Binding<Bool>(
                                                 get: { getVal(for: crit) == 1.0 },
                                                 set: { setVal(for: crit, value: $0 ? 1.0 : 0.0) }
                                             )).labelsHidden()
                                         } else {
-                                            TextField("0", value: Binding(
-                                                get: { getVal(for: crit) },
-                                                set: { setVal(for: crit, value: $0) }
-                                            ), format: .number)
-                                            .textFieldStyle(.roundedBorder)
-                                            .frame(width: 80)
-                                            
-                                            if crit.type == .percentage {
-                                                Text("%").font(.caption).foregroundColor(.secondary)
+                                            HStack {
+                                                TextField("0", value: Binding(
+                                                    get: { getVal(for: crit) },
+                                                    set: { setVal(for: crit, value: $0) }
+                                                ), format: .number)
+                                                .textFieldStyle(.roundedBorder)
+                                                
+                                                if crit.type == .percentage {
+                                                    Text("%").font(.caption).foregroundColor(.secondary)
+                                                }
                                             }
                                         }
                                     }
+                                    // Divise parfaitement la largeur par le nombre de critères
+                                    .frame(maxWidth: .infinity, alignment: .top)
+                                    
                                 }
                             }
-                            .padding(.vertical, 4)
+                            .padding(.vertical, 8)
+                            
                         }
                     }
                 }
                 .padding(.trailing, 8)
             }
         }
-        .frame(maxHeight: 500)
+        .frame(maxHeight: 400) // Un peu réduit pour laisser place au comparateur en dessous
+    }
+
+}
+
+
+// --- NOUVELLE SOUS-VUE : COMPARAISON AUTOMATIQUE VS PORTFOLIO ---
+struct WatchlistLabComparison: View {
+    @ObservedObject var viewModel: PortfolioViewModel
+    let itemIndex: Int
+    
+    func getWeightedAverage(for crit: FundamentalCriterion) -> Double {
+        let totalVal = viewModel.positions.reduce(0) { $0 + $1.currentValueEUR }
+        guard totalVal > 0 else { return 0 }
+        return viewModel.positions.reduce(0) { sum, pos in
+            let w = pos.currentValueEUR / totalVal
+            let v = pos.fundamentalValues?[crit.id.uuidString] ?? 0.0
+            return sum + (v * w)
+        }
+    }
+    
+    func formatValue(_ val: Double, type: CriterionType) -> String {
+        if type == .percentage { return val.formatted(.number.precision(.fractionLength(1))) + "%" }
+        return val.formatted(.number.precision(.fractionLength(1)))
+    }
+    
+    var body: some View {
+        if viewModel.watchlistItems.indices.contains(itemIndex) {
+            let stock = viewModel.watchlistItems[itemIndex]
+            
+            // Calculs pour catégoriser Strengths (+) et Weaknesses (-)
+            let comparisons = viewModel.fundamentalCriteria.filter { $0.type != .boolean }.compactMap { crit -> (isStrength: Bool, text: String)? in
+                let stockVal = stock.fundamentalValues?[crit.id.uuidString] ?? 0.0
+                let avgVal = getWeightedAverage(for: crit)
+                
+                // Si aucune donnée n'est encodée, on ignore
+                if stockVal == 0.0 && avgVal == 0.0 { return nil }
+                
+                let isBetter = crit.isHigherBetter ? (stockVal >= avgVal) : (stockVal <= avgVal)
+                let betterOrWorse = isBetter ? "better" : "worse"
+                
+                let text = "Your watchlist stock (\(stock.ticker)) has a \(betterOrWorse) **\(crit.name)** than your portfolio's weighted avg. (\(formatValue(stockVal, type: crit.type)) vs \(formatValue(avgVal, type: crit.type)))"
+                
+                return (isStrength: isBetter, text: text)
+            }
+            
+            let strengths = comparisons.filter { $0.isStrength }
+            let weaknesses = comparisons.filter { !$0.isStrength }
+            
+            HStack(alignment: .top, spacing: 20) {
+                // COLONNE + (Strengths)
+                VStack(alignment: .leading, spacing: 12) {
+                    Text("Strengths (+)").font(.headline).foregroundColor(.green)
+                    ForEach(strengths.indices, id: \.self) { i in
+                        HStack(alignment: .top) {
+                            Image(systemName: "plus.circle.fill").foregroundColor(.green).padding(.top, 2)
+                            // Utilisation d'un markdown basique pour mettre le nom du critère en gras
+                            if let mdText = try? AttributedString(markdown: strengths[i].text) {
+                                Text(mdText).font(.caption).foregroundColor(.secondary)
+                            } else {
+                                Text(strengths[i].text).font(.caption).foregroundColor(.secondary)
+                            }
+                        }
+                    }
+                    if strengths.isEmpty { Text("No strengths found vs portfolio.").font(.caption).foregroundColor(.secondary.opacity(0.5)).italic() }
+                }
+                .frame(maxWidth: .infinity, alignment: .top)
+                
+                Divider()
+                
+                // COLONNE - (Weaknesses)
+                VStack(alignment: .leading, spacing: 12) {
+                    Text("Weaknesses (-)").font(.headline).foregroundColor(.red)
+                    ForEach(weaknesses.indices, id: \.self) { i in
+                        HStack(alignment: .top) {
+                            Image(systemName: "minus.circle.fill").foregroundColor(.red).padding(.top, 2)
+                            if let mdText = try? AttributedString(markdown: weaknesses[i].text) {
+                                Text(mdText).font(.caption).foregroundColor(.secondary)
+                            } else {
+                                Text(weaknesses[i].text).font(.caption).foregroundColor(.secondary)
+                            }
+                        }
+                    }
+                    if weaknesses.isEmpty { Text("No weaknesses found vs portfolio.").font(.caption).foregroundColor(.secondary.opacity(0.5)).italic() }
+                }
+                .frame(maxWidth: .infinity, alignment: .top)
+            }
+            .padding(16)
+            .background(Color(NSColor.controlBackgroundColor))
+            .cornerRadius(12)
+            .overlay(RoundedRectangle(cornerRadius: 12).stroke(Color.gray.opacity(0.15), lineWidth: 1))
+        }
     }
 }
+
 
 // --- SOUS-VUE : GRAPHIQUE BARRE SCORE (AVEC ZOOM ET SURVOL) ---
 struct WatchlistLabScoreChart: View {
