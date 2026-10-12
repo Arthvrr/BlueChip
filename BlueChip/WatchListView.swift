@@ -817,74 +817,76 @@ struct WatchlistLabForm: View {
 
     
     var body: some View {
-        ScrollView(.vertical, showsIndicators: true) {
+        // 1. Plus de ScrollView, juste un VStack
+        VStack(alignment: .leading, spacing: 16) {
             if viewModel.watchlistItems.indices.contains(itemIndex) {
                 
-                VStack(alignment: .leading, spacing: 16) {
-                    ForEach(groupedCriteria, id: \.section) { group in
-                        GroupBox(group.section) {
-                            
-                            // NOUVEAU : HStack pour aligner les critères en colonnes (1/x largeur)
-                            HStack(alignment: .top, spacing: 16) {
-                                ForEach(group.criteria) { crit in
+                ForEach(groupedCriteria, id: \.section) { group in
+                    GroupBox(group.section) {
+                        
+                        HStack(alignment: .top, spacing: 16) {
+                            ForEach(group.criteria) { crit in
+                                
+                                // Espacement augmenté pour laisser respirer
+                                VStack(alignment: .center, spacing: 12) {
                                     
-                                    VStack(alignment: .leading, spacing: 8) {
-                                        // En-tête du critère (Nom + Liens)
-                                        HStack(spacing: 8) {
-                                            Text(crit.name)
-                                                .font(.subheadline)
-                                                .fontWeight(.medium)
-                                                .lineLimit(1)
-                                            
-                                            if !crit.referenceLink.isEmpty && !viewModel.watchlistItems[itemIndex].ticker.isEmpty {
-                                                let urlString = crit.referenceLink.replacingOccurrences(of: "{ticker}", with: viewModel.watchlistItems[itemIndex].ticker)
-                                                if let url = URL(string: urlString) {
-                                                    Link(destination: url) { Image(systemName: "safari").foregroundColor(.blue).font(.caption) }
-                                                    Button(action: {
-                                                        NSPasteboard.general.clearContents()
-                                                        NSPasteboard.general.setString(url.absoluteString, forType: .string)
-                                                    }) {
-                                                        Image(systemName: "doc.on.clipboard").foregroundColor(.blue).font(.caption)
-                                                    }.buttonStyle(.plain)
-                                                }
-                                            }
-                                        }
+                                    // 2. Centrage du nom et des icônes dans leur 1/x de largeur
+                                    HStack(spacing: 8) {
+                                        Text(crit.name)
+                                            .font(.subheadline)
+                                            .fontWeight(.medium)
+                                            .lineLimit(1)
                                         
-                                        // Champ de saisie
-                                        if crit.type == .boolean {
-                                            Toggle("", isOn: Binding<Bool>(
-                                                get: { getVal(for: crit) == 1.0 },
-                                                set: { setVal(for: crit, value: $0 ? 1.0 : 0.0) }
-                                            )).labelsHidden()
-                                        } else {
-                                            HStack {
-                                                TextField("0", value: Binding(
-                                                    get: { getVal(for: crit) },
-                                                    set: { setVal(for: crit, value: $0) }
-                                                ), format: .number)
-                                                .textFieldStyle(.roundedBorder)
-                                                
-                                                if crit.type == .percentage {
-                                                    Text("%").font(.caption).foregroundColor(.secondary)
-                                                }
+                                        if !crit.referenceLink.isEmpty && !viewModel.watchlistItems[itemIndex].ticker.isEmpty {
+                                            let urlString = crit.referenceLink.replacingOccurrences(of: "{ticker}", with: viewModel.watchlistItems[itemIndex].ticker)
+                                            if let url = URL(string: urlString) {
+                                                Link(destination: url) { Image(systemName: "safari").foregroundColor(.blue).font(.caption) }
+                                                Button(action: {
+                                                    NSPasteboard.general.clearContents()
+                                                    NSPasteboard.general.setString(url.absoluteString, forType: .string)
+                                                }) {
+                                                    Image(systemName: "doc.on.clipboard").foregroundColor(.blue).font(.caption)
+                                                }.buttonStyle(.plain)
                                             }
                                         }
                                     }
-                                    // Divise parfaitement la largeur par le nombre de critères
-                                    .frame(maxWidth: .infinity, alignment: .top)
+                                    .frame(maxWidth: .infinity, alignment: .center) // <-- Centrage ici
                                     
+                                    // Champ de saisie
+                                    if crit.type == .boolean {
+                                        Toggle("", isOn: Binding<Bool>(
+                                            get: { getVal(for: crit) == 1.0 },
+                                            set: { setVal(for: crit, value: $0 ? 1.0 : 0.0) }
+                                        )).labelsHidden()
+                                    } else {
+                                        HStack {
+                                            TextField("0", value: Binding(
+                                                get: { getVal(for: crit) },
+                                                set: { setVal(for: crit, value: $0) }
+                                            ), format: .number)
+                                            .textFieldStyle(.roundedBorder)
+                                            .multilineTextAlignment(.center) // <-- Centrage de la valeur tapée
+                                            
+                                            if crit.type == .percentage {
+                                                Text("%").font(.caption).foregroundColor(.secondary)
+                                            }
+                                        }
+                                    }
                                 }
+                                .frame(maxWidth: .infinity, alignment: .top)
+                                
                             }
-                            .padding(.vertical, 8)
-                            
                         }
+                        .padding(.vertical, 24) // 3. Aération verticale augmentée
+                        
                     }
                 }
                 .padding(.trailing, 8)
             }
         }
-        .frame(maxHeight: 400) // Un peu réduit pour laisser place au comparateur en dessous
+        // J'ai supprimé .frame(maxHeight: 400) pour qu'il soit responsive
     }
+
 
 }
 
@@ -905,8 +907,8 @@ struct WatchlistLabComparison: View {
     }
     
     func formatValue(_ val: Double, type: CriterionType) -> String {
-        if type == .percentage { return val.formatted(.number.precision(.fractionLength(1))) + "%" }
-        return val.formatted(.number.precision(.fractionLength(1)))
+        if type == .percentage { return val.formatted(.number.precision(.fractionLength(2))) + "%" }
+        return val.formatted(.number.precision(.fractionLength(2)))
     }
     
     var body: some View {
@@ -938,16 +940,15 @@ struct WatchlistLabComparison: View {
                     Text("Strengths (+)").font(.headline).foregroundColor(.green)
                     ForEach(strengths.indices, id: \.self) { i in
                         HStack(alignment: .top) {
-                            Image(systemName: "plus.circle.fill").foregroundColor(.green).padding(.top, 2)
-                            // Utilisation d'un markdown basique pour mettre le nom du critère en gras
+                            Image(systemName: "plus.circle.fill").foregroundColor(.green).padding(.top, 3) // <-- Léger padding
                             if let mdText = try? AttributedString(markdown: strengths[i].text) {
-                                Text(mdText).font(.caption).foregroundColor(.secondary)
+                                Text(mdText).font(.subheadline).foregroundColor(.secondary) // <-- subheadline
                             } else {
-                                Text(strengths[i].text).font(.caption).foregroundColor(.secondary)
+                                Text(strengths[i].text).font(.subheadline).foregroundColor(.secondary) // <-- subheadline
                             }
                         }
                     }
-                    if strengths.isEmpty { Text("No strengths found vs portfolio.").font(.caption).foregroundColor(.secondary.opacity(0.5)).italic() }
+                    if strengths.isEmpty { Text("No strengths found vs portfolio.").font(.subheadline).foregroundColor(.secondary.opacity(0.5)).italic() }
                 }
                 .frame(maxWidth: .infinity, alignment: .top)
                 
@@ -958,15 +959,15 @@ struct WatchlistLabComparison: View {
                     Text("Weaknesses (-)").font(.headline).foregroundColor(.red)
                     ForEach(weaknesses.indices, id: \.self) { i in
                         HStack(alignment: .top) {
-                            Image(systemName: "minus.circle.fill").foregroundColor(.red).padding(.top, 2)
+                            Image(systemName: "minus.circle.fill").foregroundColor(.red).padding(.top, 3) // <-- Léger padding
                             if let mdText = try? AttributedString(markdown: weaknesses[i].text) {
-                                Text(mdText).font(.caption).foregroundColor(.secondary)
+                                Text(mdText).font(.subheadline).foregroundColor(.secondary) // <-- subheadline
                             } else {
-                                Text(weaknesses[i].text).font(.caption).foregroundColor(.secondary)
+                                Text(weaknesses[i].text).font(.subheadline).foregroundColor(.secondary) // <-- subheadline
                             }
                         }
                     }
-                    if weaknesses.isEmpty { Text("No weaknesses found vs portfolio.").font(.caption).foregroundColor(.secondary.opacity(0.5)).italic() }
+                    if weaknesses.isEmpty { Text("No weaknesses found vs portfolio.").font(.subheadline).foregroundColor(.secondary.opacity(0.5)).italic() }
                 }
                 .frame(maxWidth: .infinity, alignment: .top)
             }
