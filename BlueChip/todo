@@ -8,9 +8,8 @@ notifs apple : ce qu'il se passe demain et aujourd'hui calendar, price target se
 
 icone barre des menus : 3 prochains évents, chaque position avec prix actuel + target price, refresh api yahoo finance
 
-AUJOURDHUI :
-mettre bouton tutoriel pour chaque page qui explique comment fonctionne la page avec un bouton icone ? (pas que raccourci clavier)
+demander à l'IA des idées d'ajouts !! que ce soit Pages ou features
 
-mettre dividend receveid this month avec récupération des ticker qui versent un dividende ce mois-ci
+AUJOURDHUI :
 
 bouton IA qui analyse le contenu de la page, et donne son avis ! ≠ pour chaque page (GYOK, Gemini Flash)

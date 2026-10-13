@@ -29,8 +29,10 @@ struct DividendsView: View {
                 
                 DividendsProjectedChartsSection(viewModel: viewModel, privacyMode: $privacyMode, chartToZoom: $chartToZoom)
                 
-                DividendsTableSection(viewModel: viewModel, privacyMode: $privacyMode)
+                DividendsThisMonthSection(viewModel: viewModel, privacyMode: $privacyMode)
                 
+                DividendsTableSection(viewModel: viewModel, privacyMode: $privacyMode)
+                                
                 DividendsManualChartsSection(viewModel: viewModel, privacyMode: $privacyMode, chartToZoom: $chartToZoom)
                 
                 DividendsSecurityMetricsSection(viewModel: viewModel, privacyMode: $privacyMode, chartToZoom: $chartToZoom)
@@ -961,5 +963,233 @@ struct DividendFullScreenChartView: View {
         case .seasonality: return "Cumulative Monthly Seasonality"
         case .dgr: return "Dividend Growth Rate (YoY DGR)"
         }
+    }
+}
+
+// =========================================================================
+// MARK: - THIS MONTH'S DIVIDEND TRACKER
+// =========================================================================
+
+struct DividendsThisMonthSection: View {
+    @ObservedObject var viewModel: PortfolioViewModel
+    @Binding var privacyMode: Bool
+    
+    var currentYear: Int { Calendar.current.component(.year, from: Date()) }
+    var currentMonth: Int { Calendar.current.component(.month, from: Date()) }
+    var currentMonthName: String { Calendar.current.monthSymbols[currentMonth - 1] }
+    
+    var payingStocks: [Position] {
+        viewModel.positions.filter { $0.dividendMonths.contains(currentMonth) }.sorted { $0.ticker < $1.ticker }
+    }
+    
+    var totalExpected: Double {
+        payingStocks.reduce(0.0) { sum, pos in
+            let monthsCount = max(1, pos.dividendMonths.count)
+            return sum + (pos.totalDividendEUR / Double(monthsCount))
+        }
+    }
+    
+    @State private var receivedDict: [String: Double] = [:]
+    @State private var selectedAngleValue: Double? = nil
+    
+    var totalReceived: Double { receivedDict.values.reduce(0, +) }
+    
+    // CORRECTION 3 : Force les 100% si on a reçu exactement la somme attendue
+    var progress: Double {
+        guard totalExpected > 0 else { return 0 }
+        let diff = abs(totalReceived - totalExpected)
+        if diff < 0.01 { return 1.0 } // Moins d'un centime d'écart = 100%
+        return totalReceived / totalExpected
+    }
+    
+    var donutData: [ChartDataItem] {
+        receivedDict.filter { $0.value > 0 }.map { ChartDataItem(name: $0.key, value: $0.value) }.sorted { $0.value > $1.value }
+    }
+    
+    // CORRECTION 2 : Hauteur dynamique basée sur le nombre de lignes
+    var dynamicTableHeight: CGFloat {
+        let rowHeight: CGFloat = 44
+        let headerHeight: CGFloat = 32
+        if payingStocks.isEmpty { return 100 }
+        let calculated = CGFloat(payingStocks.count) * rowHeight + headerHeight
+        return min(max(calculated, 100), 400) // 400 max pour éviter de prendre tout l'écran s'il y a 20 actions
+    }
+    
+    var body: some View {
+        VStack(alignment: .leading, spacing: 16) {
+            Text("This Month (\(currentMonthName)) Tracker").font(.title2).fontWeight(.bold).foregroundColor(.secondary)
+            
+            if payingStocks.isEmpty {
+                Text("No dividends expected this month based on your portfolio settings.")
+                    .foregroundColor(.secondary)
+                    .frame(maxWidth: .infinity, minHeight: 100)
+            } else {
+                HStack(alignment: .center, spacing: 32) {
+                    
+                    // --- GAUCHE : DONUT CHART ---
+                    VStack {
+                        if donutData.isEmpty {
+                            ZStack {
+                                Circle().stroke(Color.gray.opacity(0.2), lineWidth: 30).frame(width: 180, height: 180)
+                                Text("Waiting for payouts...").font(.caption).foregroundColor(.secondary)
+                            }
+                        } else {
+                            Chart(donutData) { item in
+                                SectorMark(angle: .value("Value", item.value), innerRadius: .ratio(0.65), angularInset: 1.5)
+                                    .foregroundStyle(viewModel.color(for: item.name))
+                                    .cornerRadius(4)
+                            }
+                            .chartLegend(.hidden)
+                            .chartAngleSelection(value: $selectedAngleValue)
+                            .chartBackground { proxy in
+                                GeometryReader { geometry in
+                                    if let value = selectedAngleValue, let item = findItem(for: value) {
+                                        VStack {
+                                            Text(item.name).font(.headline)
+                                            Text(item.value.formatted(.currency(code: "EUR"))).font(.subheadline).foregroundColor(.secondary).blur(radius: privacyMode ? 6 : 0)
+                                        }.position(x: geometry.frame(in: .local).midX, y: geometry.frame(in: .local).midY)
+                                    } else {
+                                        VStack {
+                                            Text("Received").font(.caption).foregroundColor(.secondary)
+                                            Text(totalReceived.formatted(.currency(code: "EUR").precision(.fractionLength(2)))).font(.title3).fontWeight(.bold).blur(radius: privacyMode ? 6 : 0)
+                                        }.position(x: geometry.frame(in: .local).midX, y: geometry.frame(in: .local).midY)
+                                    }
+                                }
+                            }
+                        }
+                    }
+                    .frame(maxWidth: .infinity) // CORRECTION 1 : 50% de la largeur
+                    .frame(height: 250) // Hauteur fixe pour le donut pour qu'il reste esthétique
+                    
+                    // --- DROITE : STATS & TABLEAU ---
+                    VStack(alignment: .leading, spacing: 16) {
+                        
+                        // Header Stats
+                        HStack(spacing: 20) {
+                            VStack(alignment: .leading) {
+                                Text("Expected Total").font(.caption).foregroundColor(.secondary)
+                                Text(totalExpected.formatted(.currency(code: "EUR"))).font(.title3).fontWeight(.bold).blur(radius: privacyMode ? 6 : 0)
+                            }
+                            Divider().frame(height: 30)
+                            VStack(alignment: .leading) {
+                                Text("Remaining").font(.caption).foregroundColor(.secondary)
+                                let remaining = max(0, totalExpected - totalReceived)
+                                Text(remaining.formatted(.currency(code: "EUR"))).font(.title3).fontWeight(.bold).foregroundColor(.orange).blur(radius: privacyMode ? 6 : 0)
+                            }
+                            Divider().frame(height: 30)
+                            VStack(alignment: .leading) {
+                                Text("Progress").font(.caption).foregroundColor(.secondary)
+                                Text(progress.formatted(.percent.precision(.fractionLength(1)))).font(.title3).fontWeight(.bold).foregroundColor(progress >= 1 ? .green : .blue).blur(radius: privacyMode ? 6 : 0)
+                            }
+                        }
+                        .padding(12).background(Color(NSColor.windowBackgroundColor)).cornerRadius(8)
+                        
+                        // Tableau des saisies
+                        VStack(spacing: 0) {
+                            HStack {
+                                Text("Ticker").fontWeight(.bold).frame(width: 60, alignment: .leading)
+                                Text("Expected").fontWeight(.bold).frame(maxWidth: .infinity, alignment: .trailing)
+                                Text("Received").fontWeight(.bold).frame(width: 100, alignment: .trailing)
+                            }
+                            .font(.caption).foregroundColor(.secondary).padding(.horizontal, 12).padding(.vertical, 8)
+                            .background(Color(NSColor.windowBackgroundColor))
+                            
+                            Divider()
+                            
+                            ScrollView {
+                                VStack(spacing: 0) {
+                                    ForEach(payingStocks) { pos in
+                                        let expectedAmount = pos.totalDividendEUR / Double(max(1, pos.dividendMonths.count))
+                                        HStack {
+                                            HStack(spacing: 6) {
+                                                Circle().fill(viewModel.color(for: pos.ticker)).frame(width: 8, height: 8)
+                                                Text(pos.ticker).fontWeight(.bold)
+                                            }.frame(width: 60, alignment: .leading)
+                                            
+                                            Text(expectedAmount.formatted(.currency(code: "EUR"))).foregroundColor(.secondary).blur(radius: privacyMode ? 6 : 0).frame(maxWidth: .infinity, alignment: .trailing)
+                                            
+                                            TickerMonthField(ticker: pos.ticker, value: binding(for: pos.ticker), privacyMode: privacyMode)
+                                                .frame(width: 100, alignment: .trailing)
+                                        }
+                                        .padding(.horizontal, 12).padding(.vertical, 8)
+                                        Divider()
+                                    }
+                                }
+                            }
+                        }
+                        .frame(height: dynamicTableHeight) // CORRECTION 2 : Application de la hauteur dynamique
+                        .cornerRadius(8)
+                        .overlay(RoundedRectangle(cornerRadius: 8).stroke(Color.gray.opacity(0.2), lineWidth: 1))
+                    }
+                    .frame(maxWidth: .infinity) // CORRECTION 1 : L'autre 50% de la largeur
+                }
+            }
+        }
+        .padding()
+        .background(Color(NSColor.controlBackgroundColor))
+        .cornerRadius(12)
+        .shadow(color: Color.black.opacity(0.05), radius: 2, x: 0, y: 1)
+        .onAppear { loadDict() }
+    }
+    
+    // --- GESTION DES DONNÉES LOCALES ---
+    private var userDefaultsKey: String { "divTracker_\(currentYear)_\(currentMonth)" }
+    
+    func binding(for ticker: String) -> Binding<Double> {
+        Binding<Double>(
+            get: { receivedDict[ticker] ?? 0.0 },
+            set: { receivedDict[ticker] = $0; saveDict() }
+        )
+    }
+    
+    func loadDict() {
+        if let data = UserDefaults.standard.data(forKey: userDefaultsKey),
+           let dict = try? JSONDecoder().decode([String: Double].self, from: data) {
+            receivedDict = dict
+        }
+    }
+    
+    func saveDict() {
+        if let data = try? JSONEncoder().encode(receivedDict) {
+            UserDefaults.standard.set(data, forKey: userDefaultsKey)
+        }
+    }
+    
+    func findItem(for value: Double) -> ChartDataItem? {
+        var cum = 0.0
+        for item in donutData {
+            cum += item.value
+            if value <= cum { return item }
+        }
+        return donutData.last
+    }
+}
+
+// =========================================================================
+// MARK: - CHAMP DE SAISIE FIABLE (ANTI-BUG)
+// =========================================================================
+struct TickerMonthField: View {
+    let ticker: String
+    @Binding var value: Double
+    var privacyMode: Bool
+    
+    @State private var textValue: String = ""
+    
+    var body: some View {
+        TextField("0.00", text: $textValue)
+            .textFieldStyle(.roundedBorder)
+            .multilineTextAlignment(.trailing)
+            .blur(radius: privacyMode ? 6 : 0)
+            .onAppear {
+                if value != 0 { textValue = value.formatted(.number.grouping(.never)) }
+            }
+            .onChange(of: textValue) { _, newValue in
+                let cleanString = newValue.replacingOccurrences(of: ",", with: ".")
+                if let doubleVal = Double(cleanString) {
+                    value = doubleVal
+                } else if newValue.isEmpty {
+                    value = 0
+                }
+            }
     }
 }

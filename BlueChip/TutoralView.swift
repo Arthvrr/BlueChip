@@ -23,7 +23,7 @@ struct TutorialView: View {
 
         case .growth:
             return (
-                "Capital Growth",
+                "Growth",
                 "chart.line.uptrend.xyaxis",
                 "This is your wealth accumulator. It compares your net deposits against market returns to show your compound annual growth rate (CAGR)."
             )
@@ -58,7 +58,7 @@ struct TutorialView: View {
 
         case .calendar:
             return (
-                "Financial Calendar",
+                "Calendar",
                 "calendar",
                 "Stay on top of important financial dates. Track upcoming dividends, earnings announcements, and other events that may affect your investments."
             )
@@ -86,14 +86,14 @@ struct TutorialView: View {
 
         case .wealth:
             return (
-                "Net Worth",
+                "Wealth",
                 "wallet.bifold.fill",
                 "Track your overall wealth over time. Get a broader picture of your financial progress and see how your assets and liabilities contribute to your net worth."
             )
 
         case .valuation:
             return (
-                "Valuation Lab",
+                "Valuation",
                 "scale.3d",
                 "Analyze whether a stock is undervalued or overvalued. Set your Margin of Safety in the settings to estimate fair value using metrics such as PEG and Forward P/E ratios."
             )

@@ -96,19 +96,33 @@ struct ContentView: View {
                     .font(.system(size: 24, weight: .black, design: .rounded))
                     .foregroundColor(.primary)
                 Spacer()
-                
+
+                // NOUVEAU BOUTON TUTORIEL
+                Button(action: {
+                    // Remplace par le nom exact de la notification ou de la variable d'état de ton tutoriel
+                    NotificationCenter.default.post(name: NSNotification.Name("OpenTutorial"), object: nil)
+                }) {
+                    Image(systemName: "questionmark.circle")
+                        .font(.title2)
+                        .foregroundColor(.secondary)
+                }
+                .buttonStyle(.plain)
+                .padding(.trailing, 8)
+
                 Button(action: { withAnimation { privacyMode.toggle() } }) {
                     Image(systemName: privacyMode ? "eye.slash" : "eye").font(.body)
                 }
                 .buttonStyle(.plain)
                 .padding(.trailing, 8)
-                
+
                 Button(action: { viewModel.showSettings = true }) {
                     Image(systemName: "gearshape.fill")
                         .font(.title2)
                         .foregroundColor(.secondary)
-                }.buttonStyle(.plain)
-                
+                }
+                .buttonStyle(.plain)
+                .padding(.trailing, 8) // Ajout d'un padding ici pour équilibrer l'espacement avant le bouton Refresh
+
                 Button(action: { performRefresh() }) {
                     if viewModel.isLoading {
                         ProgressView().controlSize(.small)
@@ -119,11 +133,12 @@ struct ContentView: View {
                 .disabled(viewModel.isLoading)
                 .buttonStyle(.bordered)
                 .padding(.trailing, 8)
-                
+
                 Button(action: { showAddSheet = true }) {
                     Label("Add", systemImage: "plus")
                 }
                 .buttonStyle(.borderedProminent)
+
             }
             .padding(.horizontal, 20)
             .padding(.top, 20)
