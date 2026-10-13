@@ -132,13 +132,13 @@ struct AICopilotView: View {
         
         Task {
             do {
-                // On envoie un message utilisateur "caché" à l'API pour qu'elle ait un point de départ
+                // On crée un message utilisateur "caché" pour lancer l'analyse sans l'afficher dans l'UI
                 let hiddenInitialMessage = ChatMessage(role: "user", text: "Analyze the current page data.")
                 
                 let response = try await GeminiService.shared.generateChatResponse(systemPrompt: systemPrompt, messages: [hiddenInitialMessage], apiKey: geminiApiKey)
                 
                 await MainActor.run {
-                    // On affiche SEULEMENT la réponse de l'IA
+                    // On n'affiche QUE la réponse du modèle !
                     messages.append(ChatMessage(role: "model", text: response))
                     isThinking = false
                 }
@@ -158,9 +158,10 @@ struct AICopilotView: View {
         Do NOT use generic disclaimers like "This is not financial advice". Speak directly and professionally.
         
         CRITICAL FORMATTING RULES:
-        1. Keep the layout airy and easy to read. Structure your response with distinct paragraphs.
-        2. Use bullet points (-) for lists.
-        3. Use bold text (**text**) to highlight key metrics, ticker names, and sub-titles.
+        1. DO NOT use markdown headings (like "#" or "###") or horizontal lines (like "---").
+        2. For section headers, simply write the title in bold (e.g., **Portfolio Overview**).
+        3. Use standard bullet points (-) for lists.
+        4. Add line breaks between paragraphs to keep the layout breathable.
         
         --- CURRENT PORTFOLIO CONTEXT ---
         Current Tab Being Viewed: \(currentTab.rawValue)
@@ -233,11 +234,12 @@ struct AICopilotView: View {
         
         Task {
             do {
-                // On recrée l'historique complet pour l'API, y compris le tout premier message caché
+                // On envoie le premier message caché + l'historique visible
                 var apiMessages = [ChatMessage(role: "user", text: "Analyze the current page data.")]
-                apiMessages.append(contentsOf: messages) // Contient la réponse initiale + la nouvelle question
+                apiMessages.append(contentsOf: messages)
                 
                 let response = try await GeminiService.shared.generateChatResponse(systemPrompt: systemPrompt, messages: apiMessages, apiKey: geminiApiKey)
+                
                 await MainActor.run {
                     messages.append(ChatMessage(role: "model", text: response))
                     isThinking = false
@@ -253,7 +255,7 @@ struct AICopilotView: View {
 }
 
 // =========================================================================
-// MARK: - COMPOSANT BULLE DE CHAT (AVEC COPIE & ESPACEMENT)
+// MARK: - COMPOSANT BULLE DE CHAT (AVEC COPIE & ESPACEMENT PARFAIT)
 // =========================================================================
 struct ChatBubble: View {
     let message: ChatMessage
@@ -263,12 +265,12 @@ struct ChatBubble: View {
         message.role == "user"
     }
     
-    // Remplacement intelligent pour garantir un affichage aéré
-    var formattedText: String {
+    // Nettoyage de sécurité au cas où l'IA s'entête à utiliser des symboles interdits
+    var cleanedText: String {
         message.text
-            .replacingOccurrences(of: "\n\n", with: "[[DBL_NEWLINE]]")
-            .replacingOccurrences(of: "\n", with: "\n\n")
-            .replacingOccurrences(of: "[[DBL_NEWLINE]]", with: "\n\n")
+            .replacingOccurrences(of: "### ", with: "")
+            .replacingOccurrences(of: "###", with: "")
+            .replacingOccurrences(of: "---", with: "")
     }
     
     var body: some View {
@@ -289,19 +291,28 @@ struct ChatBubble: View {
                 }
                 
                 VStack(alignment: .leading, spacing: 8) {
-                    // LocalizedStringKey interprète automatiquement le Markdown natif de SwiftUI
-                    Text(LocalizedStringKey(formattedText))
-                        .lineSpacing(4)
-                        .padding(14)
-                        .background(isUser ? Color.blue : Color(NSColor.controlBackgroundColor))
-                        .foregroundColor(isUser ? .white : .primary)
-                        .cornerRadius(12)
+                    // L'astuce magique: inlineOnlyPreservingWhitespace empêche SwiftUI d'écraser les sauts de ligne !
+                    if let mdText = try? AttributedString(markdown: cleanedText, options: AttributedString.MarkdownParsingOptions(interpretedSyntax: .inlineOnlyPreservingWhitespace)) {
+                        Text(mdText)
+                            .lineSpacing(6)
+                            .padding(14)
+                            .background(isUser ? Color.blue : Color(NSColor.controlBackgroundColor))
+                            .foregroundColor(isUser ? .white : .primary)
+                            .cornerRadius(12)
+                    } else {
+                        Text(cleanedText)
+                            .lineSpacing(6)
+                            .padding(14)
+                            .background(isUser ? Color.blue : Color(NSColor.controlBackgroundColor))
+                            .foregroundColor(isUser ? .white : .primary)
+                            .cornerRadius(12)
+                    }
                     
                     // BOUTON DE COPIE POUR L'IA
                     if !isUser {
                         Button(action: {
                             NSPasteboard.general.clearContents()
-                            NSPasteboard.general.setString(message.text, forType: .string)
+                            NSPasteboard.general.setString(cleanedText, forType: .string)
                             withAnimation { showCopiedFeedback = true }
                             DispatchQueue.main.asyncAfter(deadline: .now() + 2) {
                                 withAnimation { showCopiedFeedback = false }
