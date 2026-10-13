@@ -960,65 +960,91 @@ struct EditPositionView: View {
             pos.dividendMonths = selectedMonths
             viewModel.objectWillChange.send()
         } else {
-            let newPos = Position(
-                id: UUID(),
-                ticker: cleanTicker,
-                quantity: safeQty,
-                averageCost: safeAvg,
-                currentPrice: 0.0,
-                currency: "USD", // Par défaut USD pour actions US/ADR comme TSM
-                usdToEurRate: 0.92,
-                annualDividendNet: safeDiv,
-                country: country,
-                sector: sector,
-                marketCap: marketCap,
-                dividendMonths: selectedMonths,
-                purchaseDate: purchaseDate,
-                dividendGrowth5Y: safeGrow
-            )
-            newPos.companyName = companyName
-            newPos.logoData = logoData
-            newPos.logoScale = logoScale
-            
-            context.insert(newPos)
-            viewModel.positions.append(newPos)
-            
-            // Fetch automatique du cours et de la devise réelle dès l'ajout
-            Task {
-                let service = YahooFinanceService()
+            // NOUVEAU : 1. Vérifier si le Ticker existe déjà dans le portefeuille
+            if let existingPos = viewModel.positions.first(where: { $0.ticker == cleanTicker }) {
                 
-                // 1. Récupère le prix de l'action
-                if let data = await service.fetchStockData(for: cleanTicker) {
-                    await MainActor.run {
-                        newPos.currentPrice = data.price
-                        newPos.currency = data.currency
-                    }
+                // 2. Fusionner : Calculer le nouveau PRU pondéré et additionner les quantités
+                let totalQty = existingPos.quantity + safeQty
+                if totalQty > 0 {
+                    let currentTotalCost = existingPos.quantity * existingPos.averageCost
+                    let newCost = safeQty * safeAvg
+                    existingPos.averageCost = (currentTotalCost + newCost) / totalQty
+                }
+                existingPos.quantity = totalQty
+                
+                // 3. Optionnel : Mettre à jour les autres infos si elles ont été saisies lors de ce "renforcement"
+                if !companyName.isEmpty { existingPos.companyName = companyName }
+                if logoData != nil {
+                    existingPos.logoData = logoData
+                    existingPos.logoScale = logoScale
+                }
+                if safeDiv > 0 { existingPos.annualDividendNet = safeDiv }
+                
+                // On prévient l'interface de se mettre à jour
+                viewModel.objectWillChange.send()
+                
+            } else {
+                // COMME AVANT : Création d'une toute nouvelle position
+                let newPos = Position(
+                    id: UUID(),
+                    ticker: cleanTicker,
+                    quantity: safeQty,
+                    averageCost: safeAvg,
+                    currentPrice: 0.0,
+                    currency: "USD", // Par défaut USD pour actions US/ADR comme TSM
+                    usdToEurRate: 0.92,
+                    annualDividendNet: safeDiv,
+                    country: country,
+                    sector: sector,
+                    marketCap: marketCap,
+                    dividendMonths: selectedMonths,
+                    purchaseDate: purchaseDate,
+                    dividendGrowth5Y: safeGrow
+                )
+                newPos.companyName = companyName
+                newPos.logoData = logoData
+                newPos.logoScale = logoScale
+                
+                context.insert(newPos)
+                viewModel.positions.append(newPos)
+                
+                // Fetch automatique du cours et de la devise réelle dès l'ajout
+                Task {
+                    let service = YahooFinanceService()
                     
-                    // 2. Si la devise est l'USD, on va chercher le vrai taux de change en direct
-                    if data.currency.uppercased() == "USD" {
-                        // "EUR=X" est le ticker Yahoo Finance pour le taux USD/EUR
-                        if let fxData = await service.fetchStockData(for: "EUR=X") {
+                    // 1. Récupère le prix de l'action
+                    if let data = await service.fetchStockData(for: cleanTicker) {
+                        await MainActor.run {
+                            newPos.currentPrice = data.price
+                            newPos.currency = data.currency
+                        }
+                        
+                        // 2. Si la devise est l'USD, on va chercher le vrai taux de change en direct
+                        if data.currency.uppercased() == "USD" {
+                            // "EUR=X" est le ticker Yahoo Finance pour le taux USD/EUR
+                            if let fxData = await service.fetchStockData(for: "EUR=X") {
+                                await MainActor.run {
+                                    newPos.usdToEurRate = fxData.price
+                                    viewModel.objectWillChange.send()
+                                }
+                            } else {
+                                await MainActor.run { viewModel.objectWillChange.send() }
+                            }
+                        } else if data.currency.uppercased() == "EUR" {
+                            // Si c'est déjà en Euro, le taux est de 1
                             await MainActor.run {
-                                newPos.usdToEurRate = fxData.price
+                                newPos.usdToEurRate = 1.0
                                 viewModel.objectWillChange.send()
                             }
                         } else {
                             await MainActor.run { viewModel.objectWillChange.send() }
                         }
-                    } else if data.currency.uppercased() == "EUR" {
-                        // Si c'est déjà en Euro, le taux est de 1
-                        await MainActor.run {
-                            newPos.usdToEurRate = 1.0
-                            viewModel.objectWillChange.send()
-                        }
-                    } else {
-                        await MainActor.run { viewModel.objectWillChange.send() }
                     }
                 }
             }
-
         }
         dismiss()
     }
+
 
 }
