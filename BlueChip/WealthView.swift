@@ -1,8 +1,19 @@
 import SwiftUI
 import Charts
-import SwiftData // <-- NOUVEAU
+import SwiftData
 import Combine
 
+// =========================================================================
+// MARK: - ZOOM ENUM
+// =========================================================================
+enum WealthChartZoomType: String, Identifiable {
+    case allocation, roi
+    var id: String { self.rawValue }
+}
+
+// =========================================================================
+// MARK: - MAIN WEALTH VIEW
+// =========================================================================
 struct WealthView: View {
     @ObservedObject var viewModel: PortfolioViewModel
     @Binding var privacyMode: Bool
@@ -12,10 +23,11 @@ struct WealthView: View {
     @State private var newAssetInvested: Double? = nil
     @State private var newAssetCurrent: Double? = nil
     
-    // States for editing
+    // States for editing & Zoom
     @State private var editingAsset: WealthAsset? = nil
     @State private var editingLiability: WealthLiability? = nil
     @State private var showGoalSheet: Bool = false
+    @State private var chartToZoom: WealthChartZoomType? = nil
     
     var body: some View {
         let isPrivate = privacyMode
@@ -23,7 +35,7 @@ struct WealthView: View {
         ScrollView {
             VStack(spacing: 24) {
                 
-                // 1. DASHBOARD: 8 SUMMARY CARDS (UPDATED WITH TRUE NET WORTH)
+                // 1. DASHBOARD: 8 SUMMARY CARDS
                 VStack(spacing: 16) {
                     HStack(spacing: 16) {
                         DashboardCard(title: "True Net Worth", value: viewModel.trueNetWorth.formatted(.currency(code: "EUR")), titleIcon: "building.columns.fill", privacyMode: $privacyMode)
@@ -57,7 +69,7 @@ struct WealthView: View {
                     }
                 }
                 
-                // 2. GOAL PROGRESS BAR (Now linked to True Net Worth)
+                // 2. GOAL PROGRESS BAR
                 WealthGoalProgressBar(
                     currentValue: viewModel.trueNetWorth,
                     targetValue: viewModel.wealthGoalTarget,
@@ -82,7 +94,6 @@ struct WealthView: View {
                         onAdd: {
                             guard !newAssetName.isEmpty, let invested = newAssetInvested, let current = newAssetCurrent else { return }
                             let newAsset = WealthAsset(name: newAssetName, invested: invested, current: current, isAutoFilled: false)
-                            // MODIFIÉ : SwiftData
                             viewModel.addWealthAsset(newAsset)
                             newAssetName = ""
                             newAssetInvested = nil
@@ -104,27 +115,27 @@ struct WealthView: View {
                 
                 // 5. CHARTS (DONUT & BARS for Assets)
                 HStack(spacing: 24) {
-                    WealthAllocationChart(viewModel: viewModel)
-                    WealthROIChart(viewModel: viewModel)
+                    WealthAllocationChart(viewModel: viewModel, privacyMode: $privacyMode, expandedChart: $chartToZoom)
+                    WealthROIChart(viewModel: viewModel, privacyMode: $privacyMode, expandedChart: $chartToZoom)
                 }
                 
-                // 6. FIRE SIMULATOR (FINANCIAL INDEPENDENCE)
+                // 6. FIRE SIMULATOR
                 WealthFIRESimulatorSection(viewModel: viewModel, privacyMode: $privacyMode)
             }
             .padding()
         }
         .background(Color(NSColor.windowBackgroundColor))
-        // Goal Edit Sheet
         .sheet(isPresented: $showGoalSheet) {
             SimpleNumberEditView(title: "Edit Net Worth Goal", value: $viewModel.wealthGoalTarget)
         }
-        // Asset Edit Sheet
         .sheet(item: $editingAsset) { asset in
             EditWealthAssetSheet(viewModel: viewModel, assetToEdit: asset)
         }
-        // Liability Edit Sheet
         .sheet(item: $editingLiability) { liability in
             EditWealthLiabilitySheet(viewModel: viewModel, liabilityToEdit: liability)
+        }
+        .sheet(item: $chartToZoom) { type in
+            WealthFullScreenChartView(zoomType: type, viewModel: viewModel, privacyMode: $privacyMode)
         }
     }
 }
@@ -150,7 +161,6 @@ struct WealthAssetsTableSection: View {
             .padding(.bottom, 4)
             
             VStack(spacing: 0) {
-                // Header
                 HStack(spacing: 8) {
                     Text("Asset").fontWeight(.bold).frame(maxWidth: .infinity, alignment: .leading)
                     Text("Current Value").fontWeight(.bold).frame(maxWidth: .infinity, alignment: .trailing)
@@ -167,7 +177,6 @@ struct WealthAssetsTableSection: View {
                 
                 Divider()
                 
-                // Rows
                 ForEach(viewModel.allWealthAssets) { asset in
                     HStack(spacing: 8) {
                         HStack {
@@ -179,13 +188,12 @@ struct WealthAssetsTableSection: View {
                         Text(asset.current.formatted(.currency(code: "EUR"))).fontWeight(.semibold).blur(radius: isPrivate ? 6 : 0).frame(maxWidth: .infinity, alignment: .trailing)
                         Text(asset.invested.formatted(.currency(code: "EUR"))).blur(radius: isPrivate ? 6 : 0).frame(maxWidth: .infinity, alignment: .trailing)
                         Text(asset.variationEUR.formatted(.currency(code: "EUR").sign(strategy: .always()))).fontWeight(.semibold).foregroundColor(asset.variationEUR >= 0 ? .green : .red).blur(radius: isPrivate ? 6 : 0).frame(maxWidth: .infinity, alignment: .trailing)
-                        Text(asset.variationPercent.formatted(.percent.precision(.fractionLength(2)).sign(strategy: .always()))).fontWeight(.bold).padding(.horizontal, 6).padding(.vertical, 2).background((asset.variationPercent >= 0 ? Color.green : Color.red).opacity(0.15)).foregroundColor(asset.variationPercent >= 0 ? .green : .red).cornerRadius(4).frame(maxWidth: .infinity, alignment: .trailing)
+                        Text(asset.variationPercent.formatted(.percent.precision(.fractionLength(2)).sign(strategy: .always()))).fontWeight(.bold).padding(.horizontal, 6).padding(.vertical, 2).background((asset.variationPercent >= 0 ? Color.green : Color.red).opacity(0.15)).foregroundColor(asset.variationPercent >= 0 ? .green : .red).cornerRadius(4).blur(radius: isPrivate ? 6 : 0).frame(maxWidth: .infinity, alignment: .trailing)
                         
                         let pctTotal = viewModel.totalAssets > 0 ? (asset.current / viewModel.totalAssets) : 0
                         Text(pctTotal.formatted(.percent.precision(.fractionLength(2))))
-                            .blur(radius: isPrivate ? 6 : 0) // <-- AJOUT DU BLUR
+                            .blur(radius: isPrivate ? 6 : 0)
                             .frame(maxWidth: .infinity, alignment: .trailing)
-
                     }
                     .padding(.horizontal, 16).padding(.vertical, 12).contentShape(Rectangle())
                     .onTapGesture(count: 2) { onEdit(asset) }
@@ -221,10 +229,12 @@ struct WealthLiabilitiesTableSection: View {
             .padding(.bottom, 4)
             
             VStack(spacing: 0) {
-                // Header
                 HStack(spacing: 8) {
                     Text("Liability Name").fontWeight(.bold).frame(maxWidth: .infinity, alignment: .leading)
+                    Text("Borrowed").fontWeight(.bold).frame(maxWidth: .infinity, alignment: .trailing)
+                    Text("Already Refund").fontWeight(.bold).frame(maxWidth: .infinity, alignment: .trailing)
                     Text("Amount Owed").fontWeight(.bold).frame(maxWidth: .infinity, alignment: .trailing)
+                    Text("Left (%)").fontWeight(.bold).frame(maxWidth: .infinity, alignment: .trailing)
                     Text("% of Total Debt").fontWeight(.bold).frame(maxWidth: .infinity, alignment: .trailing)
                 }
                 .font(.subheadline)
@@ -238,14 +248,27 @@ struct WealthLiabilitiesTableSection: View {
                 if viewModel.manualWealthLiabilities.isEmpty {
                     Text("No liabilities recorded. You are debt-free! 🎉").foregroundColor(.secondary).padding(20)
                 } else {
-                    // Rows
                     ForEach(viewModel.manualWealthLiabilities) { liability in
                         HStack(spacing: 8) {
                             Text(liability.name).fontWeight(.bold).frame(maxWidth: .infinity, alignment: .leading)
-                            Text(liability.amount.formatted(.currency(code: "EUR"))).fontWeight(.semibold).foregroundColor(.red).blur(radius: isPrivate ? 6 : 0).frame(maxWidth: .infinity, alignment: .trailing)
                             
+                            // Borrowed
+                            Text(liability.initialAmount.formatted(.currency(code: "EUR"))).blur(radius: isPrivate ? 6 : 0).frame(maxWidth: .infinity, alignment: .trailing)
+                            
+                            // Already Refund
+                            let reimbursed = max(0, liability.initialAmount - liability.amount)
+                            Text(reimbursed.formatted(.currency(code: "EUR"))).fontWeight(.semibold).foregroundColor(.green).blur(radius: isPrivate ? 6 : 0).frame(maxWidth: .infinity, alignment: .trailing)
+                            
+                            // Amount Owed
+                            Text(liability.amount.formatted(.currency(code: "EUR"))).fontWeight(.bold).foregroundColor(.red).blur(radius: isPrivate ? 6 : 0).frame(maxWidth: .infinity, alignment: .trailing)
+                            
+                            // Left (%)
+                            let leftPct = liability.initialAmount > 0 ? (liability.amount / liability.initialAmount) : 0
+                            Text(leftPct.formatted(.percent.precision(.fractionLength(1)))).blur(radius: isPrivate ? 6 : 0).frame(maxWidth: .infinity, alignment: .trailing)
+                            
+                            // % of Total Debt
                             let pctTotal = viewModel.totalLiabilities > 0 ? (liability.amount / viewModel.totalLiabilities) : 0
-                            Text(pctTotal.formatted(.percent.precision(.fractionLength(2)))).frame(maxWidth: .infinity, alignment: .trailing)
+                            Text(pctTotal.formatted(.percent.precision(.fractionLength(2)))).blur(radius: isPrivate ? 6 : 0).frame(maxWidth: .infinity, alignment: .trailing)
                         }
                         .padding(.horizontal, 16).padding(.vertical, 12).contentShape(Rectangle())
                         .onTapGesture(count: 2) { onEdit(liability) }
@@ -286,7 +309,7 @@ struct WealthAddLiabilitySection: View {
     @ObservedObject var viewModel: PortfolioViewModel
     var body: some View {
         HStack(spacing: 16) {
-            TextField("Liability Name (e.g. Mortgage, Student Loan...)", text: $viewModel.newLiabilityName).textFieldStyle(.roundedBorder)
+            TextField("Liability Name (e.g. Mortgage)", text: $viewModel.newLiabilityName).textFieldStyle(.roundedBorder)
             TextField("Amount Owed (€)", value: $viewModel.newLiabilityAmount, format: .number).textFieldStyle(.roundedBorder).frame(width: 160)
             Button(action: viewModel.addNewLiability) { Label("Add Liability", systemImage: "plus") }.buttonStyle(.borderedProminent).tint(.red).disabled(viewModel.newLiabilityName.isEmpty || viewModel.newLiabilityAmount == nil)
         }
@@ -398,6 +421,12 @@ struct WealthFIRESimulatorSection: View {
 
 struct WealthAllocationChart: View {
     @ObservedObject var viewModel: PortfolioViewModel
+    @Binding var privacyMode: Bool
+    var isExpanded: Bool = false
+    @Binding var expandedChart: WealthChartZoomType?
+    
+    @State private var selectedAngleValue: Double? = nil
+    
     let chartColors: [Color] = [.blue, .green, .orange, .purple, .pink, .teal, .yellow, .indigo, .mint, .cyan, .red, .brown]
     
     func color(for name: String) -> Color {
@@ -405,11 +434,28 @@ struct WealthAllocationChart: View {
         return .gray
     }
     
+    var sortedAssets: [WealthAsset] {
+        viewModel.allWealthAssets.sorted(by: { $0.current > $1.current })
+    }
+    
+    func findItem(for value: Double) -> WealthAsset? {
+        var cum = 0.0
+        for asset in sortedAssets {
+            cum += asset.current
+            if value <= cum { return asset }
+        }
+        return sortedAssets.last
+    }
+    
     var body: some View {
         VStack(alignment: .leading, spacing: 16) {
-            Text("Assets Allocation").font(.headline).foregroundColor(.secondary)
+            HStack {
+                if !isExpanded { Text("Assets Allocation").font(.headline).foregroundColor(.secondary) }
+                Spacer()
+                if !isExpanded { Button(action: { expandedChart = .allocation }) { Image(systemName: "plus.magnifyingglass").foregroundColor(.secondary) }.buttonStyle(.plain) }
+            }
             
-            Chart(viewModel.allWealthAssets.sorted(by: { $0.current > $1.current })) { asset in
+            Chart(sortedAssets) { asset in
                 SectorMark(
                     angle: .value("Value", asset.current),
                     innerRadius: .ratio(0.65),
@@ -417,12 +463,26 @@ struct WealthAllocationChart: View {
                 )
                 .foregroundStyle(color(for: asset.name))
                 .cornerRadius(4)
-                .annotation(position: .overlay) {
-                    let pct = viewModel.totalAssets > 0 ? (asset.current / viewModel.totalAssets) : 0
-                    if pct > 0.05 { Text(pct.formatted(.percent.precision(.fractionLength(0)))).font(.caption2.bold()).foregroundColor(.white) }
+                // L'annotation permanente a été supprimée ici
+            }
+            .chartLegend(.hidden)
+            .chartAngleSelection(value: $selectedAngleValue)
+            .chartBackground { proxy in
+                GeometryReader { geometry in
+                    if let value = selectedAngleValue, let asset = findItem(for: value) {
+                        let pct = viewModel.totalAssets > 0 ? (asset.current / viewModel.totalAssets) : 0
+                        VStack {
+                            Text(asset.name).font(.headline).lineLimit(1)
+                            Text(pct.formatted(.percent.precision(.fractionLength(1))))
+                                .font(.title3).fontWeight(.bold).foregroundColor(color(for: asset.name))
+                                .blur(radius: privacyMode ? 6 : 0)
+                        }
+                        .position(x: geometry.frame(in: .local).midX, y: geometry.frame(in: .local).midY)
+                    }
                 }
             }
-            .frame(height: 250)
+            .animation(.easeInOut(duration: 0.2), value: selectedAngleValue)
+            .frame(height: isExpanded ? .infinity : 250)
             
             HStack(spacing: 12) {
                 ForEach(viewModel.allWealthAssets, id: \.id) { asset in
@@ -439,9 +499,19 @@ struct WealthAllocationChart: View {
 
 struct WealthROIChart: View {
     @ObservedObject var viewModel: PortfolioViewModel
+    @Binding var privacyMode: Bool
+    var isExpanded: Bool = false
+    @Binding var expandedChart: WealthChartZoomType?
+    
+    @State private var hoveredAsset: String? = nil
+    
     var body: some View {
         VStack(alignment: .leading, spacing: 16) {
-            Text("Return on Investment (ROI % by Asset)").font(.headline).foregroundColor(.secondary)
+            HStack {
+                if !isExpanded { Text("Return on Investment (ROI % by Asset)").font(.headline).foregroundColor(.secondary) }
+                Spacer()
+                if !isExpanded { Button(action: { expandedChart = .roi }) { Image(systemName: "plus.magnifyingglass").foregroundColor(.secondary) }.buttonStyle(.plain) }
+            }
             
             Chart(viewModel.allWealthAssets) { asset in
                 BarMark(
@@ -450,15 +520,48 @@ struct WealthROIChart: View {
                 )
                 .foregroundStyle(asset.variationPercent >= 0 ? Color.green.gradient : Color.red.gradient)
                 .cornerRadius(4)
-                .annotation(position: .top) { Text(asset.variationPercent.formatted(.percent.precision(.fractionLength(1)))).font(.caption.bold()) }
+                .annotation(position: .top) {
+                    if hoveredAsset == asset.name {
+                        Text(asset.variationPercent.formatted(.percent.precision(.fractionLength(1))))
+                            .font(.caption.bold())
+                            .blur(radius: privacyMode ? 6 : 0)
+                    }
+                }
             }
+            .chartXSelection(value: $hoveredAsset)
             .chartYAxis { AxisMarks(position: .leading) { value in AxisGridLine(); AxisTick(); if let val = value.as(Double.self) { AxisValueLabel("\(val.formatted(.number.precision(.fractionLength(0))))%") } } }
-            .frame(height: 250)
+            .frame(height: isExpanded ? .infinity : 250)
             
             HStack { Text("Unrealized performance by asset class").font(.caption2).foregroundColor(.secondary); Spacer(); BlueChipWatermark() }
             Spacer()
         }
         .padding().frame(maxWidth: .infinity, alignment: .leading).background(Color(NSColor.controlBackgroundColor)).cornerRadius(12).shadow(color: Color.black.opacity(0.05), radius: 2, x: 0, y: 1)
+    }
+}
+
+// =========================================================================
+// MARK: - FULL SCREEN ZOOM MODAL
+// =========================================================================
+struct WealthFullScreenChartView: View {
+    @Environment(\.dismiss) var dismiss
+    let zoomType: WealthChartZoomType
+    @ObservedObject var viewModel: PortfolioViewModel
+    @Binding var privacyMode: Bool
+
+    var body: some View {
+        VStack(spacing: 20) {
+            HStack {
+                Text(zoomType == .allocation ? "Assets Allocation" : "Return on Investment").font(.title).fontWeight(.bold)
+                Spacer()
+                Button(action: { dismiss() }) { Image(systemName: "xmark.circle.fill").font(.title).foregroundColor(.secondary) }.buttonStyle(.plain)
+            }
+            
+            if zoomType == .allocation {
+                WealthAllocationChart(viewModel: viewModel, privacyMode: $privacyMode, isExpanded: true, expandedChart: .constant(nil))
+            } else {
+                WealthROIChart(viewModel: viewModel, privacyMode: $privacyMode, isExpanded: true, expandedChart: .constant(nil))
+            }
+        }.padding(30).frame(minWidth: 900, minHeight: 700)
     }
 }
 
@@ -515,7 +618,8 @@ struct EditWealthLiabilitySheet: View {
     let liabilityToEdit: WealthLiability
     
     @State private var name: String = ""
-    @State private var amount: Double = 0.0
+    @State private var initialAmount: Double = 0.0
+    @State private var alreadyRefund: Double = 0.0
     
     var body: some View {
         VStack(spacing: 0) {
@@ -524,7 +628,8 @@ struct EditWealthLiabilitySheet: View {
             
             Form {
                 TextField("Liability Name", text: $name)
-                TextField("Amount Owed (€)", value: $amount, format: .number)
+                TextField("Amount Borrowed (€)", value: $initialAmount, format: .number)
+                TextField("Already Refund (€)", value: $alreadyRefund, format: .number)
             }.padding()
             
             Divider()
@@ -538,13 +643,24 @@ struct EditWealthLiabilitySheet: View {
                 Button("Save") {
                     if let idx = viewModel.manualWealthLiabilities.firstIndex(where: { $0.id == liabilityToEdit.id }) {
                         viewModel.manualWealthLiabilities[idx].name = name
-                        viewModel.manualWealthLiabilities[idx].amount = amount
+                        viewModel.manualWealthLiabilities[idx].initialAmount = initialAmount
+                        
+                        // Calcule le nouveau montant restant à payer
+                        let newAmountOwed = max(0, initialAmount - alreadyRefund)
+                        viewModel.manualWealthLiabilities[idx].amount = newAmountOwed
+                        
                         viewModel.objectWillChange.send() // Force UI Update
                     }
                     dismiss()
                 }.keyboardShortcut(.defaultAction).buttonStyle(.borderedProminent).tint(.red).disabled(name.isEmpty)
             }.padding()
         }.frame(width: 400, height: 260)
-        .onAppear { name = liabilityToEdit.name; amount = liabilityToEdit.amount }
+        .onAppear {
+            name = liabilityToEdit.name
+            initialAmount = liabilityToEdit.initialAmount
+            // Calcule ce qui a déjà été remboursé pour pré-remplir le champ
+            alreadyRefund = max(0, liabilityToEdit.initialAmount - liabilityToEdit.amount)
+        }
     }
 }
+

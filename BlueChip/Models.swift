@@ -320,14 +320,19 @@ struct RevenueSegment: Identifiable, Codable {
 }
 
 @Model final class WealthLiability: Identifiable {
-    @Attribute(.unique) var id: UUID
+    var id: UUID
     var name: String
     var amount: Double
-    
-    init(id: UUID = UUID(), name: String, amount: Double) {
-        self.id = id; self.name = name; self.amount = amount
+    var initialAmount: Double = 0.0
+
+    init(id: UUID = UUID(), name: String, amount: Double, initialAmount: Double? = nil) {
+        self.id = id
+        self.name = name
+        self.amount = amount
+        self.initialAmount = initialAmount ?? amount
     }
 }
+
 
 // =========================================================================
 // MARK: - UI HELPER STRUCTS (Éphémères, restent des struct)
