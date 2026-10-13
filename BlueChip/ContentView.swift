@@ -1,7 +1,7 @@
 import SwiftUI
 import SwiftData
 import Combine
-import LocalAuthentication // <-- REQUIS POUR TOUCH ID / MOT DE PASSE
+import LocalAuthentication
 
 struct ContentView: View {
     @Environment(\.modelContext) private var context
@@ -9,6 +9,9 @@ struct ContentView: View {
     
     @State private var selectedTab: AppTab = .composition
     @State private var showAddSheet = false
+    
+    // NOUVEAU : État temporaire pour la recherche globale (Cmd + K)
+    @State private var showGlobalSearch = false
     
     // Variables persistantes
     @AppStorage("privacyMode") private var privacyMode = false
@@ -53,10 +56,7 @@ struct ContentView: View {
         }
         .preferredColorScheme(appTheme.colorScheme)
         .onAppear {
-            // Si le mode confidentialité forcé est activé, on floute au lancement
-            if forcePrivacyOnStartup {
-                privacyMode = true
-            }
+            if forcePrivacyOnStartup { privacyMode = true }
             viewModel.initializeData(context: context)
         }
     }
@@ -68,22 +68,13 @@ struct ContentView: View {
         let context = LAContext()
         var error: NSError?
 
-        // Vérifie si le Mac supporte la biométrie ou le mot de passe
         if context.canEvaluatePolicy(.deviceOwnerAuthentication, error: &error) {
-            context.evaluatePolicy(.deviceOwnerAuthentication, localizedReason: "Unlock BlueChip to access your financial data.") { success, authenticationError in
-                // Le résultat est renvoyé sur un thread secondaire, on repasse sur le Main
+            context.evaluatePolicy(.deviceOwnerAuthentication, localizedReason: "Unlock BlueChip to access your financial data.") { success, _ in
                 DispatchQueue.main.async {
-                    if success {
-                        // Déverrouillé avec succès !
-                        self.isUnlocked = true
-                    } else {
-                        // Échec (l'utilisateur a annulé ou s'est trompé)
-                        // L'écran de verrouillage reste affiché avec le bouton "Unlock Portfolio"
-                    }
+                    if success { self.isUnlocked = true }
                 }
             }
         } else {
-            // Si le Mac n'a ni mot de passe ni Touch ID configuré, on laisse passer
             self.isUnlocked = true
         }
     }
@@ -164,25 +155,38 @@ struct ContentView: View {
         }
         .background(Color(NSColor.windowBackgroundColor))
         .navigationTitle("")
+        
+        // --- TOUTES LES MODALES (SHEETS) ---
         .sheet(isPresented: $showAddSheet) { EditPositionView(viewModel: viewModel, position: nil) }
         .sheet(isPresented: $viewModel.showSettings) { SettingsView(viewModel: viewModel) }
         
+        // La modale temporaire pour la recherche globale
+        .sheet(isPresented: $showGlobalSearch) {
+            VStack(spacing: 16) {
+                Image(systemName: "magnifyingglass").font(.system(size: 50)).foregroundColor(.blue)
+                Text("Global Search").font(.title).fontWeight(.bold)
+                Text("Appuyez sur Cmd + F depuis n'importe où.\nMoteur de recherche en construction !").multilineTextAlignment(.center).foregroundColor(.secondary)
+                Button("Close") { showGlobalSearch = false }.keyboardShortcut(.cancelAction)
+            }
+            .padding(40)
+            .frame(width: 400, height: 300)
+        }
+        
         // --- ÉCOUTEURS DE NOTIFICATIONS POUR LES RACCOURCIS CLAVIER ---
-        .onReceive(NotificationCenter.default.publisher(for: NSNotification.Name("OpenSettings"))) { _ in
-            viewModel.showSettings = true
+        .onReceive(NotificationCenter.default.publisher(for: NSNotification.Name("OpenSettings"))) { _ in viewModel.showSettings = true }
+        .onReceive(NotificationCenter.default.publisher(for: NSNotification.Name("OpenAddPosition"))) { _ in showAddSheet = true }
+        .onReceive(NotificationCenter.default.publisher(for: NSNotification.Name("TogglePrivacy"))) { _ in withAnimation { privacyMode.toggle() } }
+        .onReceive(NotificationCenter.default.publisher(for: NSNotification.Name("RefreshPrices"))) { _ in performRefresh() }
+        .onReceive(NotificationCenter.default.publisher(for: NSNotification.Name("NextTab"))) { _ in cycleToNextTab() }
+        
+        // Nouveaux écouteurs
+        .onReceive(NotificationCenter.default.publisher(for: NSNotification.Name("PrevTab"))) { _ in cycleToPreviousTab() }
+        .onReceive(NotificationCenter.default.publisher(for: NSNotification.Name("GlobalSearch"))) { _ in showGlobalSearch = true }
+        .onReceive(NotificationCenter.default.publisher(for: NSNotification.Name("LockApp"))) { _ in lockApp() }
+        .onReceive(NotificationCenter.default.publisher(for: NSNotification.Name("ToggleFullScreen"))) { _ in
+            if let window = NSApplication.shared.keyWindow ?? NSApplication.shared.windows.first { window.toggleFullScreen(nil)}
         }
-        .onReceive(NotificationCenter.default.publisher(for: NSNotification.Name("OpenAddPosition"))) { _ in
-            showAddSheet = true
-        }
-        .onReceive(NotificationCenter.default.publisher(for: NSNotification.Name("TogglePrivacy"))) { _ in
-            withAnimation { privacyMode.toggle() }
-        }
-        .onReceive(NotificationCenter.default.publisher(for: NSNotification.Name("RefreshPrices"))) { _ in
-            performRefresh()
-        }
-        .onReceive(NotificationCenter.default.publisher(for: NSNotification.Name("NextTab"))) { _ in
-            cycleToNextTab()
-        }
+
     }
     
     // ==========================================
@@ -205,11 +209,26 @@ struct ContentView: View {
         }
     }
     
+    private func lockApp() {
+        // Force l'activation de la sécurité et verrouille immédiatement
+        requireAuthOnStartup = true
+        isUnlocked = false
+    }
+    
     private func cycleToNextTab() {
         let allTabs = AppTab.allCases
         if let currentIndex = allTabs.firstIndex(of: selectedTab) {
             let nextIndex = (currentIndex + 1) % allTabs.count
             withAnimation { selectedTab = allTabs[nextIndex] }
+        }
+    }
+    
+    private func cycleToPreviousTab() {
+        let allTabs = AppTab.allCases
+        if let currentIndex = allTabs.firstIndex(of: selectedTab) {
+            // L'astuce mathématique pour reculer dans un tableau sans faire d'erreur "Index Out Of Bounds"
+            let prevIndex = (currentIndex - 1 + allTabs.count) % allTabs.count
+            withAnimation { selectedTab = allTabs[prevIndex] }
         }
     }
 }

@@ -1,10 +1,6 @@
 créer plusieurs portefeuille
 
-faire raccourci claviers
-
 ajouter recherche globale sur l'appli
-
-mettre mot de passe pour entrer sur l'app
 
 page Renforcement (voir quelles actions renforcer, avec delta pru - prix actuel, score de qualité, )
 
@@ -14,4 +10,6 @@ icone barre des menus : 3 prochains évents, chaque position avec prix actuel + 
 
 mettre dividend receveid this month avec récupération des ticker qui versent un dividende ce mois-ci
 
-ajouter transactions broker tax par défaut et state tax par défaut aussi dans les réglages !
+bouton IA qui analyse le contenu de la page, et donne son avis !
+
+bouton tutoriel pour chaque page qui explique comment fonctionne la page avec un bouton icone ?

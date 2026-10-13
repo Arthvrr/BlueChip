@@ -1,10 +1,3 @@
-//
-//  BlueChipApp.swift
-//  BlueChip
-//
-//  Created by Arthur Louette on 09/01/2026.
-//
-
 import SwiftUI
 import SwiftData
 
@@ -15,7 +8,6 @@ struct BlueChipApp: App {
             ContentView()
         }
         .windowStyle(.hiddenTitleBar) // Enlève la barre de titre moche de macOS
-        // NOUVEAU : On initialise la base de données avec tous tes modèles
         .modelContainer(for: [
             AppSettings.self,
             Position.self,
@@ -30,12 +22,19 @@ struct BlueChipApp: App {
             WatchlistItem.self
         ])
         .commands {
-            // 1. Menu Préférences (BlueChip > Preferences)
+            // 1. Menu Préférences & Sécurité (BlueChip)
             CommandGroup(replacing: .appSettings) {
                 Button("Preferences...") {
                     NotificationCenter.default.post(name: NSNotification.Name("OpenSettings"), object: nil)
                 }
                 .keyboardShortcut(",", modifiers: .command)
+                
+                Divider()
+                
+                Button("Lock Application") {
+                    NotificationCenter.default.post(name: NSNotification.Name("LockApp"), object: nil)
+                }
+                .keyboardShortcut("l", modifiers: .command)
             }
             
             // 2. Menu Fichier (File > Add Position)
@@ -43,11 +42,18 @@ struct BlueChipApp: App {
                 Button("Add Position...") {
                     NotificationCenter.default.post(name: NSNotification.Name("OpenAddPosition"), object: nil)
                 }
-                .keyboardShortcut("n", modifiers: .command) // Cmd + N classique pour un nouvel élément
+                .keyboardShortcut("n", modifiers: .command)
             }
             
-            // 3. Menu Affichage (View > Refresh, Privacy, Next Tab)
-            CommandMenu("View Options") {
+            // 3. Menu Navigation & Actions
+            CommandMenu("Actions & Navigation") {
+                Button("Global Search") {
+                    NotificationCenter.default.post(name: NSNotification.Name("GlobalSearch"), object: nil)
+                }
+                .keyboardShortcut("f", modifiers: .command)
+                
+                Divider()
+                
                 Button("Refresh Prices & FX") {
                     NotificationCenter.default.post(name: NSNotification.Name("RefreshPrices"), object: nil)
                 }
@@ -56,15 +62,27 @@ struct BlueChipApp: App {
                 Button("Toggle Privacy Mode") {
                     NotificationCenter.default.post(name: NSNotification.Name("TogglePrivacy"), object: nil)
                 }
-                .keyboardShortcut("f", modifiers: .command) // Tu avais demandé Cmd + F
+                .keyboardShortcut("k", modifiers: .command)
                 
                 Divider()
                 
                 Button("Next Tab") {
                     NotificationCenter.default.post(name: NSNotification.Name("NextTab"), object: nil)
                 }
-                .keyboardShortcut(.tab, modifiers: .control) // Control + Tab
+                .keyboardShortcut(.tab, modifiers: .control)
+                
+                Button("Previous Tab") {
+                    NotificationCenter.default.post(name: NSNotification.Name("PrevTab"), object: nil)
+                }
+                .keyboardShortcut(.tab, modifiers: [.control, .shift])
+                
+                Button("Toggle Full Screen") {
+                    NotificationCenter.default.post(name: NSNotification.Name("ToggleFullScreen"), object: nil)
+                }
+                .keyboardShortcut("f", modifiers: [.command, .control]) // Cmd + Control + F
+
             }
         }
     }
 }
+
