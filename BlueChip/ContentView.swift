@@ -1,14 +1,15 @@
 import SwiftUI
-import SwiftData // <-- NOUVEAU
+import SwiftData
 import Combine
 
 struct ContentView: View {
-    @Environment(\.modelContext) private var context // <-- NOUVEAU : Récupération de la base de données
+    @Environment(\.modelContext) private var context
     @StateObject private var viewModel = PortfolioViewModel()
     
     @State private var selectedTab: AppTab = .composition
     @State private var showAddSheet = false
     @AppStorage("privacyMode") private var privacyMode = false
+    @AppStorage("appTheme") private var appTheme: AppTheme = .system
 
     var body: some View {
         VStack(spacing: 0) {
@@ -24,12 +25,20 @@ struct ContentView: View {
                 .buttonStyle(.plain)
                 .padding(.trailing, 8)
                 
+                // MODIFIÉ : Utilisation de viewModel.showSettings
+                Button(action: { viewModel.showSettings = true }) {
+                    Image(systemName: "gearshape.fill")
+                        .font(.title2)
+                        .foregroundColor(.secondary)
+                }.buttonStyle(.plain)
+                .keyboardShortcut(",", modifiers: .command)
+                
                 Button(action: {
                     Task {
                         // 1. Mise à jour des prix des actions
                         await viewModel.refreshPrices()
                         
-                        // 2. NOUVEAU : Récupération du taux de change en direct (USD -> EUR)
+                        // 2. Récupération du taux de change en direct (USD -> EUR)
                         let service = YahooFinanceService()
                         if let fxData = await service.fetchStockData(for: "EUR=X") {
                             await MainActor.run {
@@ -56,7 +65,6 @@ struct ContentView: View {
                 .disabled(viewModel.isLoading)
                 .buttonStyle(.bordered)
                 .padding(.trailing, 8)
-
                 
                 Button(action: { showAddSheet = true }) {
                     Label("Add", systemImage: "plus")
@@ -101,9 +109,21 @@ struct ContentView: View {
         .background(Color(NSColor.windowBackgroundColor))
         .navigationTitle("")
         .sheet(isPresented: $showAddSheet) { EditPositionView(viewModel: viewModel, position: nil) }
+        
+        // MODIFIÉ : La modale écoute maintenant viewModel.showSettings
+        // ... fin de ton ContentView ...
+        .sheet(isPresented: $viewModel.showSettings) {
+            SettingsView(viewModel: viewModel)
+        }
         .onAppear {
-            // NOUVEAU : Initialise le ViewModel avec SwiftData et lance la migration JSON si nécessaire
             viewModel.initializeData(context: context)
+        }
+        .preferredColorScheme(appTheme.colorScheme)
+        
+        // NOUVEAU : Écoute le clic du menu système et ouvre la modale
+        .onReceive(NotificationCenter.default.publisher(for: NSNotification.Name("OpenSettings"))) { _ in
+            viewModel.showSettings = true
         }
     }
 }
+

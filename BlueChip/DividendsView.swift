@@ -1,6 +1,7 @@
 import SwiftUI
 import Charts
 import SwiftData // <-- NOUVEAU
+import Combine
 
 // MARK: - SPECIFIC ZOOM ENUM FOR DIVIDENDS
 enum DividendChartZoomType: String, Identifiable {
@@ -105,7 +106,7 @@ struct DividendsDashboardSection: View {
                 DashboardCard(title: "Best Year", value: bestYear.formatted(.currency(code: "EUR").precision(.fractionLength(2))), privacyMode: $privacyMode)
                 YoYCard(yoyGrowth: yoyGrowth, privacyMode: $privacyMode)
                 DashboardCard(title: "Projected Annual Yield", value: viewModel.portfolioYield.formatted(.percent.precision(.fractionLength(2))), privacyMode: $privacyMode)
-                StartYearCard(viewModel: viewModel, privacyMode: $privacyMode)
+                DashboardCard(title: "Projected Annual Income", value: viewModel.totalDividends.formatted(.currency(code: "EUR").precision(.fractionLength(2))), privacyMode: $privacyMode)
             }
         }
     }
@@ -118,19 +119,6 @@ struct YoYCard: View {
             Text("YoY Growth (vs Last Year)").font(.subheadline).foregroundColor(.secondary).lineLimit(1)
             Text(yoyGrowth.formatted(.percent.precision(.fractionLength(2)).sign(strategy: .always())))
                 .font(.title2).fontWeight(.bold).foregroundColor(yoyGrowth >= 0 ? .green : .red).blur(radius: privacyMode ? 8 : 0)
-        }.padding().frame(maxWidth: .infinity, alignment: .leading).frame(height: 110).background(Color(NSColor.controlBackgroundColor)).cornerRadius(10).shadow(color: Color.black.opacity(0.05), radius: 2, x: 0, y: 1)
-    }
-}
-
-struct StartYearCard: View {
-    @ObservedObject var viewModel: PortfolioViewModel
-    @Binding var privacyMode: Bool
-    var body: some View {
-        VStack(alignment: .leading, spacing: 6) {
-            Text("Start Year").font(.subheadline).foregroundColor(.secondary)
-            TextField("Year", value: $viewModel.dividendStartYear, format: .number.grouping(.never))
-                .textFieldStyle(.roundedBorder).frame(maxWidth: 80).font(.title3.bold())
-                .blur(radius: privacyMode ? 6 : 0)
         }.padding().frame(maxWidth: .infinity, alignment: .leading).frame(height: 110).background(Color(NSColor.controlBackgroundColor)).cornerRadius(10).shadow(color: Color.black.opacity(0.05), radius: 2, x: 0, y: 1)
     }
 }
@@ -150,19 +138,17 @@ struct DividendsProjectedChartsSection: View {
     }
 }
 
+// =========================================================================
+// MARK: - TABLEAU SPREADSHEET
+// =========================================================================
+
 struct DividendsTableSection: View {
     @ObservedObject var viewModel: PortfolioViewModel
     @Binding var privacyMode: Bool
     
-    // NOUVEAU : Récupération de l'année en cours
     var currentYear: Int { Calendar.current.component(.year, from: Date()) }
+    var displayedYears: [DividendYear] { viewModel.dividendYears.filter { $0.year <= currentYear } }
     
-    // 1. Filtrage des années
-    var displayedYears: [DividendYear] {
-        viewModel.dividendYears.filter { $0.year <= currentYear }
-    }
-    
-    // 2. Hauteur dynamique
     var dynamicHeight: CGFloat {
         let rowHeight: CGFloat = 38
         let headerHeight: CGFloat = 46
@@ -181,35 +167,35 @@ struct DividendsTableSection: View {
                     Text("Total").fontWeight(.bold).frame(width: 80, alignment: .trailing)
                 }.padding(.horizontal, 16).padding(.vertical, 12).background(Color(NSColor.windowBackgroundColor)); Divider()
                 
-                // 3. Suppression du ScrollView et boucle sur les années filtrées
                 VStack(spacing: 0) {
                     ForEach(displayedYears) { yearData in
-                        SpreadsheetRowView(yearData: yearData, privacyMode: privacyMode)
+                        // NOUVEAU : On passe le viewModel pour forcer la mise à jour des graphiques
+                        SpreadsheetRowView(yearData: yearData, privacyMode: privacyMode, viewModel: viewModel)
                             .padding(.horizontal, 16).padding(.vertical, 8)
                         Divider()
                     }
                 }
             }.background(Color(NSColor.controlBackgroundColor)).cornerRadius(8).overlay(RoundedRectangle(cornerRadius: 8).stroke(Color.gray.opacity(0.2), lineWidth: 1))
         }
-        // 4. On applique la hauteur dynamique
         .frame(height: dynamicHeight).padding().background(Color(NSColor.controlBackgroundColor)).cornerRadius(12).shadow(color: Color.black.opacity(0.05), radius: 2, x: 0, y: 1)
     }
 }
 
-
 struct SpreadsheetRowView: View {
-    @Bindable var yearData: DividendYear // MODIFIÉ : @Bindable remplace @Binding pour SwiftData
+    @Bindable var yearData: DividendYear
     var privacyMode: Bool
+    @ObservedObject var viewModel: PortfolioViewModel // NOUVEAU
+    
     var body: some View {
         HStack(spacing: 8) {
             Group {
                 Text(String(yearData.year)).fontWeight(.bold).frame(width: 50, alignment: .leading)
-                MonthField(value: $yearData.jan, privacyMode: privacyMode); MonthField(value: $yearData.feb, privacyMode: privacyMode); MonthField(value: $yearData.mar, privacyMode: privacyMode)
-                MonthField(value: $yearData.apr, privacyMode: privacyMode); MonthField(value: $yearData.may, privacyMode: privacyMode); MonthField(value: $yearData.jun, privacyMode: privacyMode)
+                MonthField(value: $yearData.jan, privacyMode: privacyMode, viewModel: viewModel); MonthField(value: $yearData.feb, privacyMode: privacyMode, viewModel: viewModel); MonthField(value: $yearData.mar, privacyMode: privacyMode, viewModel: viewModel)
+                MonthField(value: $yearData.apr, privacyMode: privacyMode, viewModel: viewModel); MonthField(value: $yearData.may, privacyMode: privacyMode, viewModel: viewModel); MonthField(value: $yearData.jun, privacyMode: privacyMode, viewModel: viewModel)
             }
             Group {
-                MonthField(value: $yearData.jul, privacyMode: privacyMode); MonthField(value: $yearData.aug, privacyMode: privacyMode); MonthField(value: $yearData.sep, privacyMode: privacyMode)
-                MonthField(value: $yearData.oct, privacyMode: privacyMode); MonthField(value: $yearData.nov, privacyMode: privacyMode); MonthField(value: $yearData.dec, privacyMode: privacyMode)
+                MonthField(value: $yearData.jul, privacyMode: privacyMode, viewModel: viewModel); MonthField(value: $yearData.aug, privacyMode: privacyMode, viewModel: viewModel); MonthField(value: $yearData.sep, privacyMode: privacyMode, viewModel: viewModel)
+                MonthField(value: $yearData.oct, privacyMode: privacyMode, viewModel: viewModel); MonthField(value: $yearData.nov, privacyMode: privacyMode, viewModel: viewModel); MonthField(value: $yearData.dec, privacyMode: privacyMode, viewModel: viewModel)
                 Text(yearData.total.formatted(.currency(code: "EUR").precision(.fractionLength(2))))
                     .fontWeight(.bold).foregroundColor(.green).frame(width: 80, alignment: .trailing)
                     .blur(radius: privacyMode ? 6 : 0)
@@ -218,12 +204,30 @@ struct SpreadsheetRowView: View {
     }
 }
 
+// NOUVEAU : Champ 100% fiable qui sauvegarde à chaque frappe
 struct MonthField: View {
     @Binding var value: Double
     var privacyMode: Bool
+    @ObservedObject var viewModel: PortfolioViewModel
+    
+    @State private var textValue: String = ""
+    
     var body: some View {
-        TextField("0", value: $value, format: .number).textFieldStyle(.plain).frame(maxWidth: .infinity, alignment: .leading)
+        TextField("0", text: $textValue)
+            .textFieldStyle(.plain).frame(maxWidth: .infinity, alignment: .leading)
             .blur(radius: privacyMode ? 6 : 0)
+            .onAppear {
+                if value != 0 { textValue = value.formatted(.number.grouping(.never)) }
+            }
+            .onChange(of: textValue) { _, newValue in
+                let cleanString = newValue.replacingOccurrences(of: ",", with: ".") // Gère la virgule européenne
+                if let doubleVal = Double(cleanString) {
+                    value = doubleVal
+                } else if newValue.isEmpty {
+                    value = 0
+                }
+                viewModel.objectWillChange.send() // Met à jour les graphiques en temps réel !
+            }
     }
 }
 

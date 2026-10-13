@@ -1,6 +1,7 @@
 import SwiftUI
 import SwiftData // <-- NOUVEAU
 import Charts
+import Combine
 
 // MARK: - SPECIFIC ZOOM ENUM FOR GROWTH
 enum GrowthChartZoomType: String, Identifiable {
@@ -230,21 +231,20 @@ struct GrowthGoalProgressBar: View {
 // MARK: - TABLEAU SPREADSHEET
 // =========================================================================
 
+// =========================================================================
+// MARK: - TABLEAU SPREADSHEET
+// =========================================================================
+
 struct GrowthTableSection: View {
     @ObservedObject var viewModel: PortfolioViewModel
     @Binding var privacyMode: Bool
     
     var currentYear: Int { Calendar.current.component(.year, from: Date()) }
+    var displayedYears: [GrowthYear] { viewModel.growthYears.filter { $0.year <= currentYear } }
     
-    // 1. On filtre pour n'afficher que les années jusqu'à aujourd'hui
-    var displayedYears: [GrowthYear] {
-        viewModel.growthYears.filter { $0.year <= currentYear }
-    }
-    
-    // 2. On calcule la hauteur dynamique
     var dynamicHeight: CGFloat {
-        let rowHeight: CGFloat = 38 // Hauteur d'une ligne
-        let headerHeight: CGFloat = 46 // Hauteur de l'en-tête
+        let rowHeight: CGFloat = 38
+        let headerHeight: CGFloat = 46
         if displayedYears.isEmpty { return 120 }
         return CGFloat(displayedYears.count) * rowHeight + headerHeight + 20
     }
@@ -271,16 +271,17 @@ struct GrowthTableSection: View {
                 .font(.subheadline).foregroundColor(.secondary).padding(.horizontal, 16).padding(.vertical, 12).background(Color(NSColor.windowBackgroundColor))
                 Divider()
                 
-                // 3. Suppression du ScrollView et passage en simple VStack avec les années filtrées
                 VStack(spacing: 0) {
                     ForEach(displayedYears) { yearData in
                         let isCurrent = (yearData.year == currentYear)
+                        // NOUVEAU : On passe le viewModel
                         GrowthRowView(
                             yearData: yearData,
                             isCurrentYear: isCurrent,
                             liveWalletValue: viewModel.currentTotalCapital,
                             cumulativeInvest: cumulativeInvest(for: yearData.year),
-                            privacyMode: privacyMode
+                            privacyMode: privacyMode,
+                            viewModel: viewModel
                         )
                         .padding(.horizontal, 16).padding(.vertical, 8)
                         Divider()
@@ -289,18 +290,17 @@ struct GrowthTableSection: View {
             }
             .background(Color(NSColor.controlBackgroundColor)).cornerRadius(8).overlay(RoundedRectangle(cornerRadius: 8).stroke(Color.gray.opacity(0.2), lineWidth: 1))
         }
-        // 4. On applique la hauteur dynamique
         .frame(height: dynamicHeight).padding().background(Color(NSColor.controlBackgroundColor)).cornerRadius(12).shadow(color: Color.black.opacity(0.05), radius: 2, x: 0, y: 1)
     }
 }
 
-
 struct GrowthRowView: View {
-    @Bindable var yearData: GrowthYear // MODIFIÉ : @Bindable permet à SwiftData de modifier l'objet
+    @Bindable var yearData: GrowthYear
     let isCurrentYear: Bool
     let liveWalletValue: Double
     let cumulativeInvest: Double
     let privacyMode: Bool
+    @ObservedObject var viewModel: PortfolioViewModel // NOUVEAU
     
     var effectiveEndWallet: Double { isCurrentYear ? liveWalletValue : yearData.endWallet }
     var displayReturnAmount: Double { effectiveEndWallet - yearData.startWallet - yearData.invested }
@@ -310,10 +310,10 @@ struct GrowthRowView: View {
     
     var body: some View {
         HStack(spacing: 8) {
-            Text(String(yearData.year)).fontWeight(.bold).frame(width: 50, alignment: .leading) // Year stays visible
+            Text(String(yearData.year)).fontWeight(.bold).frame(width: 50, alignment: .leading)
             
-            GrowthField(value: $yearData.startWallet, privacyMode: privacyMode)
-            GrowthField(value: $yearData.invested, privacyMode: privacyMode)
+            GrowthField(value: $yearData.startWallet, privacyMode: privacyMode, viewModel: viewModel)
+            GrowthField(value: $yearData.invested, privacyMode: privacyMode, viewModel: viewModel)
             
             if isCurrentYear {
                 Text(liveWalletValue.formatted(.number.precision(.fractionLength(2))))
@@ -321,7 +321,7 @@ struct GrowthRowView: View {
                     .blur(radius: privacyMode ? 6 : 0)
                     .help("Live portfolio value")
             } else {
-                GrowthField(value: $yearData.endWallet, privacyMode: privacyMode)
+                GrowthField(value: $yearData.endWallet, privacyMode: privacyMode, viewModel: viewModel)
             }
             
             if isBlankYear {
@@ -351,15 +351,33 @@ struct GrowthRowView: View {
     }
 }
 
+// NOUVEAU : Champ 100% fiable
 struct GrowthField: View {
     @Binding var value: Double
     var privacyMode: Bool
+    @ObservedObject var viewModel: PortfolioViewModel
+    
+    @State private var textValue: String = ""
+    
     var body: some View {
-        TextField("0", value: $value, format: .number)
+        TextField("0", text: $textValue)
             .textFieldStyle(.plain).frame(maxWidth: .infinity, alignment: .leading)
             .blur(radius: privacyMode ? 6 : 0)
+            .onAppear {
+                if value != 0 { textValue = value.formatted(.number.grouping(.never)) }
+            }
+            .onChange(of: textValue) { _, newValue in
+                let cleanString = newValue.replacingOccurrences(of: ",", with: ".")
+                if let doubleVal = Double(cleanString) {
+                    value = doubleVal
+                } else if newValue.isEmpty {
+                    value = 0
+                }
+                viewModel.objectWillChange.send() // Met à jour l'UI en temps réel !
+            }
     }
 }
+
 
 // =========================================================================
 // MARK: - SECTIONS DE GRAPHIQUES

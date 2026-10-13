@@ -29,5 +29,14 @@ struct BlueChipApp: App {
             WealthLiability.self,
             WatchlistItem.self
         ])
+        .commands {
+            CommandGroup(replacing: .appSettings) {
+                Button("Settings...") {
+                    // Envoie un signal invisible à ContentView quand on clique ou fait Cmd+,
+                    NotificationCenter.default.post(name: NSNotification.Name("OpenSettings"), object: nil)
+                }
+                .keyboardShortcut(",", modifiers: .command)
+            }
+        }
     }
 }

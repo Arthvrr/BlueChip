@@ -41,7 +41,7 @@ class PortfolioViewModel: ObservableObject {
     @Published var dividendGoalTarget: Double = 1000.0 { didSet { settings?.dividendGoalTarget = dividendGoalTarget } }
     
     @Published var dividendYears: [DividendYear] = []
-    @Published var dividendStartYear: Int = 2022 { didSet { settings?.dividendStartYear = dividendStartYear; setupDividendYears(); setupGrowthYears() } }
+    @Published var dividendStartYear: Int = 2026 { didSet { settings?.dividendStartYear = dividendStartYear; setupDividendYears(); setupGrowthYears() } }
     
     @Published var growthGoalType: GrowthGoalType = .targetReturnPercent { didSet { settings?.growthGoalType = growthGoalType } }
     @Published var growthGoalTarget: Double = 10.0 { didSet { settings?.growthGoalTarget = growthGoalTarget } }
@@ -49,7 +49,6 @@ class PortfolioViewModel: ObservableObject {
     
     @Published var benchmarkIndices: [BenchmarkIndex] = []
     @Published var benchmarkGoalTarget: Double = 10.0 { didSet { settings?.benchmarkGoalTarget = benchmarkGoalTarget } }
-    
     
     @Published var transactions: [Transaction] = []
     @Published var transactionCustomColumns: [String] = ["State Tax", "Broker Tax", "Other Taxes"] { didSet { settings?.transactionCustomColumns = transactionCustomColumns } }
@@ -71,6 +70,8 @@ class PortfolioViewModel: ObservableObject {
     
     @Published var newLiabilityName: String = ""
     @Published var newLiabilityAmount: Double? = nil
+    
+    @Published var showSettings: Bool = false
     
     private let yahooService = YahooFinanceService()
     
@@ -94,7 +95,22 @@ class PortfolioViewModel: ObservableObject {
             self.settings = newSettings
         }
         
-        // 2. SYNCHRONISATION DES VARIABLES SIMPLES
+        // 2. CHARGEMENT DE TOUS LES TABLEAUX DEPUIS LA BASE DE DONNÉES EN PREMIER !!!
+        // (Il est vital de le faire avant d'assigner les variables simples pour éviter les déclenchements didSet à vide)
+        self.positions = (try? context.fetch(FetchDescriptor<Position>())) ?? []
+        self.positions.sort(using: sortOrder)
+        
+        self.dividendYears = (try? context.fetch(FetchDescriptor<DividendYear>())) ?? []
+        self.growthYears = (try? context.fetch(FetchDescriptor<GrowthYear>())) ?? []
+        self.benchmarkIndices = (try? context.fetch(FetchDescriptor<BenchmarkIndex>())) ?? []
+        self.transactions = (try? context.fetch(FetchDescriptor<Transaction>())) ?? []
+        self.watchlistItems = (try? context.fetch(FetchDescriptor<WatchlistItem>())) ?? []
+        self.calendarEvents = (try? context.fetch(FetchDescriptor<CalendarEvent>())) ?? []
+        self.fundamentalCriteria = (try? context.fetch(FetchDescriptor<FundamentalCriterion>())) ?? []
+        self.manualWealthAssets = (try? context.fetch(FetchDescriptor<WealthAsset>())) ?? []
+        self.manualWealthLiabilities = (try? context.fetch(FetchDescriptor<WealthLiability>())) ?? []
+        
+        // 3. SYNCHRONISATION DES VARIABLES SIMPLES
         self.availableCash = settings!.availableCash
         self.manuallyInvested = settings!.manuallyInvested
         if let gType = settings!.goalType { self.currentGoalType = gType }
@@ -109,20 +125,6 @@ class PortfolioViewModel: ObservableObject {
         if let txTarget = settings!.transactionGoalTarget { self.transactionGoalTarget = txTarget }
         if let wTarget = settings!.wealthGoalTarget { self.wealthGoalTarget = wTarget }
         if let swr = settings!.safeWithdrawalRate { self.safeWithdrawalRate = swr }
-        
-        // 3. CHARGEMENT DE TOUS LES TABLEAUX DEPUIS LA BASE DE DONNÉES
-        self.positions = (try? context.fetch(FetchDescriptor<Position>())) ?? []
-        self.positions.sort(using: sortOrder)
-        
-        self.dividendYears = (try? context.fetch(FetchDescriptor<DividendYear>())) ?? []
-        self.growthYears = (try? context.fetch(FetchDescriptor<GrowthYear>())) ?? []
-        self.benchmarkIndices = (try? context.fetch(FetchDescriptor<BenchmarkIndex>())) ?? []
-        self.transactions = (try? context.fetch(FetchDescriptor<Transaction>())) ?? []
-        self.watchlistItems = (try? context.fetch(FetchDescriptor<WatchlistItem>())) ?? []
-        self.calendarEvents = (try? context.fetch(FetchDescriptor<CalendarEvent>())) ?? []
-        self.fundamentalCriteria = (try? context.fetch(FetchDescriptor<FundamentalCriterion>())) ?? []
-        self.manualWealthAssets = (try? context.fetch(FetchDescriptor<WealthAsset>())) ?? []
-        self.manualWealthLiabilities = (try? context.fetch(FetchDescriptor<WealthLiability>())) ?? []
         
         // 4. SETUP FINAL
         setupDividendYears()
@@ -223,41 +225,52 @@ class PortfolioViewModel: ObservableObject {
     }
 
     // ==========================================
-    // SETUP ET CALCULS
+    // SETUP ET CALCULS (AVEC AUTO-NETTOYAGE)
     // ==========================================
     
     func setupDividendYears() {
         let currentYear = Calendar.current.component(.year, from: Date())
         let endYear = currentYear + 30
         var newYears: [DividendYear] = []
+        
         for y in dividendStartYear...endYear {
-            if let existing = dividendYears.first(where: { $0.year == y }) {
-                newYears.append(existing)
+            // S'il y a des doublons fantômes créés par le bug précédent, on garde celui avec tes vraies données
+            let duplicates = dividendYears.filter { $0.year == y }.sorted { $0.total > $1.total }
+            
+            if let bestExisting = duplicates.first {
+                newYears.append(bestExisting)
+                // Nettoie silencieusement les autres lignes vides en base de données
+                for dup in duplicates.dropFirst() { modelContext?.delete(dup) }
             } else {
                 let ny = DividendYear(year: y)
                 modelContext?.insert(ny)
                 newYears.append(ny)
             }
         }
-        if newYears.count != dividendYears.count || newYears.first?.year != dividendYears.first?.year { dividendYears = newYears }
+        
+        dividendYears = newYears.sorted { $0.year < $1.year }
     }
     
     func setupGrowthYears() {
         let currentYear = Calendar.current.component(.year, from: Date())
         let endYear = currentYear + 30
         var newYears: [GrowthYear] = []
+        
         for y in dividendStartYear...endYear {
-            if let existing = growthYears.first(where: { $0.year == y }) {
-                newYears.append(existing)
+            // Même logique : on récupère la ligne qui contient ton vrai capital
+            let duplicates = growthYears.filter { $0.year == y }.sorted { ($0.invested + $0.endWallet) > ($1.invested + $1.endWallet) }
+            
+            if let bestExisting = duplicates.first {
+                newYears.append(bestExisting)
+                for dup in duplicates.dropFirst() { modelContext?.delete(dup) }
             } else {
                 let gy = GrowthYear(year: y, startWallet: 0, invested: 0, endWallet: 0, totalInvest: 0)
                 modelContext?.insert(gy)
                 newYears.append(gy)
             }
         }
-        if newYears.count != growthYears.count || newYears.first?.year != growthYears.first?.year {
-            growthYears = newYears
-        }
+        
+        growthYears = newYears.sorted { $0.year < $1.year }
     }
     
     func refreshPrices() async {
@@ -380,3 +393,4 @@ class PortfolioViewModel: ObservableObject {
         return items
     }
 }
+
