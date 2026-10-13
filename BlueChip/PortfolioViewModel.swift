@@ -50,6 +50,7 @@ class PortfolioViewModel: ObservableObject {
     @Published var benchmarkIndices: [BenchmarkIndex] = []
     @Published var benchmarkGoalTarget: Double = 10.0 { didSet { settings?.benchmarkGoalTarget = benchmarkGoalTarget } }
     
+    
     @Published var transactions: [Transaction] = []
     @Published var transactionCustomColumns: [String] = ["State Tax", "Broker Tax", "Other Taxes"] { didSet { settings?.transactionCustomColumns = transactionCustomColumns } }
     @Published var transactionGoalTarget: Double = 50 { didSet { settings?.transactionGoalTarget = transactionGoalTarget } }

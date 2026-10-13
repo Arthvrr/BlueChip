@@ -222,9 +222,14 @@ struct RevenueSegment: Identifiable, Codable {
     @Attribute(.unique) var id: UUID
     var name: String
     var returns: [Int: Double]
+    
+    var referenceLink: String = ""
 
-    init(id: UUID = UUID(), name: String, returns: [Int: Double]) {
-        self.id = id; self.name = name; self.returns = returns
+    init(id: UUID = UUID(), name: String, returns: [Int: Double] = [:], referenceLink: String = "") {
+        self.id = id
+        self.name = name
+        self.returns = returns
+        self.referenceLink = referenceLink
     }
 
     func value10k(upToYear year: Int, startYear: Int) -> Double {
@@ -239,6 +244,7 @@ struct RevenueSegment: Identifiable, Codable {
         return validYears.reduce(0, +) / Double(validYears.count)
     }
 }
+
 
 @Model final class Transaction: Identifiable {
     @Attribute(.unique) var id: UUID

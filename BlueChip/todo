@@ -18,8 +18,8 @@ Growth OK
 Dividends OK
 Valuation OK
 Projection OK
-Simulation
-WatchList
+Simulation OK
+WatchList OK
 Exposure
 Transactions
 Benchmark
@@ -30,6 +30,4 @@ notifs apple : ce qu'il se passe demain et aujourd'hui calendar, price target se
 
 icone barre des menus : 3 prochains évents, chaque position avec prix actuel + target price, refresh api yahoo finance
 
-fix souci delete position watchlist
-
-page réglages : année de commencement investissements (2022), dark light mode ou automatic
+page réglages : année de commencement investissements (2022), dark light mode ou automatic, nombre d'années de base pour projection et margin of safety

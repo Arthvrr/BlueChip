@@ -21,6 +21,8 @@ struct BenchmarkView: View {
     @State private var showGoalSheet = false
     @State private var showAddIndexSheet = false
     @State private var chartToZoom: BenchmarkChartZoomType? = nil
+    
+    @State private var editingIndex: BenchmarkIndex? = nil
 
     var body: some View {
         ScrollView(.vertical) {
@@ -31,7 +33,7 @@ struct BenchmarkView: View {
                     .contentShape(Rectangle())
                     .onTapGesture(count: 2) { showGoalSheet = true }
 
-                BenchmarkTableSection(viewModel: viewModel, privacyMode: $privacyMode, showAddIndexSheet: $showAddIndexSheet)
+                BenchmarkTableSection(viewModel: viewModel, privacyMode: $privacyMode, showAddIndexSheet: $showAddIndexSheet, onEditIndex: { editingIndex = $0 })
 
                 BenchmarkChartsSection(viewModel: viewModel, privacyMode: $privacyMode, chartToZoom: $chartToZoom)
             }
@@ -40,6 +42,7 @@ struct BenchmarkView: View {
         .sheet(isPresented: $showGoalSheet) { EditBenchmarkGoalView(viewModel: viewModel) }
         .sheet(isPresented: $showAddIndexSheet) { AddBenchmarkIndexView(viewModel: viewModel) }
         .sheet(item: $chartToZoom) { type in BenchmarkFullScreenChartView(zoomType: type, viewModel: viewModel, privacyMode: $privacyMode) }
+        .sheet(item: $editingIndex) { idx in EditBenchmarkIndexView(viewModel: viewModel, index: idx)}
     }
 }
 
@@ -110,10 +113,15 @@ struct EditBenchmarkGoalView: View {
 // MARK: - ADD INDEX FORM
 // =========================================================================
 
+// =========================================================================
+// MARK: - ADD INDEX FORM
+// =========================================================================
+
 struct AddBenchmarkIndexView: View {
     @Environment(\.dismiss) var dismiss
     @ObservedObject var viewModel: PortfolioViewModel
     @State private var name: String = ""
+    @State private var referenceLink: String = "" // <-- NOUVEAU
 
     var body: some View {
         VStack(spacing: 0) {
@@ -134,10 +142,19 @@ struct AddBenchmarkIndexView: View {
                     .foregroundColor(.secondary)
                 
                 GroupBox {
-                    VStack(alignment: .leading, spacing: 8) {
-                        Text("Index Name")
-                        TextField("e.g. S&P 500, MSCI World, Nasdaq 100...", text: $name)
-                            .textFieldStyle(.roundedBorder)
+                    VStack(alignment: .leading, spacing: 12) {
+                        VStack(alignment: .leading, spacing: 4) {
+                            Text("Index Name")
+                            TextField("e.g. S&P 500, MSCI World...", text: $name)
+                                .textFieldStyle(.roundedBorder)
+                        }
+                        
+                        // NOUVEAU : Champ pour le lien personnalisé
+                        VStack(alignment: .leading, spacing: 4) {
+                            Text("Performance Link (Optional)")
+                            TextField("e.g. https://finance.yahoo.com/quote/%5EGSPC", text: $referenceLink)
+                                .textFieldStyle(.roundedBorder)
+                        }
                     }
                 }
             }
@@ -151,16 +168,80 @@ struct AddBenchmarkIndexView: View {
                 Spacer()
                 Button("Add Index") {
                     guard !name.trimmingCharacters(in: .whitespaces).isEmpty else { return }
-                    viewModel.addBenchmarkIndex(BenchmarkIndex(name: name, returns: [:]))
+                    // NOUVEAU : On passe le lien configuré à la création
+                    viewModel.addBenchmarkIndex(BenchmarkIndex(name: name, returns: [:], referenceLink: referenceLink))
                     dismiss()
                 }
                 .keyboardShortcut(.defaultAction).buttonStyle(.borderedProminent)
                 .disabled(name.trimmingCharacters(in: .whitespaces).isEmpty)
             }.padding()
         }
-        .frame(width: 400, height: 280)
+        .frame(width: 400, height: 330) // <-- Hauteur légèrement augmentée
     }
 }
+
+struct EditBenchmarkIndexView: View {
+    @Environment(\.dismiss) var dismiss
+    @ObservedObject var viewModel: PortfolioViewModel
+    let index: BenchmarkIndex
+    
+    @State private var name: String = ""
+    @State private var referenceLink: String = ""
+
+    var body: some View {
+        VStack(spacing: 0) {
+            HStack {
+                Text("Edit Index").font(.title2).fontWeight(.bold)
+                Spacer()
+                Button(action: { dismiss() }) { Image(systemName: "xmark.circle.fill").font(.title2).foregroundColor(.secondary) }.buttonStyle(.plain)
+            }.padding()
+            Divider()
+            
+            VStack(alignment: .leading, spacing: 16) {
+                GroupBox {
+                    VStack(alignment: .leading, spacing: 12) {
+                        VStack(alignment: .leading, spacing: 4) {
+                            Text("Index Name")
+                            TextField("e.g. S&P 500", text: $name).textFieldStyle(.roundedBorder)
+                        }
+                        VStack(alignment: .leading, spacing: 4) {
+                            Text("Performance Link (Optional)")
+                            TextField("URL", text: $referenceLink).textFieldStyle(.roundedBorder)
+                        }
+                    }
+                }
+            }.padding()
+            
+            Spacer()
+            Divider()
+            
+            HStack {
+                Button("Cancel") { dismiss() }.keyboardShortcut(.cancelAction)
+                Spacer()
+                // Bouton de suppression
+                Button("Delete Index") {
+                    viewModel.deleteBenchmarkIndex(id: index.id)
+                    dismiss()
+                }.foregroundColor(.red).padding(.trailing, 16)
+                
+                Button("Save") {
+                    guard !name.trimmingCharacters(in: .whitespaces).isEmpty else { return }
+                    index.name = name
+                    index.referenceLink = referenceLink
+                    viewModel.objectWillChange.send()
+                    dismiss()
+                }.keyboardShortcut(.defaultAction).buttonStyle(.borderedProminent)
+            }.padding()
+        }
+        .frame(width: 400, height: 330)
+        .onAppear {
+            name = index.name
+            referenceLink = index.referenceLink
+        }
+    }
+}
+
+
 
 // =========================================================================
 // MARK: - DASHBOARD
@@ -408,6 +489,8 @@ struct BenchmarkTableSection: View {
     var currentYear: Int { Calendar.current.component(.year, from: Date()) }
     var startYear: Int { viewModel.dividendStartYear }
     var years: [Int] { Array(startYear...currentYear) }
+    
+    let onEditIndex: (BenchmarkIndex) -> Void
 
     func portfolioReturn(for year: Int) -> Double? {
         guard let yearData = viewModel.growthYears.first(where: { $0.year == year }) else { return nil }
@@ -443,10 +526,25 @@ struct BenchmarkTableSection: View {
                         let index = viewModel.benchmarkIndices[idx]
                         HStack(spacing: 4) {
                             Circle().fill(benchmarkColors[idx % benchmarkColors.count]).frame(width: 8, height: 8)
+                            
                             Text(index.name).fontWeight(.bold).lineLimit(1)
-                            Button(action: { viewModel.deleteBenchmarkIndex(id: index.id) }) {
-                                Image(systemName: "xmark.circle.fill").foregroundColor(.secondary.opacity(0.5)).font(.caption)
-                            }.buttonStyle(.plain)
+                                .contentShape(Rectangle())
+                                .onTapGesture(count: 2) {
+                                    onEditIndex(index)
+                                }
+                            
+                            if !index.referenceLink.isEmpty, let url = URL(string: index.referenceLink) {
+                                Link(destination: url) {
+                                    Image(systemName: "safari").foregroundColor(.blue).font(.system(size: 10))
+                                }.help("View index performance")
+                                
+                                Button(action: {
+                                    NSPasteboard.general.clearContents()
+                                    NSPasteboard.general.setString(url.absoluteString, forType: .string)
+                                }) {
+                                    Image(systemName: "doc.on.clipboard").foregroundColor(.blue).font(.system(size: 10))
+                                }.buttonStyle(.plain).help("Copy configured link")
+                            }
                         }
                         .frame(maxWidth: .infinity, alignment: .center)
                     }
@@ -623,10 +721,12 @@ struct BenchmarkAverageRowView: View {
                 
                 Text(avg.formatted(.number.precision(.fractionLength(2)).sign(strategy: .always())) + "%")
                     .fontWeight(.bold)
-                    .foregroundColor(avg >= 0 ? idxColor : .red)
+                    // MODIFIÉ : On applique toujours la couleur de l'indice, même si c'est négatif
+                    .foregroundColor(idxColor)
                     .blur(radius: privacyMode ? 6 : 0)
                     .frame(maxWidth: .infinity, alignment: .center)
             }
+
         }
         .background(Color(NSColor.controlBackgroundColor).opacity(0.5))
     }

@@ -183,6 +183,17 @@ struct ExposureView: View {
         }
         return result
     }
+    
+    // MARK: - HAUTEUR DYNAMIQUE RESPONSIVE
+    var dynamicTableHeight: CGFloat {
+        let rowHeight: CGFloat = 44 // Hauteur approximative d'une ligne (texte + padding + divider)
+        let headerHeight: CGFloat = 46 // Hauteur de l'en-tête
+        if viewModel.positions.isEmpty { return 120 }
+        
+        // Calcule la hauteur totale exacte pour qu'il n'y ait pas besoin de scroller
+        return CGFloat(viewModel.positions.count) * rowHeight + headerHeight + 20
+    }
+
 
     var body: some View {
         ScrollView(.vertical) {
@@ -326,43 +337,44 @@ struct ExposureView: View {
                                 if viewModel.positions.isEmpty {
                                     Text("No positions in portfolio.").foregroundColor(.secondary).padding(20)
                                 } else {
-                                    ScrollView(.vertical) {
-                                        LazyVStack(spacing: 0) {
-                                            ForEach(viewModel.positions) { pos in
-                                                let exposures = pos.revenueExposures ?? []
-                                                let totalKnown = exposures.reduce(0) { $0 + $1.percentage }
+                                    // 1. SUPPRESSION du ScrollView(.vertical)
+                                    // 2. Remplacement de LazyVStack par un simple VStack
+                                    VStack(spacing: 0) {
+                                        ForEach(viewModel.positions) { pos in
+                                            let exposures = pos.revenueExposures ?? []
+                                            let totalKnown = exposures.reduce(0) { $0 + $1.percentage }
+                                            
+                                            HStack(spacing: 12) {
+                                                // ... (Garde exactement le même contenu de la ligne ici) ...
+                                                Text(pos.ticker).fontWeight(.bold).frame(width: 80, alignment: .leading)
                                                 
-                                                HStack(spacing: 12) {
-                                                    Text(pos.ticker).fontWeight(.bold).frame(width: 80, alignment: .leading)
-                                                    
-                                                    HStack {
-                                                        ProgressView(value: min(totalKnown, 100.0), total: 100.0)
-                                                            .tint(totalKnown >= 100 ? .green : .orange)
-                                                            .frame(width: 50)
-                                                        Text("\(Int(totalKnown))%")
-                                                            .font(.caption).fontWeight(.bold)
-                                                            .foregroundColor(totalKnown >= 100 ? .green : .orange)
-                                                            .blur(radius: privacyMode ? 6 : 0)
-                                                    }
-                                                    .frame(width: 110, alignment: .leading)
-                                                    
-                                                    ForEach(allRegions, id: \.self) { region in
-                                                        let pct = exposures.first(where: { $0.regionName == region })?.percentage
-                                                        Text(pct != nil ? "\(pct!.formatted(.number.precision(.fractionLength(1))))%" : "/")
-                                                            .frame(maxWidth: .infinity, alignment: .trailing)
-                                                            .foregroundColor(pct != nil ? .primary : .secondary.opacity(0.3))
-                                                            .blur(radius: privacyMode ? 6 : 0)
-                                                    }
+                                                HStack {
+                                                    ProgressView(value: min(totalKnown, 100.0), total: 100.0)
+                                                        .tint(totalKnown >= 100 ? .green : .orange)
+                                                        .frame(width: 50)
+                                                    Text("\(Int(totalKnown))%")
+                                                        .font(.caption).fontWeight(.bold)
+                                                        .foregroundColor(totalKnown >= 100 ? .green : .orange)
+                                                        .blur(radius: privacyMode ? 6 : 0)
                                                 }
-                                                .padding(.horizontal, 16)
-                                                .padding(.vertical, 10)
-                                                .contentShape(Rectangle())
-                                                .onTapGesture(count: 2) {
-                                                    editingPosition = pos
-                                                }
+                                                .frame(width: 110, alignment: .leading)
                                                 
-                                                Divider()
+                                                ForEach(allRegions, id: \.self) { region in
+                                                    let pct = exposures.first(where: { $0.regionName == region })?.percentage
+                                                    Text(pct != nil ? "\(pct!.formatted(.number.precision(.fractionLength(1))))%" : "/")
+                                                        .frame(maxWidth: .infinity, alignment: .trailing)
+                                                        .foregroundColor(pct != nil ? .primary : .secondary.opacity(0.3))
+                                                        .blur(radius: privacyMode ? 6 : 0)
+                                                }
                                             }
+                                            .padding(.horizontal, 16)
+                                            .padding(.vertical, 10)
+                                            .contentShape(Rectangle())
+                                            .onTapGesture(count: 2) {
+                                                editingPosition = pos
+                                            }
+                                            
+                                            Divider()
                                         }
                                     }
                                 }
@@ -373,7 +385,7 @@ struct ExposureView: View {
                             .overlay(RoundedRectangle(cornerRadius: 8).stroke(Color.gray.opacity(0.2), lineWidth: 1))
                         }
                     }
-                    .frame(height: 300)
+                    .frame(height: dynamicTableHeight) // 3. APPLICATION de la hauteur calculée
                 }
                 .padding()
                 .background(Color(NSColor.controlBackgroundColor))
@@ -968,13 +980,38 @@ struct ExposureEditorSheet: View {
     @State private var newIsUSA: Bool = false
     
     var totalPercentage: Double {
-        segments.reduce(0) { $0 + $1.percentage }
+        // On calcule la somme, puis on arrondit à 2 décimales pour éviter
+        // les micro-imprécisions des nombres à virgule (ex: 100.000000001)
+        let sum = segments.reduce(0) { $0 + $1.percentage }
+        return (sum * 100).rounded() / 100
     }
+
     
     var body: some View {
         VStack(spacing: 0) {
             HStack {
                 Text("Revenue Segments for \(position.ticker)").font(.title2).fontWeight(.bold)
+                
+                // NOUVEAU : Raccourcis GuruFocus intégrés
+                let urlString = "https://www.gurufocus.com/stock/\(position.ticker)/summary"
+                if let url = URL(string: urlString) {
+                    HStack(spacing: 8) {
+                        Link(destination: url) {
+                            Image(systemName: "safari").foregroundColor(.blue).font(.title3)
+                        }.help("Open GuruFocus in Safari")
+                        
+                        Button(action: {
+                            NSPasteboard.general.clearContents()
+                            NSPasteboard.general.setString(url.absoluteString, forType: .string)
+                        }) {
+                            Image(systemName: "doc.on.clipboard").foregroundColor(.blue).font(.title3)
+                        }
+                        .buttonStyle(.plain)
+                        .help("Copy link to clipboard")
+                    }
+                    .padding(.leading, 8)
+                }
+                
                 Spacer()
                 Button(action: { dismiss() }) { Image(systemName: "xmark.circle.fill").font(.title2).foregroundColor(.secondary) }.buttonStyle(.plain)
             }.padding()
@@ -987,7 +1024,7 @@ struct ExposureEditorSheet: View {
                     Text("Total Identified:")
                     ProgressView(value: min(totalPercentage, 100.0), total: 100.0)
                         .tint(totalPercentage == 100 ? .green : (totalPercentage > 100 ? .red : .blue))
-                    Text("\(Int(totalPercentage)) / 100%")
+                    Text("\(totalPercentage.formatted(.number.precision(.fractionLength(1)))) / 100%")
                         .fontWeight(.bold)
                         .foregroundColor(totalPercentage == 100 ? .green : (totalPercentage > 100 ? .red : .primary))
                 }
