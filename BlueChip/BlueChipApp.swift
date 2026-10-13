@@ -63,12 +63,17 @@ struct BlueChipApp: App {
                 .keyboardShortcut("e", modifiers: .command)
             }
             
-            // 3. Menu Navigation & Actions
-            CommandMenu("Actions & Navigation") {
+            // 4. Menu Outils (Tools > Search, AI Copilot)
+            CommandMenu("Tools") {
                 Button("Global Search") {
-                    NotificationCenter.default.post(name: NSNotification.Name("GlobalSearch"), object: nil)
+                    NotificationCenter.default.post(name: NSNotification.Name("OpenSearch"), object: nil)
                 }
-                .keyboardShortcut("f", modifiers: .command)
+                .keyboardShortcut("f", modifiers: .command) // Cmd + F
+                
+                Button("AI Copilot Insights") {
+                    NotificationCenter.default.post(name: NSNotification.Name("OpenAICopilot"), object: nil)
+                }
+                .keyboardShortcut("i", modifiers: .command) // Cmd + I
                 
                 Divider()
                 

@@ -27,6 +27,9 @@ struct ContentView: View {
     @State private var showCheatSheet = false
     @State private var showAbout = false
     @State private var showTutorial = false
+    
+    @State private var showSearch = false
+    @State private var showAICopilot = false
 
 
     var body: some View {
@@ -96,6 +99,23 @@ struct ContentView: View {
                     .font(.system(size: 24, weight: .black, design: .rounded))
                     .foregroundColor(.primary)
                 Spacer()
+                                
+                // BOUTON RECHERCHE GLOBALE (Cmd + F)
+                Button(action: { NotificationCenter.default.post(name: NSNotification.Name("OpenSearch"), object: nil) }) {
+                    Image(systemName: "magnifyingglass")
+                        .font(.title2)
+                        .foregroundColor(.secondary)
+                }.buttonStyle(.plain)
+                .padding(.trailing, 8)
+                
+                // BOUTON IA COPILOT (Cmd + I)
+                Button(action: { NotificationCenter.default.post(name: NSNotification.Name("OpenAICopilot"), object: nil) }) {
+                    Image(systemName: "sparkles")
+                        .font(.title2)
+                        .foregroundColor(.secondary) // En bleu pour bien le démarquer !
+                }.buttonStyle(.plain)
+                .padding(.trailing, 8)
+                
 
                 // NOUVEAU BOUTON TUTORIEL
                 Button(action: {
@@ -212,6 +232,11 @@ struct ContentView: View {
         .sheet(isPresented: $showAbout) { AboutBlueChipView() }
         .sheet(isPresented: $showTutorial) { TutorialView(currentTab: selectedTab) }
         
+        .sheet(isPresented: $showAICopilot) {
+            AICopilotView(viewModel: viewModel, currentTab: selectedTab)
+        }
+
+        
         // --- NOUVEAUX ÉCOUTEURS ---
         .onReceive(NotificationCenter.default.publisher(for: NSNotification.Name("OpenAddTransaction"))) { _ in showAddTransaction = true }
         .onReceive(NotificationCenter.default.publisher(for: NSNotification.Name("OpenAddEvent"))) { _ in showAddEvent = true }
@@ -232,10 +257,10 @@ struct ContentView: View {
         .onReceive(NotificationCenter.default.publisher(for: NSNotification.Name("GlobalSearch"))) { _ in showGlobalSearch = true }
         .onReceive(NotificationCenter.default.publisher(for: NSNotification.Name("LockApp"))) { _ in lockApp() }
         .onReceive(NotificationCenter.default.publisher(for: NSNotification.Name("ToggleFullScreen"))) { _ in
-            if let window = NSApplication.shared.keyWindow ?? NSApplication.shared.windows.first { window.toggleFullScreen(nil)}
-        }
+            if let window = NSApplication.shared.keyWindow ?? NSApplication.shared.windows.first { window.toggleFullScreen(nil)}}
         
-        
+        .onReceive(NotificationCenter.default.publisher(for: NSNotification.Name("OpenSearch"))) { _ in showSearch = true}
+        .onReceive(NotificationCenter.default.publisher(for: NSNotification.Name("OpenAICopilot"))) { _ in showAICopilot = true}
 
     }
     

@@ -26,6 +26,8 @@ struct SettingsView: View {
     @AppStorage("forcePrivacyOnStartup") private var forcePrivacyOnStartup: Bool = false
     @AppStorage("requireAuthOnStartup") private var requireAuthOnStartup: Bool = false
     
+    @AppStorage("geminiApiKey") private var geminiApiKey: String = ""
+    
     // État pour afficher l'alerte de confirmation
     @State private var showResetAlert = false
     
@@ -104,9 +106,36 @@ struct SettingsView: View {
                     }
                     .padding(.vertical, 8)
                 }
-                
-                //Divider().padding(.vertical, 4)
-                
+                                
+                // NOUVELLE SECTION : AI COPILOT
+                Section {
+                    VStack(alignment: .leading, spacing: 8) {
+                        Text("AI Copilot Configuration")
+                            .font(.headline)
+                        
+                        HStack {
+                            Text("Enter your Google Gemini API Key to enable the financial AI assistant. Your key is stored securely and locally on your Mac.")
+                                .font(.caption)
+                                .foregroundColor(.secondary)
+                            
+                            Spacer()
+                            
+                            Link(destination: URL(string: "https://aistudio.google.com/api-keys")!) {
+                                HStack(spacing: 4) {
+                                    Text("Get Free Key")
+                                    Image(systemName: "arrow.up.right.square")
+                                }
+                                .font(.caption)
+                                .foregroundColor(.blue)
+                            }
+                        }
+                        
+                        SecureField("Gemini API Key (AIzaSy...)", text: $geminiApiKey)
+                            .textFieldStyle(.roundedBorder)
+                    }
+                    .padding(.vertical, 8)
+                }
+
                 // NOUVELLE SECTION : DANGER ZONE
                 Section {
                     VStack(alignment: .leading, spacing: 8) {
