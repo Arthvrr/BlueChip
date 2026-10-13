@@ -393,5 +393,47 @@ class PortfolioViewModel: ObservableObject {
         if underwater > 0 { items.append(ChartDataItem(name: "Underwater", value: underwater)) }
         return items
     }
+    
+    
+    // ==========================================
+    // DANGER ZONE : RÉINITIALISATION TOTALE
+    // ==========================================
+    func wipeAllData() {
+        guard let context = modelContext else { return }
+        
+        // 1. Supprimer toutes les entités de SwiftData
+        positions.forEach { context.delete($0) }
+        dividendYears.forEach { context.delete($0) }
+        growthYears.forEach { context.delete($0) }
+        benchmarkIndices.forEach { context.delete($0) }
+        transactions.forEach { context.delete($0) }
+        watchlistItems.forEach { context.delete($0) }
+        calendarEvents.forEach { context.delete($0) }
+        fundamentalCriteria.forEach { context.delete($0) }
+        manualWealthAssets.forEach { context.delete($0) }
+        manualWealthLiabilities.forEach { context.delete($0) }
+        
+        // 2. Vider les tableaux locaux de l'interface
+        positions.removeAll()
+        dividendYears.removeAll()
+        growthYears.removeAll()
+        benchmarkIndices.removeAll()
+        transactions.removeAll()
+        watchlistItems.removeAll()
+        calendarEvents.removeAll()
+        fundamentalCriteria.removeAll()
+        manualWealthAssets.removeAll()
+        manualWealthLiabilities.removeAll()
+        
+        // 3. Remettre les compteurs à zéro
+        availableCash = 0.0
+        manuallyInvested = 0.0
+        
+        // 4. Recréer les années vierges et rafraîchir
+        setupDividendYears()
+        setupGrowthYears()
+        updateDividendsViewData()
+        
+        objectWillChange.send()
+    }
 }
-

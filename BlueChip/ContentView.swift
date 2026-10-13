@@ -1,6 +1,7 @@
 import SwiftUI
 import SwiftData
 import Combine
+import LocalAuthentication // <-- REQUIS POUR TOUCH ID / MOT DE PASSE
 
 struct ContentView: View {
     @Environment(\.modelContext) private var context
@@ -8,10 +9,89 @@ struct ContentView: View {
     
     @State private var selectedTab: AppTab = .composition
     @State private var showAddSheet = false
+    
+    // Variables persistantes
     @AppStorage("privacyMode") private var privacyMode = false
     @AppStorage("appTheme") private var appTheme: AppTheme = .system
+    @AppStorage("forcePrivacyOnStartup") private var forcePrivacyOnStartup: Bool = false
+    @AppStorage("requireAuthOnStartup") private var requireAuthOnStartup: Bool = false
+    
+    // État de verrouillage (True = l'utilisateur peut voir l'app)
+    @State private var isUnlocked: Bool = false
 
     var body: some View {
+        Group {
+            // SI L'APP EST VERROUILLÉE
+            if requireAuthOnStartup && !isUnlocked {
+                VStack(spacing: 24) {
+                    Image(systemName: "lock.shield.fill")
+                        .font(.system(size: 80))
+                        .foregroundColor(.blue)
+                    
+                    Text("BlueChip is Locked")
+                        .font(.largeTitle)
+                        .fontWeight(.bold)
+                    
+                    Text("Authentication is required to view your portfolio.")
+                        .foregroundColor(.secondary)
+                    
+                    Button("Unlock Portfolio") {
+                        authenticate()
+                    }
+                    .buttonStyle(.borderedProminent)
+                    .controlSize(.large)
+                    .padding(.top, 10)
+                }
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
+                .background(Color(NSColor.windowBackgroundColor))
+                .onAppear { authenticate() }
+            }
+            // SI L'APP EST DÉVERROUILLÉE (OU SI PAS DE SÉCURITÉ)
+            else {
+                mainAppView
+            }
+        }
+        .preferredColorScheme(appTheme.colorScheme)
+        .onAppear {
+            // Si le mode confidentialité forcé est activé, on floute au lancement
+            if forcePrivacyOnStartup {
+                privacyMode = true
+            }
+            viewModel.initializeData(context: context)
+        }
+    }
+    
+    // ==========================================
+    // LOGIQUE D'AUTHENTIFICATION (TOUCH ID)
+    // ==========================================
+    func authenticate() {
+        let context = LAContext()
+        var error: NSError?
+
+        // Vérifie si le Mac supporte la biométrie ou le mot de passe
+        if context.canEvaluatePolicy(.deviceOwnerAuthentication, error: &error) {
+            context.evaluatePolicy(.deviceOwnerAuthentication, localizedReason: "Unlock BlueChip to access your financial data.") { success, authenticationError in
+                // Le résultat est renvoyé sur un thread secondaire, on repasse sur le Main
+                DispatchQueue.main.async {
+                    if success {
+                        // Déverrouillé avec succès !
+                        self.isUnlocked = true
+                    } else {
+                        // Échec (l'utilisateur a annulé ou s'est trompé)
+                        // L'écran de verrouillage reste affiché avec le bouton "Unlock Portfolio"
+                    }
+                }
+            }
+        } else {
+            // Si le Mac n'a ni mot de passe ni Touch ID configuré, on laisse passer
+            self.isUnlocked = true
+        }
+    }
+    
+    // ==========================================
+    // LE CORPS DE L'APPLICATION (VUE PRINCIPALE)
+    // ==========================================
+    var mainAppView: some View {
         VStack(spacing: 0) {
             HStack {
                 Text("BlueChip - Stocks Portfolio Manager")
@@ -25,32 +105,22 @@ struct ContentView: View {
                 .buttonStyle(.plain)
                 .padding(.trailing, 8)
                 
-                // MODIFIÉ : Utilisation de viewModel.showSettings
                 Button(action: { viewModel.showSettings = true }) {
                     Image(systemName: "gearshape.fill")
                         .font(.title2)
                         .foregroundColor(.secondary)
                 }.buttonStyle(.plain)
-                .keyboardShortcut(",", modifiers: .command)
                 
                 Button(action: {
                     Task {
-                        // 1. Mise à jour des prix des actions
                         await viewModel.refreshPrices()
-                        
-                        // 2. Récupération du taux de change en direct (USD -> EUR)
                         let service = YahooFinanceService()
                         if let fxData = await service.fetchStockData(for: "EUR=X") {
                             await MainActor.run {
-                                // On met à jour toutes les positions concernées
                                 for pos in viewModel.positions {
-                                    if pos.currency.uppercased() == "USD" {
-                                        pos.usdToEurRate = fxData.price
-                                    } else if pos.currency.uppercased() == "EUR" {
-                                        pos.usdToEurRate = 1.0
-                                    }
+                                    if pos.currency.uppercased() == "USD" { pos.usdToEurRate = fxData.price }
+                                    else if pos.currency.uppercased() == "EUR" { pos.usdToEurRate = 1.0 }
                                 }
-                                // On signale à l'interface de se redessiner
                                 viewModel.objectWillChange.send()
                             }
                         }
@@ -109,18 +179,7 @@ struct ContentView: View {
         .background(Color(NSColor.windowBackgroundColor))
         .navigationTitle("")
         .sheet(isPresented: $showAddSheet) { EditPositionView(viewModel: viewModel, position: nil) }
-        
-        // MODIFIÉ : La modale écoute maintenant viewModel.showSettings
-        // ... fin de ton ContentView ...
-        .sheet(isPresented: $viewModel.showSettings) {
-            SettingsView(viewModel: viewModel)
-        }
-        .onAppear {
-            viewModel.initializeData(context: context)
-        }
-        .preferredColorScheme(appTheme.colorScheme)
-        
-        // NOUVEAU : Écoute le clic du menu système et ouvre la modale
+        .sheet(isPresented: $viewModel.showSettings) { SettingsView(viewModel: viewModel) }
         .onReceive(NotificationCenter.default.publisher(for: NSNotification.Name("OpenSettings"))) { _ in
             viewModel.showSettings = true
         }
