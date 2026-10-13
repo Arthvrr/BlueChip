@@ -310,7 +310,7 @@ struct BenchmarkDashboardSection: View {
         VStack(spacing: 16) {
             HStack(spacing: 16) {
                 VStack(alignment: .leading, spacing: 4) {
-                    Text("Portfolio Return \(currentYear)").font(.subheadline).foregroundColor(.secondary).lineLimit(1)
+                    Text("Portfolio Return \(String(currentYear))").font(.subheadline).foregroundColor(.secondary).lineLimit(1)
                     Text(portfolioCurrentYear.formatted(.number.precision(.fractionLength(2)).sign(strategy: .always())) + "%")
                         .font(.title2).fontWeight(.bold)
                         .foregroundColor(portfolioCurrentYear >= 0 ? .green : .red)

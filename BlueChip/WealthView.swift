@@ -42,7 +42,7 @@ struct WealthView: View {
                     
                     HStack(spacing: 16) {
                         DashboardCard(title: "Wealth Goal", value: viewModel.wealthGoalTarget.formatted(.currency(code: "EUR")), titleIcon: "star.fill", privacyMode: $privacyMode)
-                        DashboardCard(title: "Overall Assets ROI", value: viewModel.totalWealthVariationPercent.formatted(.percent.precision(.fractionLength(2)).sign(strategy: .always())), titleIcon: nil, privacyMode: .constant(false))
+                        DashboardCard(title: "Overall Assets ROI", value: viewModel.totalWealthVariationPercent.formatted(.percent.precision(.fractionLength(2)).sign(strategy: .always())), titleIcon: nil, privacyMode: $privacyMode)
                         
                         // Debt-to-Asset Ratio
                         VStack(alignment: .leading, spacing: 6) {
@@ -53,7 +53,7 @@ struct WealthView: View {
                                 .blur(radius: isPrivate ? 8 : 0)
                         }.padding().frame(maxWidth: .infinity, alignment: .leading).frame(height: 110).background(Color(NSColor.controlBackgroundColor)).cornerRadius(10).shadow(color: Color.black.opacity(0.05), radius: 2, x: 0, y: 1)
                         
-                        DashboardCard(title: "Brokerage Weight", value: viewModel.wealthStockWeight.formatted(.percent.precision(.fractionLength(2))), titleIcon: "chart.pie.fill", privacyMode: .constant(false))
+                        DashboardCard(title: "Brokerage Weight", value: viewModel.wealthStockWeight.formatted(.percent.precision(.fractionLength(2))), titleIcon: "chart.pie.fill", privacyMode: $privacyMode)
                     }
                 }
                 
@@ -182,7 +182,10 @@ struct WealthAssetsTableSection: View {
                         Text(asset.variationPercent.formatted(.percent.precision(.fractionLength(2)).sign(strategy: .always()))).fontWeight(.bold).padding(.horizontal, 6).padding(.vertical, 2).background((asset.variationPercent >= 0 ? Color.green : Color.red).opacity(0.15)).foregroundColor(asset.variationPercent >= 0 ? .green : .red).cornerRadius(4).frame(maxWidth: .infinity, alignment: .trailing)
                         
                         let pctTotal = viewModel.totalAssets > 0 ? (asset.current / viewModel.totalAssets) : 0
-                        Text(pctTotal.formatted(.percent.precision(.fractionLength(2)))).frame(maxWidth: .infinity, alignment: .trailing)
+                        Text(pctTotal.formatted(.percent.precision(.fractionLength(2))))
+                            .blur(radius: isPrivate ? 6 : 0) // <-- AJOUT DU BLUR
+                            .frame(maxWidth: .infinity, alignment: .trailing)
+
                     }
                     .padding(.horizontal, 16).padding(.vertical, 12).contentShape(Rectangle())
                     .onTapGesture(count: 2) { onEdit(asset) }

@@ -153,6 +153,23 @@ struct DividendsProjectedChartsSection: View {
 struct DividendsTableSection: View {
     @ObservedObject var viewModel: PortfolioViewModel
     @Binding var privacyMode: Bool
+    
+    // NOUVEAU : Récupération de l'année en cours
+    var currentYear: Int { Calendar.current.component(.year, from: Date()) }
+    
+    // 1. Filtrage des années
+    var displayedYears: [DividendYear] {
+        viewModel.dividendYears.filter { $0.year <= currentYear }
+    }
+    
+    // 2. Hauteur dynamique
+    var dynamicHeight: CGFloat {
+        let rowHeight: CGFloat = 38
+        let headerHeight: CGFloat = 46
+        if displayedYears.isEmpty { return 120 }
+        return CGFloat(displayedYears.count) * rowHeight + headerHeight + 20
+    }
+    
     var body: some View {
         VStack(alignment: .leading, spacing: 8) {
             Text("Manual Dividend Received Tracker").font(.title2).fontWeight(.bold).foregroundColor(.secondary).padding(.bottom, 4)
@@ -164,20 +181,21 @@ struct DividendsTableSection: View {
                     Text("Total").fontWeight(.bold).frame(width: 80, alignment: .trailing)
                 }.padding(.horizontal, 16).padding(.vertical, 12).background(Color(NSColor.windowBackgroundColor)); Divider()
                 
-                ScrollView {
-                    LazyVStack(spacing: 0) {
-                        // MODIFIÉ : Utilisation de l'objet direct au lieu de '$'
-                        ForEach(viewModel.dividendYears) { yearData in
-                            SpreadsheetRowView(yearData: yearData, privacyMode: privacyMode)
-                                .padding(.horizontal, 16).padding(.vertical, 8)
-                            Divider()
-                        }
+                // 3. Suppression du ScrollView et boucle sur les années filtrées
+                VStack(spacing: 0) {
+                    ForEach(displayedYears) { yearData in
+                        SpreadsheetRowView(yearData: yearData, privacyMode: privacyMode)
+                            .padding(.horizontal, 16).padding(.vertical, 8)
+                        Divider()
                     }
                 }
             }.background(Color(NSColor.controlBackgroundColor)).cornerRadius(8).overlay(RoundedRectangle(cornerRadius: 8).stroke(Color.gray.opacity(0.2), lineWidth: 1))
-        }.frame(height: 380).padding().background(Color(NSColor.controlBackgroundColor)).cornerRadius(12).shadow(color: Color.black.opacity(0.05), radius: 2, x: 0, y: 1)
+        }
+        // 4. On applique la hauteur dynamique
+        .frame(height: dynamicHeight).padding().background(Color(NSColor.controlBackgroundColor)).cornerRadius(12).shadow(color: Color.black.opacity(0.05), radius: 2, x: 0, y: 1)
     }
 }
+
 
 struct SpreadsheetRowView: View {
     @Bindable var yearData: DividendYear // MODIFIÉ : @Bindable remplace @Binding pour SwiftData

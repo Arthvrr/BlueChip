@@ -236,6 +236,19 @@ struct GrowthTableSection: View {
     
     var currentYear: Int { Calendar.current.component(.year, from: Date()) }
     
+    // 1. On filtre pour n'afficher que les années jusqu'à aujourd'hui
+    var displayedYears: [GrowthYear] {
+        viewModel.growthYears.filter { $0.year <= currentYear }
+    }
+    
+    // 2. On calcule la hauteur dynamique
+    var dynamicHeight: CGFloat {
+        let rowHeight: CGFloat = 38 // Hauteur d'une ligne
+        let headerHeight: CGFloat = 46 // Hauteur de l'en-tête
+        if displayedYears.isEmpty { return 120 }
+        return CGFloat(displayedYears.count) * rowHeight + headerHeight + 20
+    }
+    
     func cumulativeInvest(for targetYear: Int) -> Double {
         let initialWallet = viewModel.growthYears.first?.startWallet ?? 0
         let investedSum = viewModel.growthYears.filter { $0.year <= targetYear }.reduce(0) { $0 + $1.invested }
@@ -257,29 +270,30 @@ struct GrowthTableSection: View {
                 }
                 .font(.subheadline).foregroundColor(.secondary).padding(.horizontal, 16).padding(.vertical, 12).background(Color(NSColor.windowBackgroundColor))
                 Divider()
-                ScrollView {
-                    LazyVStack(spacing: 0) {
-                        // MODIFIÉ : On itère directement sur le tableau sans '$' pour SwiftData
-                        ForEach(viewModel.growthYears) { yearData in
-                            let isCurrent = (yearData.year == currentYear)
-                            GrowthRowView(
-                                yearData: yearData, // MODIFIÉ
-                                isCurrentYear: isCurrent,
-                                liveWalletValue: viewModel.currentTotalCapital,
-                                cumulativeInvest: cumulativeInvest(for: yearData.year),
-                                privacyMode: privacyMode
-                            )
-                            .padding(.horizontal, 16).padding(.vertical, 8)
-                            Divider()
-                        }
+                
+                // 3. Suppression du ScrollView et passage en simple VStack avec les années filtrées
+                VStack(spacing: 0) {
+                    ForEach(displayedYears) { yearData in
+                        let isCurrent = (yearData.year == currentYear)
+                        GrowthRowView(
+                            yearData: yearData,
+                            isCurrentYear: isCurrent,
+                            liveWalletValue: viewModel.currentTotalCapital,
+                            cumulativeInvest: cumulativeInvest(for: yearData.year),
+                            privacyMode: privacyMode
+                        )
+                        .padding(.horizontal, 16).padding(.vertical, 8)
+                        Divider()
                     }
                 }
             }
             .background(Color(NSColor.controlBackgroundColor)).cornerRadius(8).overlay(RoundedRectangle(cornerRadius: 8).stroke(Color.gray.opacity(0.2), lineWidth: 1))
         }
-        .frame(height: 380).padding().background(Color(NSColor.controlBackgroundColor)).cornerRadius(12).shadow(color: Color.black.opacity(0.05), radius: 2, x: 0, y: 1)
+        // 4. On applique la hauteur dynamique
+        .frame(height: dynamicHeight).padding().background(Color(NSColor.controlBackgroundColor)).cornerRadius(12).shadow(color: Color.black.opacity(0.05), radius: 2, x: 0, y: 1)
     }
 }
+
 
 struct GrowthRowView: View {
     @Bindable var yearData: GrowthYear // MODIFIÉ : @Bindable permet à SwiftData de modifier l'objet
