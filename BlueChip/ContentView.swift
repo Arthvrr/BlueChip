@@ -21,6 +21,13 @@ struct ContentView: View {
     
     // État de verrouillage (True = l'utilisateur peut voir l'app)
     @State private var isUnlocked: Bool = false
+    
+    @State private var showAddTransaction = false
+    @State private var showAddEvent = false
+    @State private var showCheatSheet = false
+    @State private var showAbout = false
+    @State private var showTutorial = false
+
 
     var body: some View {
         Group {
@@ -172,6 +179,32 @@ struct ContentView: View {
             .frame(width: 400, height: 300)
         }
         
+        // --- NOUVELLES MODALES (SHEETS) ---
+        .sheet(isPresented: $showAddTransaction) {
+            AddEditTransactionView(viewModel: viewModel, transaction: nil)
+        }
+        .sheet(isPresented: $showAddEvent) {
+            AddEditEventSheet(viewModel: viewModel, event: nil, initialDate: Date())
+        }
+        .onReceive(NotificationCenter.default.publisher(for: NSNotification.Name("OpenAddTransaction"))) { _ in
+            showAddTransaction = true
+        }
+        .onReceive(NotificationCenter.default.publisher(for: NSNotification.Name("OpenAddEvent"))) { _ in
+            showAddEvent = true
+        }
+
+        .sheet(isPresented: $showCheatSheet) { CheatSheetView() }
+        .sheet(isPresented: $showAbout) { AboutBlueChipView() }
+        .sheet(isPresented: $showTutorial) { TutorialView(currentTab: selectedTab) }
+        
+        // --- NOUVEAUX ÉCOUTEURS ---
+        .onReceive(NotificationCenter.default.publisher(for: NSNotification.Name("OpenAddTransaction"))) { _ in showAddTransaction = true }
+        .onReceive(NotificationCenter.default.publisher(for: NSNotification.Name("OpenAddEvent"))) { _ in showAddEvent = true }
+        .onReceive(NotificationCenter.default.publisher(for: NSNotification.Name("OpenCheatSheet"))) { _ in showCheatSheet = true }
+        .onReceive(NotificationCenter.default.publisher(for: NSNotification.Name("OpenAbout"))) { _ in showAbout = true }
+        .onReceive(NotificationCenter.default.publisher(for: NSNotification.Name("OpenTutorial"))) { _ in showTutorial = true }
+
+        
         // --- ÉCOUTEURS DE NOTIFICATIONS POUR LES RACCOURCIS CLAVIER ---
         .onReceive(NotificationCenter.default.publisher(for: NSNotification.Name("OpenSettings"))) { _ in viewModel.showSettings = true }
         .onReceive(NotificationCenter.default.publisher(for: NSNotification.Name("OpenAddPosition"))) { _ in showAddSheet = true }
@@ -186,6 +219,8 @@ struct ContentView: View {
         .onReceive(NotificationCenter.default.publisher(for: NSNotification.Name("ToggleFullScreen"))) { _ in
             if let window = NSApplication.shared.keyWindow ?? NSApplication.shared.windows.first { window.toggleFullScreen(nil)}
         }
+        
+        
 
     }
     

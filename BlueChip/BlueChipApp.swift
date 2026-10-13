@@ -22,6 +22,14 @@ struct BlueChipApp: App {
             WatchlistItem.self
         ])
         .commands {
+            
+            
+            CommandGroup(replacing: .appInfo) {
+                Button("About BlueChip") {
+                    NotificationCenter.default.post(name: NSNotification.Name("OpenAbout"), object: nil)
+                }
+            }
+            
             // 1. Menu Préférences & Sécurité (BlueChip)
             CommandGroup(replacing: .appSettings) {
                 Button("Preferences...") {
@@ -43,6 +51,16 @@ struct BlueChipApp: App {
                     NotificationCenter.default.post(name: NSNotification.Name("OpenAddPosition"), object: nil)
                 }
                 .keyboardShortcut("n", modifiers: .command)
+                
+                Button("Add Transaction...") {
+                    NotificationCenter.default.post(name: NSNotification.Name("OpenAddTransaction"), object: nil)
+                }
+                .keyboardShortcut("t", modifiers: .command)
+                
+                Button("Add Calendar Event...") {
+                    NotificationCenter.default.post(name: NSNotification.Name("OpenAddEvent"), object: nil)
+                }
+                .keyboardShortcut("e", modifiers: .command)
             }
             
             // 3. Menu Navigation & Actions
@@ -81,6 +99,19 @@ struct BlueChipApp: App {
                 }
                 .keyboardShortcut("f", modifiers: [.command, .control]) // Cmd + Control + F
 
+            }
+            
+            // 3. Menu Aide (Tutoriels & Raccourcis)
+            CommandGroup(replacing: .help) {
+                Button("Page Tutorial") {
+                    NotificationCenter.default.post(name: NSNotification.Name("OpenTutorial"), object: nil)
+                }
+                .keyboardShortcut("t", modifiers: [.command, .shift]) // Cmd + Shift + T
+                
+                Button("Keyboard Shortcuts") {
+                    NotificationCenter.default.post(name: NSNotification.Name("OpenCheatSheet"), object: nil)
+                }
+                .keyboardShortcut("/", modifiers: .command) // Cmd + /
             }
         }
     }
