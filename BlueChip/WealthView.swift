@@ -419,6 +419,10 @@ struct WealthFIRESimulatorSection: View {
 // MARK: - CHARTS (DONUT & BARS)
 // =========================================================================
 
+// =========================================================================
+// MARK: - CHARTS (DONUT & BARS)
+// =========================================================================
+
 struct WealthAllocationChart: View {
     @ObservedObject var viewModel: PortfolioViewModel
     @Binding var privacyMode: Bool
@@ -426,6 +430,7 @@ struct WealthAllocationChart: View {
     @Binding var expandedChart: WealthChartZoomType?
     
     @State private var selectedAngleValue: Double? = nil
+    @State private var hiddenItems: Set<String> = []
     
     let chartColors: [Color] = [.blue, .green, .orange, .purple, .pink, .teal, .yellow, .indigo, .mint, .cyan, .red, .brown]
     
@@ -434,17 +439,19 @@ struct WealthAllocationChart: View {
         return .gray
     }
     
-    var sortedAssets: [WealthAsset] {
-        viewModel.allWealthAssets.sorted(by: { $0.current > $1.current })
+    var filteredAssets: [WealthAsset] {
+        viewModel.allWealthAssets
+            .filter { !hiddenItems.contains($0.name) }
+            .sorted(by: { $0.current > $1.current })
     }
     
     func findItem(for value: Double) -> WealthAsset? {
         var cum = 0.0
-        for asset in sortedAssets {
+        for asset in filteredAssets {
             cum += asset.current
             if value <= cum { return asset }
         }
-        return sortedAssets.last
+        return filteredAssets.last
     }
     
     var body: some View {
@@ -455,45 +462,51 @@ struct WealthAllocationChart: View {
                 if !isExpanded { Button(action: { expandedChart = .allocation }) { Image(systemName: "plus.magnifyingglass").foregroundColor(.secondary) }.buttonStyle(.plain) }
             }
             
-            Chart(sortedAssets) { asset in
-                SectorMark(
-                    angle: .value("Value", asset.current),
-                    innerRadius: .ratio(0.65),
-                    angularInset: 1.5
-                )
-                .foregroundStyle(color(for: asset.name))
-                .cornerRadius(4)
-                // L'annotation permanente a été supprimée ici
-            }
-            .chartLegend(.hidden)
-            .chartAngleSelection(value: $selectedAngleValue)
-            .chartBackground { proxy in
-                GeometryReader { geometry in
-                    if let value = selectedAngleValue, let asset = findItem(for: value) {
-                        let pct = viewModel.totalAssets > 0 ? (asset.current / viewModel.totalAssets) : 0
-                        VStack {
-                            Text(asset.name).font(.headline).lineLimit(1)
-                            Text(pct.formatted(.percent.precision(.fractionLength(1))))
-                                .font(.title3).fontWeight(.bold).foregroundColor(color(for: asset.name))
-                                .blur(radius: privacyMode ? 6 : 0)
+            InteractiveLegendView(items: viewModel.allWealthAssets.map { $0.name }, colorMap: color, hiddenItems: $hiddenItems)
+                .padding(.bottom, 8)
+            
+            if filteredAssets.isEmpty {
+                Spacer(); Text("No data").foregroundColor(.secondary).frame(maxWidth: .infinity, alignment: .center); Spacer()
+            } else {
+                Chart(filteredAssets) { asset in
+                    SectorMark(
+                        angle: .value("Value", asset.current),
+                        innerRadius: .ratio(0.65),
+                        angularInset: 1.5
+                    )
+                    .foregroundStyle(color(for: asset.name))
+                    .cornerRadius(4)
+                }
+                .chartLegend(.hidden)
+                .chartAngleSelection(value: $selectedAngleValue)
+                .chartBackground { proxy in
+                    GeometryReader { geometry in
+                        if let value = selectedAngleValue, let asset = findItem(for: value) {
+                            let totalVisible = filteredAssets.reduce(0) { $0 + $1.current }
+                            let pct = totalVisible > 0 ? (asset.current / totalVisible) : 0
+                            
+                            VStack {
+                                Text(asset.name).font(.headline).lineLimit(1)
+                                Text(pct.formatted(.percent.precision(.fractionLength(1))))
+                                    .font(.title3).fontWeight(.bold).foregroundColor(color(for: asset.name))
+                                    .blur(radius: privacyMode ? 6 : 0)
+                            }
+                            .position(x: geometry.frame(in: .local).midX, y: geometry.frame(in: .local).midY)
                         }
-                        .position(x: geometry.frame(in: .local).midX, y: geometry.frame(in: .local).midY)
                     }
                 }
-            }
-            .animation(.easeInOut(duration: 0.2), value: selectedAngleValue)
-            .frame(height: isExpanded ? .infinity : 250)
-            
-            HStack(spacing: 12) {
-                ForEach(viewModel.allWealthAssets, id: \.id) { asset in
-                    HStack(spacing: 4) { Circle().fill(color(for: asset.name)).frame(width: 8, height: 8); Text(asset.name).font(.caption2).foregroundColor(.secondary) }
-                }
+                .animation(.easeInOut(duration: 0.2), value: selectedAngleValue)
             }
             
             Spacer()
             BlueChipWatermark()
         }
-        .padding().frame(maxWidth: .infinity, alignment: .leading).background(Color(NSColor.controlBackgroundColor)).cornerRadius(12).shadow(color: Color.black.opacity(0.05), radius: 2, x: 0, y: 1)
+        .padding()
+        // C'est cette ligne qui garantit une hauteur parfaite de 360px comme partout ailleurs !
+        .frame(minHeight: 360, maxHeight: isExpanded ? .infinity : 360)
+        .background(Color(NSColor.controlBackgroundColor))
+        .cornerRadius(12)
+        .shadow(color: Color.black.opacity(0.05), radius: 2, x: 0, y: 1)
     }
 }
 
@@ -504,6 +517,18 @@ struct WealthROIChart: View {
     @Binding var expandedChart: WealthChartZoomType?
     
     @State private var hoveredAsset: String? = nil
+    @State private var hiddenItems: Set<String> = []
+    
+    func color(for name: String) -> Color {
+        if let asset = viewModel.allWealthAssets.first(where: { $0.name == name }) {
+            return asset.variationPercent >= 0 ? .green : .red
+        }
+        return .gray
+    }
+    
+    var filteredAssets: [WealthAsset] {
+        viewModel.allWealthAssets.filter { !hiddenItems.contains($0.name) }
+    }
     
     var body: some View {
         VStack(alignment: .leading, spacing: 16) {
@@ -513,31 +538,44 @@ struct WealthROIChart: View {
                 if !isExpanded { Button(action: { expandedChart = .roi }) { Image(systemName: "plus.magnifyingglass").foregroundColor(.secondary) }.buttonStyle(.plain) }
             }
             
-            Chart(viewModel.allWealthAssets) { asset in
-                BarMark(
-                    x: .value("Asset", asset.name),
-                    y: .value("ROI", asset.variationPercent * 100)
-                )
-                .foregroundStyle(asset.variationPercent >= 0 ? Color.green.gradient : Color.red.gradient)
-                .cornerRadius(4)
-                .annotation(position: .top) {
-                    if hoveredAsset == asset.name {
-                        Text(asset.variationPercent.formatted(.percent.precision(.fractionLength(1))))
-                            .font(.caption.bold())
-                            .blur(radius: privacyMode ? 6 : 0)
+            InteractiveLegendView(items: viewModel.allWealthAssets.map { $0.name }, colorMap: color, hiddenItems: $hiddenItems)
+                .padding(.bottom, 8)
+            
+            if filteredAssets.isEmpty {
+                Spacer(); Text("No data").foregroundColor(.secondary).frame(maxWidth: .infinity, alignment: .center); Spacer()
+            } else {
+                Chart(filteredAssets) { asset in
+                    BarMark(
+                        x: .value("Asset", asset.name),
+                        y: .value("ROI", asset.variationPercent * 100)
+                    )
+                    .foregroundStyle(asset.variationPercent >= 0 ? Color.green.gradient : Color.red.gradient)
+                    .cornerRadius(4)
+                    .annotation(position: .top) {
+                        if hoveredAsset == asset.name {
+                            Text(asset.variationPercent.formatted(.percent.precision(.fractionLength(1))))
+                                .font(.caption.bold())
+                                .blur(radius: privacyMode ? 6 : 0)
+                        }
                     }
                 }
+                .chartXSelection(value: $hoveredAsset)
+                .chartYAxis { AxisMarks(position: .leading) { value in AxisGridLine(); AxisTick(); if let val = value.as(Double.self) { AxisValueLabel("\(val.formatted(.number.precision(.fractionLength(0))))%") } } }
             }
-            .chartXSelection(value: $hoveredAsset)
-            .chartYAxis { AxisMarks(position: .leading) { value in AxisGridLine(); AxisTick(); if let val = value.as(Double.self) { AxisValueLabel("\(val.formatted(.number.precision(.fractionLength(0))))%") } } }
-            .frame(height: isExpanded ? .infinity : 250)
             
-            HStack { Text("Unrealized performance by asset class").font(.caption2).foregroundColor(.secondary); Spacer(); BlueChipWatermark() }
             Spacer()
+            HStack { Text("Unrealized performance by asset class").font(.caption2).foregroundColor(.secondary); Spacer(); BlueChipWatermark() }
         }
-        .padding().frame(maxWidth: .infinity, alignment: .leading).background(Color(NSColor.controlBackgroundColor)).cornerRadius(12).shadow(color: Color.black.opacity(0.05), radius: 2, x: 0, y: 1)
+        .padding()
+        // Idem ici : on force la base à 360px pour un alignement parfait avec le Donut
+        .frame(minHeight: 360, maxHeight: isExpanded ? .infinity : 360)
+        .background(Color(NSColor.controlBackgroundColor))
+        .cornerRadius(12)
+        .shadow(color: Color.black.opacity(0.05), radius: 2, x: 0, y: 1)
     }
 }
+
+
 
 // =========================================================================
 // MARK: - FULL SCREEN ZOOM MODAL
