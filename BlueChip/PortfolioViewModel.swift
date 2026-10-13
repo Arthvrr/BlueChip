@@ -41,7 +41,8 @@ class PortfolioViewModel: ObservableObject {
     @Published var dividendGoalTarget: Double = 1000.0 { didSet { settings?.dividendGoalTarget = dividendGoalTarget } }
     
     @Published var dividendYears: [DividendYear] = []
-    @Published var dividendStartYear: Int = 2026 { didSet { settings?.dividendStartYear = dividendStartYear; setupDividendYears(); setupGrowthYears() } }
+    @Published var dividendStartYear: Int = Calendar.current.component(.year, from: Date()) { didSet { settings?.dividendStartYear = dividendStartYear; setupDividendYears(); setupGrowthYears() } }
+
     
     @Published var growthGoalType: GrowthGoalType = .targetReturnPercent { didSet { settings?.growthGoalType = growthGoalType } }
     @Published var growthGoalTarget: Double = 10.0 { didSet { settings?.growthGoalTarget = growthGoalTarget } }

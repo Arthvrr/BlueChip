@@ -12,4 +12,6 @@ notifs apple : ce qu'il se passe demain et aujourd'hui calendar, price target se
 
 icone barre des menus : 3 prochains évents, chaque position avec prix actuel + target price, refresh api yahoo finance
 
-page réglages : année de commencement investissements (2022), dark light mode ou automatic, nombre d'années de base pour projection et margin of safety
+mettre dividend receveid this month avec récupération des ticker qui versent un dividende ce mois-ci
+
+ajouter transactions broker tax par défaut et state tax par défaut aussi dans les réglages !

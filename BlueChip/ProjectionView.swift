@@ -11,8 +11,8 @@ enum ProjectionChartZoomType: String, Identifiable {
 // Struct de données pour chaque année projetée
 struct ProjectionYearData: Identifiable {
     let id = UUID()
-    let yearIndex: Int        // Année 0, 1, 2...
-    let calendarYear: Int     // 2026, 2027...
+    let yearIndex: Int
+    let calendarYear: Int
     let portfolioValue: Double
     let capitalGain: Double
     let annualDividend: Double
@@ -26,16 +26,20 @@ struct ProjectionView: View {
     @Binding var privacyMode: Bool
     
     // Paramètres réglables (Base)
-    @State private var timeHorizonYears: Double = 30
+    @AppStorage("proj_timeHorizonYears") private var timeHorizonYears: Double = 30
+    
+    // Pour les Optionals (customCAGR et customDivGrowth), @AppStorage ne les gère pas directement.
+    // On garde les @State pour eux, car ils ont déjà une logique de fallback intelligente (defaultCAGR).
     @State private var customCAGR: Double? = nil
     @State private var customDivGrowth: Double? = nil
     
     // NOUVEAUX Paramètres réglables (Avancés)
-    @State private var enableMonthlyContribution: Bool = false
-    @State private var monthlyContributionAmount: Double = 0.0
-    @State private var enableDRIP: Bool = false
-    @State private var enableInflation: Bool = false
-    @State private var inflationRate: Double = 2.0
+    @AppStorage("proj_enableMonthlyContrib") private var enableMonthlyContribution: Bool = false
+    @AppStorage("proj_monthlyContribAmount") private var monthlyContributionAmount: Double = 0.0
+    @AppStorage("proj_enableDRIP") private var enableDRIP: Bool = false
+    @AppStorage("proj_enableInflation") private var enableInflation: Bool = false
+    @AppStorage("proj_inflationRate") private var inflationRate: Double = 2.0
+
     
     @State private var chartToZoom: ProjectionChartZoomType? = nil
     

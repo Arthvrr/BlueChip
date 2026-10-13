@@ -58,7 +58,8 @@ struct ValuationView: View {
     @ObservedObject var viewModel: PortfolioViewModel
     @Binding var privacyMode: Bool
     
-    @State private var marginOfSafety: Double = 10.0
+    @AppStorage("valuation_marginOfSafety") private var marginOfSafety: Double = 10.0
+
     @State private var editingPosition: Position? = nil
     @State private var chartToZoom: ValuationChartZoomType? = nil
     

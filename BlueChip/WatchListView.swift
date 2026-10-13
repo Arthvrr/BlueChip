@@ -106,7 +106,8 @@ struct WatchListView: View {
     @Binding var privacyMode: Bool
     @Environment(\.modelContext) private var context
     
-    @State private var marginOfSafety: Double = 10.0
+    @AppStorage("watchlist_marginOfSafety") private var marginOfSafety: Double = 10.0
+
     @State private var searchText: String = ""
     @State private var showAddSheet: Bool = false
     @State private var editingItem: WatchlistItem? = nil
