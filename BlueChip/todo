@@ -1,15 +1,16 @@
 créer plusieurs portefeuille
 
-ajouter recherche globale sur l'appli
+ajouter recherche globale sur l'appli (rechercher par ticker, nom de page, date transaction, critère, nom graphe, date calendrier, indice benchmarkx    ) --> année et avoir big récap de l'année ? jsp si trop difficile
 
-page Renforcement (voir quelles actions renforcer, avec delta pru - prix actuel, score de qualité, )
+page Renforcement (voir quelles actions renforcer, avec delta pru - prix actuel, score de qualité, valorisation)
 
 notifs apple : ce qu'il se passe demain et aujourd'hui calendar, price target se rapproche du prix actuel, goal dépassé, dividende reçu
 
 icone barre des menus : 3 prochains évents, chaque position avec prix actuel + target price, refresh api yahoo finance
 
+AUJOURDHUI :
+mettre bouton tutoriel pour chaque page qui explique comment fonctionne la page avec un bouton icone ? (pas que raccourci clavier)
+
 mettre dividend receveid this month avec récupération des ticker qui versent un dividende ce mois-ci
 
-bouton IA qui analyse le contenu de la page, et donne son avis ! ≠ pour chaque page
-
-bouton tutoriel pour chaque page qui explique comment fonctionne la page avec un bouton icone ?
+bouton IA qui analyse le contenu de la page, et donne son avis ! ≠ pour chaque page (GYOK, Gemini Flash)

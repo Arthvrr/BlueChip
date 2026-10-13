@@ -19,7 +19,7 @@ struct AboutBlueChipView: View {
             Button("Close") { dismiss() }.keyboardShortcut(.defaultAction).buttonStyle(.bordered)
         }
         .padding(30)
-        .frame(width: 350, height: 350)
+        .frame(width: 500, height: 500)
     }
 }
 

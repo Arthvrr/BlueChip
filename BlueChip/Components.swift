@@ -14,20 +14,85 @@ enum AppTab: String, CaseIterable {
 
 struct CustomTabBar: View {
     @Binding var selectedTab: AppTab
+
+    private let tabs = AppTab.allCases
+    private let horizontalPadding: CGFloat = 12
+    private let tabSpacing: CGFloat = 0
+
     var body: some View {
-        ScrollView(.horizontal, showsIndicators: false) {
-            HStack(spacing: 24) {
-                ForEach(AppTab.allCases, id: \.self) { tab in
-                    Text(tab.rawValue)
-                        .font(.system(size: 14, weight: selectedTab == tab ? .bold : .medium))
-                        .foregroundColor(selectedTab == tab ? .primary : .secondary)
-                        .padding(.vertical, 8)
-                        .overlay(Rectangle().frame(height: 3).foregroundColor(selectedTab == tab ? .blue : .clear).offset(y: 4), alignment: .bottom)
-                        .contentShape(Rectangle())
-                        .onTapGesture { withAnimation(.easeInOut(duration: 0.2)) { selectedTab = tab } }
+        GeometryReader { geometry in
+            let availableWidth = geometry.size.width
+
+            // Largeur nécessaire pour afficher les onglets
+            // en conservant leur taille naturelle.
+            let totalNaturalWidth = tabs.reduce(CGFloat.zero) { total, tab in
+                total + estimatedTabWidth(for: tab)
+            }
+
+            let fits = totalNaturalWidth <= availableWidth
+
+            ScrollView(.horizontal, showsIndicators: false) {
+                HStack(spacing: tabSpacing) {
+                    ForEach(tabs, id: \.self) { tab in
+                        tabButton(for: tab)
+                            .frame(
+                                width: fits
+                                    ? availableWidth / CGFloat(tabs.count)
+                                    : estimatedTabWidth(for: tab)
+                            )
+                    }
                 }
-            }.padding(.horizontal, 20)
-        }.padding(.vertical, 6).background(Color(NSColor.windowBackgroundColor))
+                .frame(
+                    minWidth: fits ? availableWidth : nil,
+                    alignment: .leading
+                )
+            }
+            .frame(width: availableWidth)
+        }
+        .frame(height: 38)
+        .background(Color(NSColor.windowBackgroundColor))
+    }
+
+    private func tabButton(for tab: AppTab) -> some View {
+        Text(tab.rawValue)
+            .font(
+                .system(
+                    size: 14,
+                    weight: selectedTab == tab ? .bold : .medium
+                )
+            )
+            .foregroundStyle(
+                selectedTab == tab ? .primary : .secondary
+            )
+            .lineLimit(1)
+            .minimumScaleFactor(1)
+            .fixedSize(horizontal: true, vertical: false)
+            .padding(.horizontal, horizontalPadding)
+            .padding(.vertical, 8)
+            .overlay(alignment: .bottom) {
+                Rectangle()
+                    .fill(selectedTab == tab ? Color.blue : Color.clear)
+                    .frame(height: 3)
+            }
+            .contentShape(Rectangle())
+            .onTapGesture {
+                withAnimation(.easeInOut(duration: 0.2)) {
+                    selectedTab = tab
+                }
+            }
+    }
+
+    private func estimatedTabWidth(for tab: AppTab) -> CGFloat {
+        let font = NSFont.systemFont(
+            ofSize: 14,
+            weight: selectedTab == tab ? .bold : .medium
+        )
+
+        let textWidth = (tab.rawValue as NSString).size(
+            withAttributes: [.font: font]
+        ).width
+
+        return ceil(textWidth) + horizontalPadding * 2
     }
 }
 
