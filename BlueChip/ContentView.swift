@@ -111,21 +111,7 @@ struct ContentView: View {
                         .foregroundColor(.secondary)
                 }.buttonStyle(.plain)
                 
-                Button(action: {
-                    Task {
-                        await viewModel.refreshPrices()
-                        let service = YahooFinanceService()
-                        if let fxData = await service.fetchStockData(for: "EUR=X") {
-                            await MainActor.run {
-                                for pos in viewModel.positions {
-                                    if pos.currency.uppercased() == "USD" { pos.usdToEurRate = fxData.price }
-                                    else if pos.currency.uppercased() == "EUR" { pos.usdToEurRate = 1.0 }
-                                }
-                                viewModel.objectWillChange.send()
-                            }
-                        }
-                    }
-                }) {
+                Button(action: { performRefresh() }) {
                     if viewModel.isLoading {
                         ProgressView().controlSize(.small)
                     } else {
@@ -180,8 +166,50 @@ struct ContentView: View {
         .navigationTitle("")
         .sheet(isPresented: $showAddSheet) { EditPositionView(viewModel: viewModel, position: nil) }
         .sheet(isPresented: $viewModel.showSettings) { SettingsView(viewModel: viewModel) }
+        
+        // --- ÉCOUTEURS DE NOTIFICATIONS POUR LES RACCOURCIS CLAVIER ---
         .onReceive(NotificationCenter.default.publisher(for: NSNotification.Name("OpenSettings"))) { _ in
             viewModel.showSettings = true
+        }
+        .onReceive(NotificationCenter.default.publisher(for: NSNotification.Name("OpenAddPosition"))) { _ in
+            showAddSheet = true
+        }
+        .onReceive(NotificationCenter.default.publisher(for: NSNotification.Name("TogglePrivacy"))) { _ in
+            withAnimation { privacyMode.toggle() }
+        }
+        .onReceive(NotificationCenter.default.publisher(for: NSNotification.Name("RefreshPrices"))) { _ in
+            performRefresh()
+        }
+        .onReceive(NotificationCenter.default.publisher(for: NSNotification.Name("NextTab"))) { _ in
+            cycleToNextTab()
+        }
+    }
+    
+    // ==========================================
+    // MÉTHODES UTILITAIRES POUR LES RACCOURCIS
+    // ==========================================
+    
+    private func performRefresh() {
+        Task {
+            await viewModel.refreshPrices()
+            let service = YahooFinanceService()
+            if let fxData = await service.fetchStockData(for: "EUR=X") {
+                await MainActor.run {
+                    for pos in viewModel.positions {
+                        if pos.currency.uppercased() == "USD" { pos.usdToEurRate = fxData.price }
+                        else if pos.currency.uppercased() == "EUR" { pos.usdToEurRate = 1.0 }
+                    }
+                    viewModel.objectWillChange.send()
+                }
+            }
+        }
+    }
+    
+    private func cycleToNextTab() {
+        let allTabs = AppTab.allCases
+        if let currentIndex = allTabs.firstIndex(of: selectedTab) {
+            let nextIndex = (currentIndex + 1) % allTabs.count
+            withAnimation { selectedTab = allTabs[nextIndex] }
         }
     }
 }
