@@ -274,55 +274,202 @@ struct TutorialView: View {
                 *Pro-tip: Click the magnifying glass icon on any chart to open a detailed full-screen view!*
                 """
             )
+            
+        case .watchlist:
+            return (
+                "Watchlist",
+                "eye.fill",
+                """
+                **The Prospective Command Center**
+                The Watchlist page is your dedicated scouting environment. It allows you to monitor potential future investments, evaluate their intrinsic value, and strictly compare their fundamental quality against the assets you already own in your portfolio.
+                
+                **The Executive Dashboard**
+                At the top of the page, an 8-card dashboard is generated **entirely automatically** based on your tracked stocks. It provides an instant macro-snapshot of your prospective targets, revealing the number of Undervalued Companies, Average Target Upside, Average PEG Ratio, and highlighting your ultimate 'Top Pick' based on Fair Price upside.
+                
+                **Risk Controls & Data Sourcing**
+                Just below the dashboard, you have total control over your monitoring tools:
+                • **Margin of Safety:** Use the slider (adjustable from 0% up to 50%) to enforce a strict discount on your Fair Price calculations across the entire watchlist.
+                • **Live Data Fetching:** Click the **Fetch Prices** button to instantly update the current market price of all your tracked stocks.
+                • **Global Data Links:** Configure your preferred financial research websites (e.g., GuruFocus, TipRanks). The system uses the `{ticker}` tag to generate dynamic shortcuts, allowing you to open web pages for specific stock metrics with a single click!
+                
+                **Watchlist Valuation Table**
+                Your prospective stocks are organized in a powerful, interactive data table. You can instantly sort the list by any column—such as Fair Price, Forward P/E, PEG, or Upside—to bubble the best bargains to the top. To modify a stock's metrics or target prices, simply **double-click** its row.
+                
+                **Valuation Visual Analytics**
+                Scroll down to explore 4 dedicated chart modules for your prospective stocks:
+                • **Valuation & Target Prices Comparison:** A bar chart mapping the current price against your external fair value estimates.
+                • **PE Valuation (Current vs Fwd vs 10Y):** Evaluates if the stock is historically cheap and expected to grow.
+                • **PEG Ratio Analysis:** A targeted chart hunting for growth at a reasonable price (PEG ≤ 1.0).
+                • **Potential Upside %:** Compares the specific percentage gap to your Target Price versus your Fair Price.
+                
+                **Quality Analysis Laboratory**
+                At the bottom of the page lies the Laboratory. This section strictly uses the custom scoring engine and criteria you built on the **Fundamentals** page to analyze a prospective stock!
+                • **Strengths (+) & Weaknesses (-):** Select a watchlist stock from the dropdown. The system will automatically compare its fundamental metrics against the *weighted average of your actual portfolio*, generating a clear list of fundamental strengths and weaknesses.
+                • **Analyzed Stock vs Portfolio Avg:** A direct bar chart comparing the total quality score of the prospective stock against your current portfolio's average score.
+                • **Stock Radar Profile:** A stunning spider web chart contrasting the multi-dimensional fundamental footprint of the targeted stock against your existing holdings.
+                
+                *Pro-tip: Click the magnifying glass icon on any chart to open a detailed full-screen view!*
+                """
+            )
+            
+        case .exposure:
+            return (
+                "Exposure",
+                "globe.europe.africa.fill",
+                """
+                **The Global Risk Command Center**
+                The Exposure page is your macroeconomic risk manager. Instead of simply looking at where a company is headquartered, it dives deep into actual geographic revenue streams to reveal your true geopolitical footprint and foreign exchange (FX) risks.
+                
+                **The Executive Dashboard**
+                At the top of the page, 8 fully automated metric cards instantly quantify your global diversification. The dashboard automatically calculates your *Weighted USA Exposure* versus *Rest of World (ROW)*, tracks the percentage of *Unassigned Revenue* in your portfolio, and estimates your overall *FX Risk* (non-USA exposure). It also monitors your data quality by tracking how many stocks are *Fully Mapped* to 100%.
+                
+                **Macro Rankings & FX Matrices**
+                Just below the dashboard, two automated modules summarize your risk concentrations:
+                • **Top Dominant Markets:** Ranks your absolute highest regional exposures across your entire portfolio.
+                • **FX Risk Matrix:** Automatically groups your global revenues into major currency zones (USD/Americas, EUR-GBP/EMEA, JPY-CNY/Asia, and Emerging Markets) to highlight potential currency headwinds or tailwinds.
+                
+                **Revenue Segmentation Table & Data Sourcing**
+                Your stocks are listed in a massive, interactive geographic matrix. To map a stock's revenue, **double-click** its row.
+                • Inside the editor, a convenient **Safari icon** dynamically links you to the stock's GuruFocus summary page to easily fetch geographic revenue data.
+                • Add specific *Revenue Segments* (e.g., "China", "Europe") with their exact percentage, and toggle whether they classify as "USA" or "ROW". A built-in progress bar ensures you never exceed 100% total revenue!
+                
+                **Visual Analytics & Charts**
+                Scroll down to explore 4 institutional-grade geographical diagnostics:
+                • **Weighted Portfolio Exposure:** A macro donut chart visualizing your total capital balance between the United States and the Rest of the World.
+                • **Detailed Geographic Breakdown:** An interactive 100% stacked bar chart dissecting the regional revenue components of every single stock in your portfolio.
+                • **Global Exposure Heatmap (Treemap):** A stunning spatial visualization where block sizes represent your actual portfolio weight, instantly highlighting your most dominant geographic bets.
+                • **Sector × Geography Risk Matrix:** A heat-mapped intersection of your industries and regions. It specifically flags dangerous structural concentrations (e.g., having 30% of your portfolio exclusively in Asian Technology) by turning orange for high-risk zones.
+                
+                *Pro-tip: Click the magnifying glass icon on any chart to open a detailed full-screen view!*
+                """
+            )
+            
+        case .transactions:
+            return (
+                "Transactions",
+                "arrow.left.arrow.right",
+                """
+                **The Behavioral & Cash Flow Ledger**
+                The Transactions page is your centralized accounting book. It provides a complete, chronological audit trail of every deposit, withdrawal, buy, and sell order you execute, allowing you to rigorously track your behavioral metrics and capital deployment.
+                
+                **The Executive Dashboard**
+                At the top of the page, 8 automated metric cards summarize your historic cash flows. You can instantly track your *Total Deposited* versus *Total Withdrawn* to reveal your true *Net Cash Flow*, and compare your *Total Bought* versus *Total Sold* to see your actual *Net Invested* capital. The dashboard also tracks your *Total Fees & Taxes* and the total number of *Transactions Found*.
+                
+                **Custom Transaction Goals**
+                Set a personalized target for the number of transactions you aim to execute using the Goal Progress Bar. **Double-click** the bar to set your desired transaction count.
+                
+                **Transaction History (The Ledger)**
+                Below the progress bar is your interactive transaction history table. 
+                • **Adding Transactions:** Click the **+ Add** button (or use the **⌘ + T** shortcut) to log a new transaction. You can record the date, type (Buy, Sell, Deposit, Withdrawal), ticker, quantity, amount in €, and add optional notes.
+                • **Custom Columns:** Click the **+ Column** button to add custom tracking fields, such as specific taxes (e.g., TOB) or broker fees.
+                • **Filtering & Search:** The table is highly interactive. Use the *Time Filter* dropdown to view transactions from "This Month," "Year to Date," or a "Custom Range." You can also quickly filter by transaction type using the pill buttons (Buy, Sell, Deposit, etc.) or search for specific tickers or notes using the search bar.
+                • **Editing:** **Double-click** any transaction row to modify or delete it.
+                
+                **Yearly Summary**
+                A consolidated table breaks down your transaction history year by year. It provides a clean aggregation of your total buys, sells, deposits, and withdrawals, alongside your total invested capital and any custom fee columns you've created.
+                
+                **Visual Analytics & Charts**
+                Scroll down to explore 4 analytical charts that visualize your trading behavior:
+                • **Transactions per Year:** A stacked bar chart showing the volume of each transaction type executed annually.
+                • **Summary by Type:** A dual-axis chart comparing the total monetary amount (€) versus the absolute count of each transaction type.
+                • **Buys over Time:** A bar chart tracking your historical buy orders, complete with an algorithmic trendline to visualize your capital deployment velocity.
+                • **Fees & Taxes Breakdown:** A donut chart illustrating exactly where your frictional costs (custom fee columns) are accumulating.
+                
+                *Pro-tip: Click the magnifying glass icon on any chart to open a detailed full-screen view!*
+                """
+            )
 
 
         case .benchmark:
             return (
                 "Benchmark",
                 "chart.bar.xaxis",
-                "Compare your portfolio's performance against major market indices.\nSee how your investment strategy performs relative to the broader market."
+                """
+                **The Ultimate Active vs. Passive Test**
+                The Benchmark page is where you evaluate your true "Alpha" (outperformance). It answers the most critical question in investing: Is your stock-picking strategy actually beating a simple, passive index fund?
+                
+                **The Executive Dashboard**
+                At the top of the page, an 8-card dashboard is generated **automatically** to compare your portfolio against your benchmarks. It displays your *Current Year Return*, your *Average Return*, and identifies your *Best Index*. Crucially, it instantly calculates whether you are ahead or behind your best benchmark, and translates these percentages into a concrete *10k€ Simulation* to show absolute wealth differences.
+                
+                **Custom Outperformance Goal (Alpha)**
+                Set your personal outperformance target using the Goal Progress Bar. **Double-click** the bar to define the exact Alpha (%) by which you aim to beat your strongest index over time.
+                
+                **Adding Indices & Data Sourcing**
+                To begin, click the **+ Add Index** button. You can name your benchmark (e.g., S&P 500, MSCI World) and optionally attach a *Performance Link* (e.g., a Yahoo Finance URL). 
+                Once added, a convenient **Safari icon** will appear next to the index name in the table, allowing you to instantly open your browser and fetch the required historical data with a single click!
+                
+                **Performance Comparison Table**
+                This matrix is where you log your benchmark returns. Simply **click on any empty cell** (—) under an index's column to input its return for a specific year. Your portfolio's return is calculated automatically based on your Growth page data.
+                *(Note: To adjust the timeline of this table, open your **Preferences (⌘ + ,)** and set your 'Investment Start Year'. The table will automatically generate rows from that date up to the current year).*
+                
+                **Visual Analytics & Charts**
+                Scroll down to explore 2 core comparative visualizations:
+                • **Annual Return (%):** A side-by-side grouped bar chart directly comparing your portfolio's specific percentage return against every tracked index, year after year.
+                • **€10,000 Simulated Growth:** A multi-line compounding chart visualizing the absolute wealth trajectory. It illustrates exactly how a theoretical €10,000 investment would have grown if deployed in your portfolio versus your chosen passive indices.
+                
+                *Pro-tip: Click the magnifying glass icon on any chart to open a detailed full-screen view!*
+                """
             )
 
-        case .transactions:
-            return (
-                "Transactions",
-                "arrow.left.arrow.right",
-                "Review your investment activity here.\nTrack your purchases, sales, deposits, and withdrawals to keep your portfolio history accurate."
-            )
-
-        case .watchlist:
-            return (
-                "Watchlist",
-                "eye.fill",
-                "Keep an eye on stocks you're interested in.\nMonitor potential investments and follow their performance before deciding to buy."
-            )
 
         case .calendar:
             return (
                 "Calendar",
                 "calendar",
-                "Stay on top of important financial dates.\nTrack upcoming dividends, earnings announcements, and other events that may affect your investments."
-            )
-
-        case .exposure:
-            return (
-                "Exposure",
-                "globe.europe.africa.fill",
-                "Understand where your money is invested.\nAnalyze your portfolio's geographic and regional exposure to identify concentrations and diversification opportunities."
-            )
-
-        case .fundamentals:
-            return (
-                "Fundamentals",
-                "building.2.fill",
-                "Dive into the financial health of companies.\nExamine key metrics such as revenue, earnings, profitability, debt, and other fundamental indicators."
+                """
+                **The Investor's Time Management Hub**
+                The Calendar page is your forward-looking catalyst tracker. It ensures you never miss a crucial market event, dividend payout, or earnings report by organizing your portfolio's timeline over a rolling 12-month horizon.
+                
+                **Automated Market & System Events**
+                Right out of the box, your calendar is already intelligently pre-populated with critical systemic dates:
+                • **US Market Holidays:** Automatically tracks days when the stock market is closed (e.g., Memorial Day, Thanksgiving) so you can anticipate liquidity constraints.
+                • **Macro Catalysts:** Flags major market events like *Quadruple Witching Days* (options and futures expiration) which typically inject high volatility into the markets.
+                • **Purchase Anniversaries:** Automatically celebrates and logs the holding duration of your active positions.
+                
+                **Adding & Exporting Events**
+                To schedule a manual catalyst, click the **+ Add Event** button at the top right (or use the shortcut **⌘ + E**). You can select a date, link it to a specific stock ticker from your portfolio or watchlist, choose the event type (Earnings, Dividend, Macro, etc.), and add personalized notes.
+                • **iCal Export:** Click the **Export .ical** button to instantly generate a standard calendar file. You can import this directly into your personal Apple Calendar, Google Agenda, or Outlook to seamlessly integrate your financial timeline with your daily life.
+                
+                **Upcoming Events & Advanced Filtering**
+                Stay focused on the short-term horizon using the **Next Upcoming Events** stack, which acts as an immediate alert center summarizing your 5 closest catalysts.
+                • **Interactive Filters:** Use the robust filtering engine to declutter the calendar. You can search by keyword, filter the entire view to only show a specific stock ticker, or isolate specific event categories (e.g., clicking the 'Earnings' or 'Dividend' pills).
+                
+                **12-Month Rolling Horizon**
+                Scroll down to view a fully expanded, continuous 12-month calendar starting from the current month. Each day cell visually indicates scheduled events with color-coded ticker tags, providing a clear bird's-eye view of your portfolio's upcoming timeline.
+                """
             )
 
         case .wealth:
             return (
                 "Wealth",
                 "wallet.bifold.fill",
-                "Track your overall wealth over time.\nGet a broader picture of your financial progress and see how your assets and liabilities contribute to your net worth."
+                """
+                **The Master Balance Sheet & FIRE Planner**
+                The Wealth page is the ultimate culmination of your financial journey. It steps back from daily stock fluctuations to provide a comprehensive, macro-level view of your entire net worth, integrating your brokerage account with external assets and liabilities.
+                
+                **The Executive Dashboard**
+                At the top of the page, 8 automated metric cards summarize your global financial position. You can instantly track your *True Net Worth* (Assets minus Liabilities), your absolute *Net P/L* across all assets, and your *Overall Assets ROI*. Crucially, the dashboard calculates your *Debt-to-Asset Ratio* (color-coding your leverage risk) and tracks your *Brokerage Weight* to show exactly how much of your total wealth is exposed to the stock market.
+                
+                **Custom Net Worth Goal**
+                Set your ultimate financial milestone using the Goal Progress Bar. **Double-click** the bar to define your target *Net Worth*, and watch the gradient fill up as your assets appreciate and your debts diminish.
+                
+                **Assets & Liabilities Management**
+                Below the dashboard, you will find two dedicated accounting sections:
+                • **Assets Allocation:** This table automatically imports your stock portfolio (locked) while allowing you to manually add external assets (e.g., Real Estate, Crypto, Cash Savings). Enter the Asset Name, Invested Amount, and Current Value to track their individual P/L.
+                • **Liabilities & Debts:** Track your mortgages, loans, and other debts here. Enter the Liability Name, the Initial Amount Borrowed, and the Amount Already Refunded. The system will automatically calculate the remaining *Amount Owed* and your *% of Total Debt*.
+                
+                *To edit any manual asset or liability, simply **double-click** its row in the tables.*
+                
+                **Visual Analytics & Charts**
+                Scroll down to explore 2 macro-level wealth charts:
+                • **Assets Allocation:** A comprehensive donut chart visualizing your total wealth distribution across all asset classes (Brokerage, Real Estate, Crypto, Cash, etc.).
+                • **Return on Investment (ROI % by Asset):** A clear bar chart comparing the percentage return of every individual asset class, helping you identify your strongest compounding engines.
+                
+                **Financial Independence (FIRE) Simulator**
+                At the bottom of the page lies the FIRE Simulator. This powerful tool uses your *True Net Worth* to estimate your passive income potential. Use the slider to set your *Safe Withdrawal Rate (SWR)*—the percentage of your wealth you plan to withdraw annually to cover living expenses—and the system will instantly calculate your *Estimated Passive Income* in both yearly and monthly amounts.
+                
+                *Pro-tip: Click the magnifying glass icon on any chart to open a detailed full-screen view!*
+                """
             )
 
         default:
