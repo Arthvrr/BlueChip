@@ -112,9 +112,12 @@ struct ContentView: View {
                 
                 // BOUTON IA COPILOT (Cmd + I)
                 Button(action: { NotificationCenter.default.post(name: NSNotification.Name("OpenAICopilot"), object: nil) }) {
-                    Image(systemName: "sparkles")
-                        .font(.title2)
-                        .foregroundColor(.secondary) // En bleu pour bien le démarquer !
+                    Image("AI")
+                        .resizable()
+                        .scaledToFit()
+                        .frame(width: 20, height: 20) // Ajuste la taille selon tes préférences
+                        .foregroundColor(.secondary) // Ça marchera grâce au "Template Image" !
+
                 }.buttonStyle(.plain)
                 .padding(.trailing, 8)
                 

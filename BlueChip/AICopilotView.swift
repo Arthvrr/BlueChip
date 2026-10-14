@@ -63,8 +63,11 @@ struct AICopilotView: View {
         VStack(spacing: 0) {
             // HEADER
             HStack {
-                Image(systemName: "sparkles")
-                    .foregroundColor(.blue)
+                Image("AI")
+                    .resizable()
+                    .scaledToFit()
+                    .frame(width: 20, height: 20) // Ajuste la taille selon tes préférences
+                    .foregroundColor(.secondary) // Ça marchera grâce au "Template Image" !
                 Text("BlueChip AI Copilot")
                     .font(.title2)
                     .fontWeight(.bold)
@@ -1092,9 +1095,12 @@ struct ChatBubble: View {
             VStack(alignment: isUser ? .trailing : .leading, spacing: 6) {
                 HStack(spacing: 6) {
                     if !isUser {
-                        Image(systemName: "sparkles")
-                            .font(.caption2)
-                            .foregroundColor(.blue)
+                        Image("AI")
+                            .resizable()
+                            .scaledToFit()
+                            .frame(width: 20, height: 20) // Ajuste la taille selon tes préférences
+                            .foregroundColor(.secondary) // Ça marchera grâce au "Template Image" !
+
                     }
                     Text(isUser ? "You" : "BlueChip AI")
                         .font(.caption)
