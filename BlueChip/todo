@@ -1,4 +1,4 @@
-créer plusieurs portefeuille
+créer plusieurs portefeuilles
 
 ajouter recherche globale sur l'appli (rechercher par ticker, nom de page, date transaction, critère, nom graphe, date calendrier, indice benchmarkx    ) --> année et avoir big récap de l'année ? jsp si trop difficile
 
@@ -10,6 +10,4 @@ icone barre des menus : 3 prochains évents, chaque position avec prix actuel + 
 
 demander à l'IA des idées d'ajouts !! que ce soit Pages ou features
 
-AUJOURDHUI :
-
-bouton IA qui analyse le contenu de la page, et donne son avis ! ≠ pour chaque page (GYOK, Gemini Flash)
+activer historique des convs avec l'IA
