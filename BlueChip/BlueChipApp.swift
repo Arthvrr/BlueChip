@@ -66,7 +66,7 @@ struct BlueChipApp: App {
             // 4. Menu Outils (Tools > Search, AI Copilot)
             CommandMenu("Tools") {
                 Button("Global Search") {
-                    NotificationCenter.default.post(name: NSNotification.Name("OpenSearch"), object: nil)
+                    NotificationCenter.default.post(name: NSNotification.Name("GlobalSearch"), object: nil)
                 }
                 .keyboardShortcut("f", modifiers: .command) // Cmd + F
                 

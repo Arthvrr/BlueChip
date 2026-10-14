@@ -1,6 +1,6 @@
 créer plusieurs portefeuilles
 
-ajouter recherche globale sur l'appli (rechercher par ticker, nom de page, date transaction, critère, nom graphe, date calendrier, indice benchmarkx    ) --> année et avoir big récap de l'année ? jsp si trop difficile
+étendre recherche globale à nom de graphiques, actions en watchlist, nom case header d'une des pages, accepter dates chiffrées (27/03/2023 et pas 27 Mar 2023)
 
 page Renforcement (voir quelles actions renforcer, avec delta pru - prix actuel, score de qualité, valorisation)
 

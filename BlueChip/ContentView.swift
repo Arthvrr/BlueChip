@@ -10,7 +10,6 @@ struct ContentView: View {
     @State private var selectedTab: AppTab = .composition
     @State private var showAddSheet = false
     
-    // NOUVEAU : État temporaire pour la recherche globale (Cmd + K)
     @State private var showGlobalSearch = false
     
     // Variables persistantes
@@ -28,7 +27,6 @@ struct ContentView: View {
     @State private var showAbout = false
     @State private var showTutorial = false
     
-    @State private var showSearch = false
     @State private var showAICopilot = false
     
     @State private var resumeAIChat = false
@@ -102,8 +100,7 @@ struct ContentView: View {
                     .foregroundColor(.primary)
                 Spacer()
                                 
-                // BOUTON RECHERCHE GLOBALE (Cmd + F)
-                Button(action: { NotificationCenter.default.post(name: NSNotification.Name("OpenSearch"), object: nil) }) {
+                Button(action: { NotificationCenter.default.post(name: NSNotification.Name("GlobalSearch"), object: nil) }) {
                     Image(systemName: "magnifyingglass")
                         .font(.title2)
                         .foregroundColor(.secondary)
@@ -207,17 +204,10 @@ struct ContentView: View {
         .sheet(isPresented: $showAddSheet) { EditPositionView(viewModel: viewModel, position: nil) }
         .sheet(isPresented: $viewModel.showSettings) { SettingsView(viewModel: viewModel) }
         
-        // La modale temporaire pour la recherche globale
         .sheet(isPresented: $showGlobalSearch) {
-            VStack(spacing: 16) {
-                Image(systemName: "magnifyingglass").font(.system(size: 50)).foregroundColor(.blue)
-                Text("Global Search").font(.title).fontWeight(.bold)
-                Text("Appuyez sur Cmd + F depuis n'importe où.\nMoteur de recherche en construction !").multilineTextAlignment(.center).foregroundColor(.secondary)
-                Button("Close") { showGlobalSearch = false }.keyboardShortcut(.cancelAction)
-            }
-            .padding(40)
-            .frame(width: 400, height: 300)
+            GlobalSearchView(viewModel: viewModel, selectedTab: $selectedTab)
         }
+
         
         // --- NOUVELLES MODALES (SHEETS) ---
         .sheet(isPresented: $showAddTransaction) {
@@ -225,12 +215,6 @@ struct ContentView: View {
         }
         .sheet(isPresented: $showAddEvent) {
             AddEditEventSheet(viewModel: viewModel, event: nil, initialDate: Date())
-        }
-        .onReceive(NotificationCenter.default.publisher(for: NSNotification.Name("OpenAddTransaction"))) { _ in
-            showAddTransaction = true
-        }
-        .onReceive(NotificationCenter.default.publisher(for: NSNotification.Name("OpenAddEvent"))) { _ in
-            showAddEvent = true
         }
 
         .sheet(isPresented: $showCheatSheet) { CheatSheetView() }
@@ -264,9 +248,6 @@ struct ContentView: View {
         .onReceive(NotificationCenter.default.publisher(for: NSNotification.Name("LockApp"))) { _ in lockApp() }
         .onReceive(NotificationCenter.default.publisher(for: NSNotification.Name("ToggleFullScreen"))) { _ in
             if let window = NSApplication.shared.keyWindow ?? NSApplication.shared.windows.first { window.toggleFullScreen(nil)}}
-        
-        .onReceive(NotificationCenter.default.publisher(for: NSNotification.Name("OpenSearch"))) { _ in showSearch = true}
-        //.onReceive(NotificationCenter.default.publisher(for: NSNotification.Name("OpenAICopilot"))) { _ in showAICopilot = true}
         
         .onReceive(NotificationCenter.default.publisher(for: NSNotification.Name("OpenAICopilot"))) { _ in
             // L'application vérifie silencieusement s'il y a une sauvegarde pour la page actuelle
