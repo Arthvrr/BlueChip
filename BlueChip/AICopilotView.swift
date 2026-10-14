@@ -1,9 +1,57 @@
 import SwiftUI
 
+// =========================================================================
+// MARK: - CHAT HISTORY MANAGER (SAUVEGARDE LOCALE)
+// =========================================================================
+class ChatHistoryManager {
+    static let shared = ChatHistoryManager()
+    private let keyPrefix = "ai_chat_"
+
+    func save(_ messages: [ChatMessage], for tab: String) {
+        if let data = try? JSONEncoder().encode(messages) {
+            UserDefaults.standard.set(data, forKey: keyPrefix + tab)
+            // Notifie l'interface pour afficher/cacher le bouton de reprise
+            DispatchQueue.main.async {
+                NotificationCenter.default.post(name: NSNotification.Name("ChatHistoryUpdated"), object: nil)
+            }
+        }
+    }
+
+    func load(for tab: String) -> [ChatMessage]? {
+        guard let data = UserDefaults.standard.data(forKey: keyPrefix + tab) else {
+            return nil
+        }
+        
+        do {
+            let decodedMessages = try JSONDecoder().decode([ChatMessage].self, from: data)
+            return decodedMessages
+        } catch {
+            print("Erreur de décodage de l'historique pour \(tab): \(error)")
+            // Si le fichier est corrompu ou illisible, on le supprime
+            clear(for: tab)
+            return nil
+        }
+    }
+
+
+    func clear(for tab: String) {
+        UserDefaults.standard.removeObject(forKey: keyPrefix + tab)
+        DispatchQueue.main.async {
+            NotificationCenter.default.post(name: NSNotification.Name("ChatHistoryUpdated"), object: nil)
+        }
+    }
+    
+    func hasHistory(for tab: String) -> Bool {
+        return UserDefaults.standard.data(forKey: keyPrefix + tab) != nil
+    }
+}
+
+
 struct AICopilotView: View {
     @Environment(\.dismiss) var dismiss
     @ObservedObject var viewModel: PortfolioViewModel
     let currentTab: AppTab
+    let resumeChat: Bool
     
     @AppStorage("geminiApiKey") private var geminiApiKey: String = ""
     
@@ -26,6 +74,22 @@ struct AICopilotView: View {
                     .foregroundColor(.secondary)
                 
                 Spacer()
+                
+                if !messages.isEmpty {
+                    Button(action: {
+                        ChatHistoryManager.shared.clear(for: currentTab.rawValue)
+                        messages.removeAll()
+                        startInitialAnalysis()
+                    }) {
+                        Image(systemName: "trash")
+                            .font(.title3)
+                            .foregroundColor(.red.opacity(0.8))
+                    }
+                    .buttonStyle(.plain)
+                    .padding(.trailing, 8)
+                    .help("Clear Chat History and Restart")
+                }
+                
                 Button(action: { dismiss() }) {
                     Image(systemName: "xmark.circle.fill")
                         .font(.title2)
@@ -60,7 +124,7 @@ struct AICopilotView: View {
                 // INTERFACE DU CHAT
                 ScrollViewReader { proxy in
                     ScrollView {
-                        LazyVStack(spacing: 16) {
+                        VStack(spacing: 16) {
                             ForEach(messages) { message in
                                 ChatBubble(message: message)
                                     .id(message.id)
@@ -81,10 +145,17 @@ struct AICopilotView: View {
                         .padding()
                     }
                     .onChange(of: messages.count) { _ in
-                        withAnimation { proxy.scrollTo(messages.last?.id, anchor: .bottom) }
+                        // Un léger délai permet à SwiftUI de calculer la taille finale du texte avant de scroller
+                        DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) {
+                            withAnimation { proxy.scrollTo(messages.last?.id, anchor: .bottom) }
+                        }
                     }
                     .onChange(of: isThinking) { _ in
-                        if isThinking { withAnimation { proxy.scrollTo("thinking", anchor: .bottom) } }
+                        if isThinking {
+                            DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) {
+                                withAnimation { proxy.scrollTo("thinking", anchor: .bottom) }
+                            }
+                        }
                     }
                 }
                 
@@ -118,9 +189,19 @@ struct AICopilotView: View {
         .frame(width: 700, height: 600)
         .onAppear {
             if !geminiApiKey.isEmpty && messages.isEmpty {
-                startInitialAnalysis()
+                if resumeChat {
+                    if let savedMessages = ChatHistoryManager.shared.load(for: currentTab.rawValue) {
+                        self.messages = savedMessages
+                    } else {
+                        startInitialAnalysis()
+                    }
+                } else {
+                    ChatHistoryManager.shared.clear(for: currentTab.rawValue)
+                    startInitialAnalysis()
+                }
             }
         }
+
     }
     
     // ==========================================
@@ -140,11 +221,13 @@ struct AICopilotView: View {
                 await MainActor.run {
                     // On n'affiche QUE la réponse du modèle !
                     messages.append(ChatMessage(role: "model", text: response))
+                    ChatHistoryManager.shared.save(messages, for: currentTab.rawValue) // <-- NOUVEAU : SAUVEGARDE
                     isThinking = false
                 }
             } catch {
                 await MainActor.run {
                     messages.append(ChatMessage(role: "model", text: "⚠️ Error: \(error.localizedDescription)"))
+                    ChatHistoryManager.shared.save(messages, for: currentTab.rawValue) // <-- NOUVEAU : SAUVEGARDE
                     isThinking = false
                 }
             }
@@ -837,18 +920,17 @@ struct AICopilotView: View {
             
             // Anniversaires d'achat
             for pos in viewModel.positions {
-                if let pDate = pos.purchaseDate {
-                    let pYear = Calendar.current.component(.year, from: pDate)
-                    let yearsHeld = currentYear - pYear
-                    if yearsHeld > 0 {
-                        var comps = Calendar.current.dateComponents([.month, .day], from: pDate)
-                        comps.year = currentYear
-                        if let annivDate = Calendar.current.date(from: comps) {
-                            allEvents.append(CalendarEvent(id: UUID(), date: annivDate, type: .anniversary, ticker: pos.ticker, note: "Holding for \(yearsHeld) Years"))
-                        }
+                let pYear = Calendar.current.component(.year, from: pos.purchaseDate)
+                let yearsHeld = currentYear - pYear
+                if yearsHeld > 0 {
+                    var comps = Calendar.current.dateComponents([.month, .day], from: pos.purchaseDate)
+                    comps.year = currentYear
+                    if let annivDate = Calendar.current.date(from: comps) {
+                        allEvents.append(CalendarEvent(id: UUID(), date: annivDate, type: .anniversary, ticker: pos.ticker, note: "Holding for \(yearsHeld) Years"))
                     }
                 }
             }
+
             
             // 2. Filtrage des événements futurs et des jours fériés
             let upcomingEvents = allEvents.filter { Calendar.current.startOfDay(for: $0.date) >= today }.sorted { $0.date < $1.date }
@@ -968,11 +1050,15 @@ struct AICopilotView: View {
                 
                 await MainActor.run {
                     messages.append(ChatMessage(role: "model", text: response))
+                    // NOUVEAU : On sauvegarde la discussion mise à jour !
+                    ChatHistoryManager.shared.save(messages, for: currentTab.rawValue)
                     isThinking = false
                 }
             } catch {
                 await MainActor.run {
                     messages.append(ChatMessage(role: "model", text: "⚠️ Error: \(error.localizedDescription)"))
+                    // NOUVEAU : On sauvegarde même s'il y a une erreur
+                    ChatHistoryManager.shared.save(messages, for: currentTab.rawValue)
                     isThinking = false
                 }
             }

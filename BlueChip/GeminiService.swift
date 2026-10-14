@@ -1,7 +1,7 @@
 import Foundation
 
-struct ChatMessage: Identifiable, Equatable {
-    let id = UUID()
+struct ChatMessage: Identifiable, Equatable, Codable {
+    var id = UUID()
     var role: String // "user" ou "model"
     var text: String
 }

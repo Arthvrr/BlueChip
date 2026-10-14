@@ -30,6 +30,8 @@ struct ContentView: View {
     
     @State private var showSearch = false
     @State private var showAICopilot = false
+    
+    @State private var resumeAIChat = false
 
 
     var body: some View {
@@ -233,8 +235,9 @@ struct ContentView: View {
         .sheet(isPresented: $showTutorial) { TutorialView(currentTab: selectedTab) }
         
         .sheet(isPresented: $showAICopilot) {
-            AICopilotView(viewModel: viewModel, currentTab: selectedTab)
+            AICopilotView(viewModel: viewModel, currentTab: selectedTab, resumeChat: resumeAIChat)
         }
+
 
         
         // --- NOUVEAUX ÉCOUTEURS ---
@@ -260,8 +263,14 @@ struct ContentView: View {
             if let window = NSApplication.shared.keyWindow ?? NSApplication.shared.windows.first { window.toggleFullScreen(nil)}}
         
         .onReceive(NotificationCenter.default.publisher(for: NSNotification.Name("OpenSearch"))) { _ in showSearch = true}
-        .onReceive(NotificationCenter.default.publisher(for: NSNotification.Name("OpenAICopilot"))) { _ in showAICopilot = true}
-
+        //.onReceive(NotificationCenter.default.publisher(for: NSNotification.Name("OpenAICopilot"))) { _ in showAICopilot = true}
+        
+        .onReceive(NotificationCenter.default.publisher(for: NSNotification.Name("OpenAICopilot"))) { _ in
+            // L'application vérifie silencieusement s'il y a une sauvegarde pour la page actuelle
+            // Si oui, ça reprend. Si non, ça lance une nouvelle analyse !
+            resumeAIChat = ChatHistoryManager.shared.hasHistory(for: selectedTab.rawValue)
+            showAICopilot = true
+        }
     }
     
     // ==========================================
