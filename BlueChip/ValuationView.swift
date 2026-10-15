@@ -270,6 +270,10 @@ struct ValuationControlsSection: View {
 // MARK: - 3. PRICE VALUATION TABLE
 // =========================================================================
 
+// =========================================================================
+// MARK: - 3. PRICE VALUATION TABLE
+// =========================================================================
+
 struct ValuationPriceTableSection: View {
     @ObservedObject var viewModel: PortfolioViewModel
     let marginOfSafety: Double
@@ -301,38 +305,46 @@ struct ValuationPriceTableSection: View {
                 if viewModel.positions.isEmpty {
                     Text("No positions in portfolio.").foregroundColor(.secondary).padding(30)
                 } else {
-                    ScrollView {
-                        LazyVStack(spacing: 0) {
-                            ForEach(viewModel.positions) { pos in
-                                let fairP = pos.fairPrice(marginOfSafety: marginOfSafety)
-                                let upside = pos.fairPriceUpside(marginOfSafety: marginOfSafety)
-                                let isUndervalued = pos.currentPrice < fairP && fairP > 0
+                    // SUPPRESSION DU SCROLLVIEW ICI POUR LAISSER LE TABLEAU S'ÉTIRER
+                    VStack(spacing: 0) {
+                        ForEach(viewModel.positions) { pos in
+                            let fairP = pos.fairPrice(marginOfSafety: marginOfSafety)
+                            let upside = pos.fairPriceUpside(marginOfSafety: marginOfSafety)
+                            let isUndervalued = pos.currentPrice < fairP && fairP > 0
+                            
+                            HStack(spacing: 8) {
+                                Text(pos.ticker).fontWeight(.bold).frame(width: 70, alignment: .leading)
+                                Text(pos.currentPrice.formatted(.currency(code: pos.currency).precision(.fractionLength(2)))).fontWeight(.semibold).blur(radius: privacyMode ? 6 : 0).frame(maxWidth: .infinity, alignment: .trailing)
+                                Text(pos.valTargetPrice > 0 ? pos.valTargetPrice.formatted(.currency(code: pos.currency).precision(.fractionLength(2))) : "-").foregroundColor(.purple).blur(radius: privacyMode ? 6 : 0).frame(maxWidth: .infinity, alignment: .trailing)
+                                Text(pos.valGuruFocusPrice > 0 ? pos.valGuruFocusPrice.formatted(.currency(code: pos.currency).precision(.fractionLength(2))) : "-").foregroundColor(.secondary).blur(radius: privacyMode ? 6 : 0).frame(maxWidth: .infinity, alignment: .trailing)
+                                Text(pos.valTipRanksPrice > 0 ? pos.valTipRanksPrice.formatted(.currency(code: pos.currency).precision(.fractionLength(2))) : "-").foregroundColor(.secondary).blur(radius: privacyMode ? 6 : 0).frame(maxWidth: .infinity, alignment: .trailing)
+                                Text(fairP > 0 ? fairP.formatted(.currency(code: pos.currency).precision(.fractionLength(2))) : "-").fontWeight(.bold).foregroundColor(isUndervalued ? .green : .primary).blur(radius: privacyMode ? 6 : 0).frame(maxWidth: .infinity, alignment: .trailing)
                                 
-                                HStack(spacing: 8) {
-                                    Text(pos.ticker).fontWeight(.bold).frame(width: 70, alignment: .leading)
-                                    Text(pos.currentPrice.formatted(.currency(code: pos.currency).precision(.fractionLength(2)))).fontWeight(.semibold).blur(radius: privacyMode ? 6 : 0).frame(maxWidth: .infinity, alignment: .trailing)
-                                    Text(pos.valTargetPrice > 0 ? pos.valTargetPrice.formatted(.currency(code: pos.currency).precision(.fractionLength(2))) : "-").foregroundColor(.purple).blur(radius: privacyMode ? 6 : 0).frame(maxWidth: .infinity, alignment: .trailing)
-                                    Text(pos.valGuruFocusPrice > 0 ? pos.valGuruFocusPrice.formatted(.currency(code: pos.currency).precision(.fractionLength(2))) : "-").foregroundColor(.secondary).blur(radius: privacyMode ? 6 : 0).frame(maxWidth: .infinity, alignment: .trailing)
-                                    Text(pos.valTipRanksPrice > 0 ? pos.valTipRanksPrice.formatted(.currency(code: pos.currency).precision(.fractionLength(2))) : "-").foregroundColor(.secondary).blur(radius: privacyMode ? 6 : 0).frame(maxWidth: .infinity, alignment: .trailing)
-                                    Text(fairP > 0 ? fairP.formatted(.currency(code: pos.currency).precision(.fractionLength(2))) : "-").fontWeight(.bold).foregroundColor(isUndervalued ? .green : .primary).blur(radius: privacyMode ? 6 : 0).frame(maxWidth: .infinity, alignment: .trailing)
-                                    
-                                    if fairP > 0 {
-                                        Text(upside.formatted(.percent.precision(.fractionLength(1)).sign(strategy: .always()))).fontWeight(.bold).padding(.horizontal, 6).padding(.vertical, 2).background((upside >= 0 ? Color.green : Color.red).opacity(0.15)).foregroundColor(upside >= 0 ? .green : .red).cornerRadius(4).blur(radius: privacyMode ? 6 : 0).frame(maxWidth: .infinity, alignment: .trailing)
-                                    } else {
-                                        Text("-").frame(maxWidth: .infinity, alignment: .trailing)
-                                    }
+                                if fairP > 0 {
+                                    Text(upside.formatted(.percent.precision(.fractionLength(1)).sign(strategy: .always()))).fontWeight(.bold).padding(.horizontal, 6).padding(.vertical, 2).background((upside >= 0 ? Color.green : Color.red).opacity(0.15)).foregroundColor(upside >= 0 ? .green : .red).cornerRadius(4).blur(radius: privacyMode ? 6 : 0).frame(maxWidth: .infinity, alignment: .trailing)
+                                } else {
+                                    Text("-").frame(maxWidth: .infinity, alignment: .trailing)
                                 }
-                                .padding(.horizontal, 16).padding(.vertical, 12).contentShape(Rectangle())
-                                .onTapGesture(count: 2) { onEdit(pos) }
-                                Divider()
                             }
+                            .padding(.horizontal, 16).padding(.vertical, 12).contentShape(Rectangle())
+                            .onTapGesture(count: 2) { onEdit(pos) }
+                            Divider()
                         }
                     }
                 }
             }.background(Color(NSColor.controlBackgroundColor)).cornerRadius(8).overlay(RoundedRectangle(cornerRadius: 8).stroke(Color.gray.opacity(0.2), lineWidth: 1))
-        }.frame(height: 380).padding().background(Color(NSColor.controlBackgroundColor)).cornerRadius(12).shadow(color: Color.black.opacity(0.05), radius: 2, x: 0, y: 1)
+        }
+        // SUPPRESSION DE .frame(height: 380) ICI
+        .padding()
+        .background(Color(NSColor.controlBackgroundColor))
+        .cornerRadius(12)
+        .shadow(color: Color.black.opacity(0.05), radius: 2, x: 0, y: 1)
     }
 }
+
+// =========================================================================
+// MARK: - 4. MULTIPLES & YIELDS TABLE
+// =========================================================================
 
 // =========================================================================
 // MARK: - 4. MULTIPLES & YIELDS TABLE
@@ -369,43 +381,47 @@ struct ValuationPETableSection: View {
                 if viewModel.positions.isEmpty {
                     Text("No positions in portfolio.").foregroundColor(.secondary).padding(30)
                 } else {
-                    ScrollView {
-                        LazyVStack(spacing: 0) {
-                            ForEach(viewModel.positions) { pos in
-                                HStack(spacing: 8) {
-                                    Text(pos.ticker).fontWeight(.bold).frame(width: 70, alignment: .leading)
-                                    Text(pos.valCurrentPE > 0 ? pos.valCurrentPE.formatted(.number.precision(.fractionLength(1))) : "-").foregroundColor((pos.valCurrentPE < pos.valHistoricalPE10Y && pos.valHistoricalPE10Y > 0) ? .green : .primary).blur(radius: privacyMode ? 6 : 0).frame(maxWidth: .infinity, alignment: .trailing)
-                                    Text(pos.valForwardPE > 0 ? pos.valForwardPE.formatted(.number.precision(.fractionLength(1))) : "-").foregroundColor((pos.valForwardPE < pos.valCurrentPE && pos.valCurrentPE > 0) ? .teal : .primary).blur(radius: privacyMode ? 6 : 0).frame(maxWidth: .infinity, alignment: .trailing)
-                                    Text(pos.valHistoricalPE10Y > 0 ? pos.valHistoricalPE10Y.formatted(.number.precision(.fractionLength(1))) : "-").foregroundColor(.secondary).blur(radius: privacyMode ? 6 : 0).frame(maxWidth: .infinity, alignment: .trailing)
-                                    Text(pos.valPFcf > 0 ? pos.valPFcf.formatted(.number.precision(.fractionLength(1))) : "-").fontWeight(.medium).blur(radius: privacyMode ? 6 : 0).frame(maxWidth: .infinity, alignment: .trailing)
-                                    
-                                    if pos.valPeg > 0 {
-                                        Text(pos.valPeg.formatted(.number.precision(.fractionLength(2)))).fontWeight(.semibold).foregroundColor(pos.valPeg <= 1.0 ? .green : (pos.valPeg > 2.0 ? .orange : .primary)).blur(radius: privacyMode ? 6 : 0).frame(maxWidth: .infinity, alignment: .trailing)
-                                    } else {
-                                        Text("-").frame(maxWidth: .infinity, alignment: .trailing)
-                                    }
-                                    
-                                    if pos.earningsYield > 0 {
-                                        Text(pos.earningsYield.formatted(.percent.precision(.fractionLength(1)))).foregroundColor(.blue).blur(radius: privacyMode ? 6 : 0).frame(maxWidth: .infinity, alignment: .trailing)
-                                    } else {
-                                        Text("-").frame(maxWidth: .infinity, alignment: .trailing)
-                                    }
-                                    
-                                    if pos.fcfYield > 0 {
-                                        Text(pos.fcfYield.formatted(.percent.precision(.fractionLength(1)))).fontWeight(.bold).foregroundColor(.green).blur(radius: privacyMode ? 6 : 0).frame(maxWidth: .infinity, alignment: .trailing)
-                                    } else {
-                                        Text("-").frame(maxWidth: .infinity, alignment: .trailing)
-                                    }
+                    // SUPPRESSION DU SCROLLVIEW ICI POUR LAISSER LE TABLEAU S'ÉTIRER
+                    VStack(spacing: 0) {
+                        ForEach(viewModel.positions) { pos in
+                            HStack(spacing: 8) {
+                                Text(pos.ticker).fontWeight(.bold).frame(width: 70, alignment: .leading)
+                                Text(pos.valCurrentPE > 0 ? pos.valCurrentPE.formatted(.number.precision(.fractionLength(1))) : "-").foregroundColor((pos.valCurrentPE < pos.valHistoricalPE10Y && pos.valHistoricalPE10Y > 0) ? .green : .primary).blur(radius: privacyMode ? 6 : 0).frame(maxWidth: .infinity, alignment: .trailing)
+                                Text(pos.valForwardPE > 0 ? pos.valForwardPE.formatted(.number.precision(.fractionLength(1))) : "-").foregroundColor((pos.valForwardPE < pos.valCurrentPE && pos.valCurrentPE > 0) ? .teal : .primary).blur(radius: privacyMode ? 6 : 0).frame(maxWidth: .infinity, alignment: .trailing)
+                                Text(pos.valHistoricalPE10Y > 0 ? pos.valHistoricalPE10Y.formatted(.number.precision(.fractionLength(1))) : "-").foregroundColor(.secondary).blur(radius: privacyMode ? 6 : 0).frame(maxWidth: .infinity, alignment: .trailing)
+                                Text(pos.valPFcf > 0 ? pos.valPFcf.formatted(.number.precision(.fractionLength(1))) : "-").fontWeight(.medium).blur(radius: privacyMode ? 6 : 0).frame(maxWidth: .infinity, alignment: .trailing)
+                                
+                                if pos.valPeg > 0 {
+                                    Text(pos.valPeg.formatted(.number.precision(.fractionLength(2)))).fontWeight(.semibold).foregroundColor(pos.valPeg <= 1.0 ? .green : (pos.valPeg > 2.0 ? .orange : .primary)).blur(radius: privacyMode ? 6 : 0).frame(maxWidth: .infinity, alignment: .trailing)
+                                } else {
+                                    Text("-").frame(maxWidth: .infinity, alignment: .trailing)
                                 }
-                                .padding(.horizontal, 16).padding(.vertical, 12).contentShape(Rectangle())
-                                .onTapGesture(count: 2) { onEdit(pos) }
-                                Divider()
+                                
+                                if pos.earningsYield > 0 {
+                                    Text(pos.earningsYield.formatted(.percent.precision(.fractionLength(1)))).foregroundColor(.blue).blur(radius: privacyMode ? 6 : 0).frame(maxWidth: .infinity, alignment: .trailing)
+                                } else {
+                                    Text("-").frame(maxWidth: .infinity, alignment: .trailing)
+                                }
+                                
+                                if pos.fcfYield > 0 {
+                                    Text(pos.fcfYield.formatted(.percent.precision(.fractionLength(1)))).fontWeight(.bold).foregroundColor(.green).blur(radius: privacyMode ? 6 : 0).frame(maxWidth: .infinity, alignment: .trailing)
+                                } else {
+                                    Text("-").frame(maxWidth: .infinity, alignment: .trailing)
+                                }
                             }
+                            .padding(.horizontal, 16).padding(.vertical, 12).contentShape(Rectangle())
+                            .onTapGesture(count: 2) { onEdit(pos) }
+                            Divider()
                         }
                     }
                 }
             }.background(Color(NSColor.controlBackgroundColor)).cornerRadius(8).overlay(RoundedRectangle(cornerRadius: 8).stroke(Color.gray.opacity(0.2), lineWidth: 1))
-        }.frame(height: 380).padding().background(Color(NSColor.controlBackgroundColor)).cornerRadius(12).shadow(color: Color.black.opacity(0.05), radius: 2, x: 0, y: 1)
+        }
+        // SUPPRESSION DE .frame(height: 380) ICI
+        .padding()
+        .background(Color(NSColor.controlBackgroundColor))
+        .cornerRadius(12)
+        .shadow(color: Color.black.opacity(0.05), radius: 2, x: 0, y: 1)
     }
 }
 
