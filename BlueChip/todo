@@ -1,11 +1,26 @@
-créer plusieurs portefeuilles
+FINISH V1.0 BlueChip :
 
-étendre recherche globale à nom de graphiques, actions en watchlist, nom case header d'une des pages, accepter dates chiffrées (27/03/2023 et pas 27 Mar 2023)
+1. étendre recherche globale à nom de graphiques, actions en watchlist, nom case header d'une des pages, accepter dates chiffrées (27/03/2023 et pas 27 Mar 2023)
+
+2. icone barre des menus : 3 prochains évents, chaque position avec prix actuel + target price, refresh api yahoo finance
+
+3. notifs apple : ce qu'il se passe demain et aujourd'hui calendar, price target se rapproche du prix actuel, goal dépassé, dividende reçu
+
+4. demander à l'IA des idées d'ajouts !! que ce soit Pages ou features
+
+- ajouter lien et heure earnings trimestriels (avec fuseau horaire)
+
+- price valuation model plus scrollable mais responsive en hauteur
+
+- tableau yearly summary responsive avec nombre d'années et connecté à année début investissements et année en cours (remplir de 0 si pas de données)
+
+- si recherche de graphe ouvre graphe en mode zoom, si recherche event ouvre event en mode zoom
+
+PLUS TARD :
 
 page Renforcement (voir quelles actions renforcer, avec delta pru - prix actuel, score de qualité, valorisation)
 
-notifs apple : ce qu'il se passe demain et aujourd'hui calendar, price target se rapproche du prix actuel, goal dépassé, dividende reçu
+créer plusieurs portefeuilles
 
-icone barre des menus : 3 prochains évents, chaque position avec prix actuel + target price, refresh api yahoo finance
+ajouter lignes de tendances à certains graphes
 
-demander à l'IA des idées d'ajouts !! que ce soit Pages ou features
