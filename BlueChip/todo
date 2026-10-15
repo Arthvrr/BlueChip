@@ -10,6 +10,8 @@ FINISH V1.0 BlueChip :
 
 - tableau yearly summary responsive avec nombre d'années et connecté à année début investissements et année en cours (remplir de 0 si pas de données)
 
+- fuseau horaire actuel et % de taxe dividendes dans les réglages 
+
 PLUS TARD :
 
 page Renforcement (voir quelles actions renforcer, avec delta pru - prix actuel, score de qualité, valorisation)

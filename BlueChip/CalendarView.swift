@@ -724,13 +724,9 @@ struct FullWidthDayCellView: View {
 // MARK: - SHEET FICHE DÉTAILLÉE D'UN ÉVÉNEMENT
 // =========================================================================
 
-// =========================================================================
-// MARK: - SHEET FICHE DÉTAILLÉE D'UN ÉVÉNEMENT
-// =========================================================================
-
 struct EventDetailSheet: View {
     @Environment(\.dismiss) var dismiss
-    @ObservedObject var viewModel: PortfolioViewModel // <-- NOUVEAU : Accès au portfolio
+    @ObservedObject var viewModel: PortfolioViewModel // <-- Requis pour les dividendes
     let event: CalendarEvent
     let isVirtual: Bool
     let onEdit: () -> Void
@@ -776,7 +772,7 @@ struct EventDetailSheet: View {
                     }
                 }
                 
-                // SECTION SPÉCIFIQUE : EARNINGS DELTA
+                // --- SECTION EARNINGS & DELTAS ---
                 if event.type.rawValue.lowercased().contains("earning") && (event.estRevenue != nil || event.estEPS != nil) {
                     GroupBox("Earnings Estimates vs Actuals") {
                         VStack(spacing: 12) {
@@ -791,19 +787,18 @@ struct EventDetailSheet: View {
                     }
                 }
                 
-                // ============================================
-                // NOUVEAU : SECTION SPÉCIFIQUE DIVIDENDES
-                // ============================================
+                // --- SECTION DIVIDENDES (Calcul Broker 100% Fidèle) ---
                 if event.type.rawValue.lowercased().contains("dividend") {
                     if let pos = viewModel.positions.first(where: { $0.ticker == event.ticker }) {
                         let paymentsPerYear = max(1.0, Double(pos.dividendMonths.count))
-                        let divPerShareGross = pos.annualDividendNet
-                        
-                        let totalAnnualGrossLocal = divPerShareGross * pos.quantity
-                        let singlePaymentGrossLocal = totalAnnualGrossLocal / paymentsPerYear
-                        
-                        let singlePaymentGrossEUR = singlePaymentGrossLocal * pos.usdToEurRate
-                        let singlePaymentNetEUR = singlePaymentGrossEUR * 0.85 // 85% du brut
+                        // 1. Dividende annuel local divisé par le nombre de versements
+                        let singlePaymentLocalPerShare = pos.annualDividendNet / paymentsPerYear
+                        // 2. Multiplié par le nombre d'actions
+                        let totalGrossLocal = singlePaymentLocalPerShare * pos.quantity
+                        // 3. Converti en euros
+                        let singlePaymentGrossEUR = totalGrossLocal * pos.usdToEurRate
+                        // 4. Net à 85%
+                        let singlePaymentNetEUR = singlePaymentGrossEUR * 0.85
                         
                         GroupBox("Estimated Dividend Payout") {
                             VStack(spacing: 12) {
@@ -898,12 +893,12 @@ struct EventDetailSheet: View {
 }
 
 // =========================================================================
-// MARK: - FORMULAIRE D'AJOUT / ÉDITION (AVEC OPTIONS EARNINGS ET DIVIDENDES)
+// MARK: - FORMULAIRE D'AJOUT / ÉDITION (PRO, SANS "0.0")
 // =========================================================================
 
 struct AddEditEventSheet: View {
     @Environment(\.dismiss) var dismiss
-    @Environment(\.modelContext) private var context // SwiftData
+    @Environment(\.modelContext) private var context
     @ObservedObject var viewModel: PortfolioViewModel
     let event: CalendarEvent?
     let initialDate: Date
@@ -913,7 +908,6 @@ struct AddEditEventSheet: View {
     @State private var ticker: String = ""
     @State private var note: String = ""
     
-    // NOUVELLES VARIABLES
     @State private var hasTime: Bool = false
     @State private var urlLink: String = ""
     @State private var estRevenue: Double? = nil
@@ -942,6 +936,30 @@ struct AddEditEventSheet: View {
     }
     
     var isEditing: Bool { event != nil }
+    
+    // NOUVEAU : Propriété pour bloquer les champs "Actuals"
+    var isFutureEvent: Bool {
+        date > Date()
+    }
+    
+    // NOUVEAU : Helper pour enlever les "0.0" moches
+    func bindingForOptional(value: Binding<Double?>) -> Binding<String> {
+        Binding<String>(
+            get: {
+                if let v = value.wrappedValue {
+                    return v.truncatingRemainder(dividingBy: 1) == 0 ? String(format: "%.0f", v) : String(v)
+                }
+                return ""
+            },
+            set: {
+                if let v = Double($0.replacingOccurrences(of: ",", with: ".")) {
+                    value.wrappedValue = v
+                } else {
+                    value.wrappedValue = nil
+                }
+            }
+        )
+    }
     
     var availableTickers: [String] {
         let pTickers = viewModel.positions.map { $0.ticker }
@@ -987,68 +1005,115 @@ struct AddEditEventSheet: View {
                     }
                 }.padding(.bottom, 12)
                 
-                // ============================================
-                // NOUVEAU : SECTION CONDITIONNELLE EARNINGS
-                // ============================================
+                // --- SECTION EARNINGS PRO ---
                 if type.rawValue.lowercased().contains("earning") {
                     Section(header: Text("Earnings Data & Webcast").font(.headline)) {
-                        TextField("Webcast / IR URL Link", text: $urlLink)
+                        TextField("Investor Relations Link", text: $urlLink)
                         
-                        HStack(spacing: 16) {
-                            VStack(alignment: .leading) {
-                                Text("Est. Revenue").font(.caption).foregroundColor(.secondary)
-                                TextField("0.0", value: $estRevenue, format: .number).textFieldStyle(.roundedBorder)
+                        VStack(spacing: 12) {
+                            // LIGNE REVENUE
+                            VStack(spacing: 4) {
+                                HStack(spacing: 16) {
+                                    VStack(alignment: .leading, spacing: 4) {
+                                        Text("Est. Revenue").font(.caption).foregroundColor(.secondary)
+                                        TextField("Expected", text: bindingForOptional(value: $estRevenue)).textFieldStyle(.roundedBorder)
+                                    }
+                                    VStack(alignment: .leading, spacing: 4) {
+                                        HStack {
+                                            Text("Act. Revenue").font(.caption).foregroundColor(.secondary)
+                                            if isFutureEvent { Image(systemName: "lock.fill").font(.caption2).foregroundColor(.secondary) }
+                                        }
+                                        TextField(isFutureEvent ? "Locked until date" : "Actual", text: bindingForOptional(value: $actRevenue))
+                                            .textFieldStyle(.roundedBorder)
+                                            .disabled(isFutureEvent) // Bloqué si futur
+                                    }
+                                }
+                                // DELTA EN DIRECT
+                                if let e = estRevenue, let a = actRevenue, e != 0 {
+                                    let diff = a - e
+                                    let pct = diff / abs(e)
+                                    HStack {
+                                        Spacer()
+                                        Image(systemName: diff >= 0 ? "arrow.up.right.circle.fill" : "arrow.down.right.circle.fill").foregroundColor(diff >= 0 ? .green : .red)
+                                        Text("Delta:").font(.caption).foregroundColor(.secondary)
+                                        Text(pct.formatted(.percent.precision(.fractionLength(2)).sign(strategy: .always())))
+                                            .font(.subheadline).fontWeight(.bold)
+                                            .foregroundColor(diff >= 0 ? .green : .red)
+                                    }.padding(.top, 2)
+                                }
                             }
-                            VStack(alignment: .leading) {
-                                Text("Act. Revenue").font(.caption).foregroundColor(.secondary)
-                                TextField("0.0", value: $actRevenue, format: .number).textFieldStyle(.roundedBorder)
-                            }
-                        }
-                        HStack(spacing: 16) {
-                            VStack(alignment: .leading) {
-                                Text("Est. EPS").font(.caption).foregroundColor(.secondary)
-                                TextField("0.0", value: $estEPS, format: .number).textFieldStyle(.roundedBorder)
-                            }
-                            VStack(alignment: .leading) {
-                                Text("Act. EPS").font(.caption).foregroundColor(.secondary)
-                                TextField("0.0", value: $actEPS, format: .number).textFieldStyle(.roundedBorder)
+                            
+                            Divider()
+                            
+                            // LIGNE EPS
+                            VStack(spacing: 4) {
+                                HStack(spacing: 16) {
+                                    VStack(alignment: .leading, spacing: 4) {
+                                        Text("Est. EPS").font(.caption).foregroundColor(.secondary)
+                                        TextField("Expected", text: bindingForOptional(value: $estEPS)).textFieldStyle(.roundedBorder)
+                                    }
+                                    VStack(alignment: .leading, spacing: 4) {
+                                        HStack {
+                                            Text("Act. EPS").font(.caption).foregroundColor(.secondary)
+                                            if isFutureEvent { Image(systemName: "lock.fill").font(.caption2).foregroundColor(.secondary) }
+                                        }
+                                        TextField(isFutureEvent ? "Locked until date" : "Actual", text: bindingForOptional(value: $actEPS))
+                                            .textFieldStyle(.roundedBorder)
+                                            .disabled(isFutureEvent) // Bloqué si futur
+                                    }
+                                }
+                                // DELTA EN DIRECT
+                                if let e = estEPS, let a = actEPS, e != 0 {
+                                    let diff = a - e
+                                    let pct = diff / abs(e)
+                                    HStack {
+                                        Spacer()
+                                        Image(systemName: diff >= 0 ? "arrow.up.right.circle.fill" : "arrow.down.right.circle.fill").foregroundColor(diff >= 0 ? .green : .red)
+                                        Text("Delta:").font(.caption).foregroundColor(.secondary)
+                                        Text(pct.formatted(.percent.precision(.fractionLength(2)).sign(strategy: .always())))
+                                            .font(.subheadline).fontWeight(.bold)
+                                            .foregroundColor(diff >= 0 ? .green : .red)
+                                    }.padding(.top, 2)
+                                }
                             }
                         }
                     }.padding(.bottom, 12)
                 }
                 
-                // ============================================
-                // NOUVEAU : SECTION CONDITIONNELLE DIVIDENDES
-                // ============================================
+                // --- SECTION DIVIDENDES EN DIRECT ---
                 if type.rawValue.lowercased().contains("dividend") && !ticker.isEmpty {
                     if let pos = viewModel.positions.first(where: { $0.ticker == ticker }) {
-                        // Récupère les données depuis ton PortfolioViewModel
                         let paymentsPerYear = max(1.0, Double(pos.dividendMonths.count))
-                        let divPerShareGross = pos.annualDividendNet // En partant du principe que tu y rentres le brut
+                        let singlePaymentLocalPerShare = pos.annualDividendNet / paymentsPerYear
+                        let totalGrossLocal = singlePaymentLocalPerShare * pos.quantity
+                        let singlePaymentGrossEUR = totalGrossLocal * pos.usdToEurRate
+                        let singlePaymentNetEUR = singlePaymentGrossEUR * 0.85
                         
-                        let totalAnnualGrossLocal = divPerShareGross * pos.quantity
-                        let singlePaymentGrossLocal = totalAnnualGrossLocal / paymentsPerYear
-                        
-                        // Conversion en euros + calcul du net
-                        let singlePaymentGrossEUR = singlePaymentGrossLocal * pos.usdToEurRate
-                        let singlePaymentNetEUR = singlePaymentGrossEUR * 0.85 // 85% du brut
-                        
-                        Section(header: Text("Estimated Payout").font(.headline)) {
+                        Section(header: Text("Estimated Dividend Payout").font(.headline)) {
                             VStack(alignment: .leading, spacing: 8) {
-                                Text("Based on your portfolio data (\(pos.quantity.formatted()) shares):")
-                                    .font(.caption).foregroundColor(.secondary)
-                                
                                 HStack {
-                                    Text("Est. Gross Payment:")
+                                    Text("Holdings:").font(.subheadline).foregroundColor(.secondary)
                                     Spacer()
-                                    Text(singlePaymentGrossEUR.formatted(.currency(code: "EUR")))
+                                    Text("\(pos.quantity.formatted()) shares").font(.subheadline).fontWeight(.medium)
                                 }
                                 HStack {
-                                    Text("Est. Net Payment (85%):").fontWeight(.bold)
+                                    Text("Dividend per share (\(pos.currency.isEmpty ? "EUR" : pos.currency)):").font(.subheadline).foregroundColor(.secondary)
                                     Spacer()
-                                    Text(singlePaymentNetEUR.formatted(.currency(code: "EUR"))).fontWeight(.bold).foregroundColor(.green)
+                                    Text(singlePaymentLocalPerShare.formatted(.currency(code: pos.currency.isEmpty ? "EUR" : pos.currency))).font(.subheadline).fontWeight(.medium)
+                                }
+                                Divider()
+                                HStack {
+                                    Text("Estimated Gross:").font(.headline)
+                                    Spacer()
+                                    Text(singlePaymentGrossEUR.formatted(.currency(code: "EUR"))).font(.headline)
+                                }
+                                HStack {
+                                    Text("Estimated Net (85%):").font(.title3).fontWeight(.bold)
+                                    Spacer()
+                                    Text(singlePaymentNetEUR.formatted(.currency(code: "EUR"))).font(.title3).fontWeight(.bold).foregroundColor(.green)
                                 }
                             }
+                            .padding(.vertical, 4)
                         }.padding(.bottom, 12)
                     }
                 }
@@ -1077,7 +1142,7 @@ struct AddEditEventSheet: View {
                     .disabled(ticker.isEmpty)
             }.padding()
         }
-        .frame(width: 480, height: 620)
+        .frame(width: 480, height: 640)
     }
     
     func save() {
@@ -1089,9 +1154,17 @@ struct AddEditEventSheet: View {
             evt.hasTime = hasTime
             evt.urlLink = urlLink
             evt.estRevenue = estRevenue
-            evt.actRevenue = actRevenue
+            
+            // On purge les Actuals si la date vient d'être repoussée dans le futur
+            if isFutureEvent {
+                evt.actRevenue = nil
+                evt.actEPS = nil
+            } else {
+                evt.actRevenue = actRevenue
+                evt.actEPS = actEPS
+            }
+            
             evt.estEPS = estEPS
-            evt.actEPS = actEPS
             viewModel.objectWillChange.send()
         } else {
             let newEvent = CalendarEvent(
@@ -1101,13 +1174,15 @@ struct AddEditEventSheet: View {
                 ticker: ticker.uppercased(),
                 note: note
             )
-            // On assigne les nouvelles valeurs juste après la création
             newEvent.hasTime = hasTime
             newEvent.urlLink = urlLink
             newEvent.estRevenue = estRevenue
-            newEvent.actRevenue = actRevenue
             newEvent.estEPS = estEPS
-            newEvent.actEPS = actEPS
+            
+            if !isFutureEvent {
+                newEvent.actRevenue = actRevenue
+                newEvent.actEPS = actEPS
+            }
             
             context.insert(newEvent)
             viewModel.calendarEvents.append(newEvent)
