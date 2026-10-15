@@ -274,7 +274,7 @@ struct CalendarView: View {
             AddEditEventSheet(viewModel: viewModel, event: event, initialDate: event.date)
         }
         .sheet(item: $detailEvent) { event in
-            EventDetailSheet(event: event, isVirtual: isVirtualEvent(event), onEdit: {
+            EventDetailSheet(viewModel: viewModel, event: event, isVirtual: isVirtualEvent(event), onEdit: {
                 detailEvent = nil
                 editingEvent = event
             })
@@ -724,18 +724,23 @@ struct FullWidthDayCellView: View {
 // MARK: - SHEET FICHE DÉTAILLÉE D'UN ÉVÉNEMENT
 // =========================================================================
 
+// =========================================================================
+// MARK: - SHEET FICHE DÉTAILLÉE D'UN ÉVÉNEMENT
+// =========================================================================
+
 struct EventDetailSheet: View {
     @Environment(\.dismiss) var dismiss
+    @ObservedObject var viewModel: PortfolioViewModel // <-- NOUVEAU : Accès au portfolio
     let event: CalendarEvent
     let isVirtual: Bool
     let onEdit: () -> Void
     
-    var dateFormatter: DateFormatter = {
+    var dateString: String {
         let f = DateFormatter()
         f.dateStyle = .full
-        f.timeStyle = .none
-        return f
-    }()
+        f.timeStyle = event.hasTime ? .short : .none
+        return f.string(from: event.date)
+    }
 
     var body: some View {
         VStack(spacing: 20) {
@@ -757,7 +762,71 @@ struct EventDetailSheet: View {
                 HStack {
                     Text("Scheduled Date:").fontWeight(.semibold).foregroundColor(.secondary)
                     Spacer()
-                    Text(dateFormatter.string(from: event.date)).font(.subheadline)
+                    Text(dateString).font(.subheadline)
+                }
+                
+                if !event.urlLink.isEmpty, let url = URL(string: event.urlLink) {
+                    HStack {
+                        Text("Webcast / Info:").fontWeight(.semibold).foregroundColor(.secondary)
+                        Spacer()
+                        Link(destination: url) {
+                            Label("Open Link", systemImage: "link")
+                                .font(.caption).fontWeight(.bold)
+                        }
+                    }
+                }
+                
+                // SECTION SPÉCIFIQUE : EARNINGS DELTA
+                if event.type.rawValue.lowercased().contains("earning") && (event.estRevenue != nil || event.estEPS != nil) {
+                    GroupBox("Earnings Estimates vs Actuals") {
+                        VStack(spacing: 12) {
+                            if event.estRevenue != nil || event.actRevenue != nil {
+                                deltaRow(title: "Revenue", est: event.estRevenue, act: event.actRevenue, isCurrency: true)
+                            }
+                            if event.estEPS != nil || event.actEPS != nil {
+                                deltaRow(title: "EPS", est: event.estEPS, act: event.actEPS, isCurrency: true)
+                            }
+                        }
+                        .padding(.vertical, 4)
+                    }
+                }
+                
+                // ============================================
+                // NOUVEAU : SECTION SPÉCIFIQUE DIVIDENDES
+                // ============================================
+                if event.type.rawValue.lowercased().contains("dividend") {
+                    if let pos = viewModel.positions.first(where: { $0.ticker == event.ticker }) {
+                        let paymentsPerYear = max(1.0, Double(pos.dividendMonths.count))
+                        let divPerShareGross = pos.annualDividendNet
+                        
+                        let totalAnnualGrossLocal = divPerShareGross * pos.quantity
+                        let singlePaymentGrossLocal = totalAnnualGrossLocal / paymentsPerYear
+                        
+                        let singlePaymentGrossEUR = singlePaymentGrossLocal * pos.usdToEurRate
+                        let singlePaymentNetEUR = singlePaymentGrossEUR * 0.85 // 85% du brut
+                        
+                        GroupBox("Estimated Dividend Payout") {
+                            VStack(spacing: 12) {
+                                HStack {
+                                    Text("Portfolio Holdings:").font(.caption).foregroundColor(.secondary)
+                                    Spacer()
+                                    Text("\(pos.quantity.formatted()) shares").font(.caption).fontWeight(.medium)
+                                }
+                                Divider()
+                                HStack {
+                                    Text("Estimated Gross:")
+                                    Spacer()
+                                    Text(singlePaymentGrossEUR.formatted(.currency(code: "EUR")))
+                                }
+                                HStack {
+                                    Text("Estimated Net (85%):").fontWeight(.bold)
+                                    Spacer()
+                                    Text(singlePaymentNetEUR.formatted(.currency(code: "EUR"))).fontWeight(.bold).foregroundColor(.green)
+                                }
+                            }
+                            .padding(.vertical, 4)
+                        }
+                    }
                 }
                 
                 if !event.note.isEmpty {
@@ -778,7 +847,6 @@ struct EventDetailSheet: View {
                 Button("Close") { dismiss() }.keyboardShortcut(.cancelAction)
                 Spacer()
                 
-                // Ne propose l'édition que si ce n'est pas un événement autogénéré
                 if !isVirtual {
                     Button(action: onEdit) {
                         Label("Edit Event", systemImage: "pencil")
@@ -790,17 +858,52 @@ struct EventDetailSheet: View {
             }
         }
         .padding(24)
-        .frame(width: 400)
+        .frame(width: 450)
+    }
+    
+    @ViewBuilder
+    func deltaRow(title: String, est: Double?, act: Double?, isCurrency: Bool) -> some View {
+        HStack {
+            Text(title).fontWeight(.semibold).frame(width: 70, alignment: .leading)
+            
+            VStack(alignment: .trailing) {
+                Text("Est.").font(.caption2).foregroundColor(.secondary)
+                if let e = est {
+                    Text(isCurrency ? e.formatted(.currency(code: "USD").notation(.compactName)) : e.formatted())
+                } else { Text("-") }
+            }.frame(maxWidth: .infinity, alignment: .trailing)
+            
+            VStack(alignment: .trailing) {
+                Text("Act.").font(.caption2).foregroundColor(.secondary)
+                if let a = act {
+                    Text(isCurrency ? a.formatted(.currency(code: "USD").notation(.compactName)) : a.formatted()).fontWeight(.bold)
+                } else { Text("-").fontWeight(.bold) }
+            }.frame(maxWidth: .infinity, alignment: .trailing)
+            
+            VStack(alignment: .trailing) {
+                Text("Delta").font(.caption2).foregroundColor(.secondary)
+                if let e = est, let a = act, e != 0 {
+                    let diff = a - e
+                    let pct = (diff / abs(e))
+                    Text(pct.formatted(.percent.precision(.fractionLength(1)).sign(strategy: .always())))
+                        .font(.caption).fontWeight(.bold)
+                        .padding(.horizontal, 6).padding(.vertical, 2)
+                        .background((diff >= 0 ? Color.green : Color.red).opacity(0.15))
+                        .foregroundColor(diff >= 0 ? .green : .red)
+                        .cornerRadius(4)
+                } else { Text("-") }
+            }.frame(width: 70, alignment: .trailing)
+        }
     }
 }
 
 // =========================================================================
-// MARK: - FORMULAIRE D'AJOUT / ÉDITION
+// MARK: - FORMULAIRE D'AJOUT / ÉDITION (AVEC OPTIONS EARNINGS ET DIVIDENDES)
 // =========================================================================
 
 struct AddEditEventSheet: View {
     @Environment(\.dismiss) var dismiss
-    @Environment(\.modelContext) private var context // <-- NOUVEAU
+    @Environment(\.modelContext) private var context // SwiftData
     @ObservedObject var viewModel: PortfolioViewModel
     let event: CalendarEvent?
     let initialDate: Date
@@ -809,6 +912,14 @@ struct AddEditEventSheet: View {
     @State private var type: CalendarEventType = .earnings
     @State private var ticker: String = ""
     @State private var note: String = ""
+    
+    // NOUVELLES VARIABLES
+    @State private var hasTime: Bool = false
+    @State private var urlLink: String = ""
+    @State private var estRevenue: Double? = nil
+    @State private var actRevenue: Double? = nil
+    @State private var estEPS: Double? = nil
+    @State private var actEPS: Double? = nil
     
     init(viewModel: PortfolioViewModel, event: CalendarEvent?, initialDate: Date) {
         self.viewModel = viewModel
@@ -820,6 +931,13 @@ struct AddEditEventSheet: View {
             _type = State(initialValue: ev.type)
             _ticker = State(initialValue: ev.ticker)
             _note = State(initialValue: ev.note)
+            
+            _hasTime = State(initialValue: ev.hasTime)
+            _urlLink = State(initialValue: ev.urlLink)
+            _estRevenue = State(initialValue: ev.estRevenue)
+            _actRevenue = State(initialValue: ev.actRevenue)
+            _estEPS = State(initialValue: ev.estEPS)
+            _actEPS = State(initialValue: ev.actEPS)
         }
     }
     
@@ -842,7 +960,10 @@ struct AddEditEventSheet: View {
             
             Form {
                 Section(header: Text("Event Details").font(.headline)) {
-                    DatePicker("Date", selection: $date, displayedComponents: .date)
+                    HStack {
+                        DatePicker("Date & Time", selection: $date, displayedComponents: hasTime ? [.date, .hourAndMinute] : .date)
+                        Toggle("Precise Time", isOn: $hasTime).toggleStyle(.switch).labelsHidden().padding(.leading, 8)
+                    }
                     
                     Picker("Event Type", selection: $type) {
                         ForEach(CalendarEventType.allCases, id: \.self) { t in
@@ -866,15 +987,80 @@ struct AddEditEventSheet: View {
                     }
                 }.padding(.bottom, 12)
                 
+                // ============================================
+                // NOUVEAU : SECTION CONDITIONNELLE EARNINGS
+                // ============================================
+                if type.rawValue.lowercased().contains("earning") {
+                    Section(header: Text("Earnings Data & Webcast").font(.headline)) {
+                        TextField("Webcast / IR URL Link", text: $urlLink)
+                        
+                        HStack(spacing: 16) {
+                            VStack(alignment: .leading) {
+                                Text("Est. Revenue").font(.caption).foregroundColor(.secondary)
+                                TextField("0.0", value: $estRevenue, format: .number).textFieldStyle(.roundedBorder)
+                            }
+                            VStack(alignment: .leading) {
+                                Text("Act. Revenue").font(.caption).foregroundColor(.secondary)
+                                TextField("0.0", value: $actRevenue, format: .number).textFieldStyle(.roundedBorder)
+                            }
+                        }
+                        HStack(spacing: 16) {
+                            VStack(alignment: .leading) {
+                                Text("Est. EPS").font(.caption).foregroundColor(.secondary)
+                                TextField("0.0", value: $estEPS, format: .number).textFieldStyle(.roundedBorder)
+                            }
+                            VStack(alignment: .leading) {
+                                Text("Act. EPS").font(.caption).foregroundColor(.secondary)
+                                TextField("0.0", value: $actEPS, format: .number).textFieldStyle(.roundedBorder)
+                            }
+                        }
+                    }.padding(.bottom, 12)
+                }
+                
+                // ============================================
+                // NOUVEAU : SECTION CONDITIONNELLE DIVIDENDES
+                // ============================================
+                if type.rawValue.lowercased().contains("dividend") && !ticker.isEmpty {
+                    if let pos = viewModel.positions.first(where: { $0.ticker == ticker }) {
+                        // Récupère les données depuis ton PortfolioViewModel
+                        let paymentsPerYear = max(1.0, Double(pos.dividendMonths.count))
+                        let divPerShareGross = pos.annualDividendNet // En partant du principe que tu y rentres le brut
+                        
+                        let totalAnnualGrossLocal = divPerShareGross * pos.quantity
+                        let singlePaymentGrossLocal = totalAnnualGrossLocal / paymentsPerYear
+                        
+                        // Conversion en euros + calcul du net
+                        let singlePaymentGrossEUR = singlePaymentGrossLocal * pos.usdToEurRate
+                        let singlePaymentNetEUR = singlePaymentGrossEUR * 0.85 // 85% du brut
+                        
+                        Section(header: Text("Estimated Payout").font(.headline)) {
+                            VStack(alignment: .leading, spacing: 8) {
+                                Text("Based on your portfolio data (\(pos.quantity.formatted()) shares):")
+                                    .font(.caption).foregroundColor(.secondary)
+                                
+                                HStack {
+                                    Text("Est. Gross Payment:")
+                                    Spacer()
+                                    Text(singlePaymentGrossEUR.formatted(.currency(code: "EUR")))
+                                }
+                                HStack {
+                                    Text("Est. Net Payment (85%):").fontWeight(.bold)
+                                    Spacer()
+                                    Text(singlePaymentNetEUR.formatted(.currency(code: "EUR"))).fontWeight(.bold).foregroundColor(.green)
+                                }
+                            }
+                        }.padding(.bottom, 12)
+                    }
+                }
+                
                 Section(header: Text("Additional Notes (Optional)").font(.headline)) {
-                    TextField("E.g. Estimated $2.50 per share", text: $note)
+                    TextField("E.g. Expecting new guidance", text: $note)
                 }
             }
             .padding()
             
             Divider()
             HStack {
-                
                 if isEditing {
                     Button(role: .destructive) {
                         delete()
@@ -891,16 +1077,21 @@ struct AddEditEventSheet: View {
                     .disabled(ticker.isEmpty)
             }.padding()
         }
-        .frame(width: 450)
+        .frame(width: 480, height: 620)
     }
     
     func save() {
         if isEditing, let evt = event {
-            // MODIFIÉ : SwiftData
             evt.date = date
             evt.type = type
             evt.ticker = ticker.uppercased()
             evt.note = note
+            evt.hasTime = hasTime
+            evt.urlLink = urlLink
+            evt.estRevenue = estRevenue
+            evt.actRevenue = actRevenue
+            evt.estEPS = estEPS
+            evt.actEPS = actEPS
             viewModel.objectWillChange.send()
         } else {
             let newEvent = CalendarEvent(
@@ -910,7 +1101,14 @@ struct AddEditEventSheet: View {
                 ticker: ticker.uppercased(),
                 note: note
             )
-            // MODIFIÉ : SwiftData
+            // On assigne les nouvelles valeurs juste après la création
+            newEvent.hasTime = hasTime
+            newEvent.urlLink = urlLink
+            newEvent.estRevenue = estRevenue
+            newEvent.actRevenue = actRevenue
+            newEvent.estEPS = estEPS
+            newEvent.actEPS = actEPS
+            
             context.insert(newEvent)
             viewModel.calendarEvents.append(newEvent)
         }
@@ -920,7 +1118,6 @@ struct AddEditEventSheet: View {
     
     func delete() {
         if let eventId = event?.id, let evtToDelete = viewModel.calendarEvents.first(where: { $0.id == eventId }) {
-            // MODIFIÉ : SwiftData
             context.delete(evtToDelete)
             viewModel.calendarEvents.removeAll { $0.id == eventId }
         }

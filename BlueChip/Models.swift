@@ -213,6 +213,13 @@ struct RevenueSegment: Identifiable, Codable {
     var ticker: String
     var note: String
     
+    var hasTime: Bool = false
+    var urlLink: String = ""
+    var estRevenue: Double? = nil
+    var actRevenue: Double? = nil
+    var estEPS: Double? = nil
+    var actEPS: Double? = nil
+    
     init(id: UUID = UUID(), date: Date, type: CalendarEventType, ticker: String, note: String) {
         self.id = id; self.date = date; self.type = type; self.ticker = ticker; self.note = note
     }
