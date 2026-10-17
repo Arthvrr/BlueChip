@@ -1,7 +1,5 @@
 FINISH V1.0 BlueChip :
 
-- fuseau horaire actuel et % de taxe dividendes dans les réglages
-
 - tableau yearly summary responsive avec nombre d'années et connecté à année début investissements et année en cours (remplir de 0 si pas de données)
 
 - zoom graphes transaction avoir titre du graphe !!

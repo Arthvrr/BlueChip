@@ -74,6 +74,9 @@ class PortfolioViewModel: ObservableObject {
     
     @Published var showSettings: Bool = false
     
+    @Published var dividendTaxRate: Double = 15.0 { didSet { settings?.dividendTaxRate = dividendTaxRate; updateDividendsViewData() } }
+    @Published var userTimeZoneIdentifier: String = TimeZone.current.identifier { didSet { settings?.userTimeZoneIdentifier = userTimeZoneIdentifier } }
+    
     private let yahooService = YahooFinanceService()
     
     // ==========================================
@@ -126,6 +129,9 @@ class PortfolioViewModel: ObservableObject {
         if let txTarget = settings!.transactionGoalTarget { self.transactionGoalTarget = txTarget }
         if let wTarget = settings!.wealthGoalTarget { self.wealthGoalTarget = wTarget }
         if let swr = settings!.safeWithdrawalRate { self.safeWithdrawalRate = swr }
+        
+        if let tax = settings!.dividendTaxRate { self.dividendTaxRate = tax }
+        if let tz = settings!.userTimeZoneIdentifier { self.userTimeZoneIdentifier = tz }
         
         // 4. SETUP FINAL
         setupDividendYears()
@@ -291,7 +297,8 @@ class PortfolioViewModel: ObservableObject {
         for pos in positions {
             guard pos.totalDividendEUR > 0, !pos.dividendMonths.isEmpty else { continue }
             let netPerMonthEUR = pos.totalDividendEUR / Double(pos.dividendMonths.count)
-            let brutPerMonthEUR = netPerMonthEUR / 0.85
+            let taxMultiplier = 1.0 - (dividendTaxRate / 100.0)
+            let brutPerMonthEUR = taxMultiplier > 0 ? (netPerMonthEUR / taxMultiplier) : netPerMonthEUR
             
             for m in pos.dividendMonths {
                 guard m >= 1 && m <= 12 else { continue }
@@ -305,6 +312,7 @@ class PortfolioViewModel: ObservableObject {
         self.stockYieldsData = positions.filter { $0.currentValueEUR > 0 }
             .map { StockYieldDataItem(ticker: $0.ticker, yield: $0.stockYieldEUR * 100.0) }
             .sorted { $0.ticker < $1.ticker }
+        
     }
     
     // === PROPRIÉTÉS CALCULÉES ===

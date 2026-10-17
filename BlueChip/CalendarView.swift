@@ -734,17 +734,28 @@ struct EventDetailSheet: View {
     var dateString: String {
         let f = DateFormatter()
         f.dateStyle = .full
-        f.timeStyle = event.hasTime ? .short : .none
+        f.timeStyle = .none
         return f.string(from: event.date)
     }
     
-    // Convertisseur dynamique pour l'affichage ET (Eastern Time)
-    var usEasternTimeEquivalent: String {
+    // NOUVEAU : Convertisseur dynamique ET -> Heure Locale (via UTC)
+    var localTimeConverted: String {
         guard event.hasTime else { return "" }
         let f = DateFormatter()
-        f.timeZone = TimeZone(identifier: "America/New_York")
-        f.dateFormat = "h:mm a 'ET'"
-        return "(\(f.string(from: event.date)))"
+        
+        // On récupère le réglage UTC (ex: 2 pour UTC+2)
+        let offsetHours = Int(viewModel.userTimeZoneIdentifier) ?? (TimeZone.current.secondsFromGMT() / 3600)
+        f.timeZone = TimeZone(secondsFromGMT: offsetHours * 3600)
+        f.dateFormat = "h:mm a"
+        
+        let usFormatter = DateFormatter()
+        usFormatter.timeZone = TimeZone(identifier: "America/New_York")
+        usFormatter.dateFormat = "h:mm a"
+        
+        let localStr = f.string(from: event.date)
+        let usStr = usFormatter.string(from: event.date)
+        
+        return "(\(usStr) ET = \(localStr) Local)"
     }
 
     var body: some View {
@@ -766,7 +777,7 @@ struct EventDetailSheet: View {
                 HStack {
                     Text("Scheduled Date:").fontWeight(.semibold).foregroundColor(.secondary).frame(width: 120, alignment: .leading)
                     Text(dateString).font(.subheadline)
-                    Text(usEasternTimeEquivalent).font(.caption).foregroundColor(.blue).fontWeight(.bold)
+                    Text(localTimeConverted).font(.caption).foregroundColor(.blue).fontWeight(.bold)
                 }
                 
                 if !event.urlLink.isEmpty, let url = URL(string: event.urlLink) {
@@ -793,18 +804,17 @@ struct EventDetailSheet: View {
                     }
                 }
                 
-                // --- SECTION DIVIDENDES (Calcul Broker 100% Fidèle) ---
+                // --- SECTION DIVIDENDES (Utilisation du Taux des Paramètres) ---
                 if event.type.rawValue.lowercased().contains("dividend") {
                     if let pos = viewModel.positions.first(where: { $0.ticker == event.ticker }) {
                         let paymentsPerYear = max(1.0, Double(pos.dividendMonths.count))
-                        // 1. Dividende annuel par action divisé par les versements
                         let singlePaymentPerShareUSD = pos.annualDividendNet / paymentsPerYear
-                        // 2. Montant total en devise d'origine ($)
                         let totalGrossUSD = singlePaymentPerShareUSD * pos.quantity
-                        // 3. Conversion totale en Euro (€)
                         let singlePaymentGrossEUR = totalGrossUSD * pos.usdToEurRate
-                        // 4. Ponction de 15% pour le Net
-                        let singlePaymentNetEUR = singlePaymentGrossEUR * 0.85
+                        
+                        let taxRate = viewModel.dividendTaxRate
+                        let taxMultiplier = 1.0 - (taxRate / 100.0)
+                        let singlePaymentNetEUR = singlePaymentGrossEUR * taxMultiplier
                         
                         GroupBox("Estimated Dividend Payout") {
                             VStack(spacing: 12) {
@@ -820,7 +830,7 @@ struct EventDetailSheet: View {
                                     Text(singlePaymentGrossEUR.formatted(.currency(code: "EUR")))
                                 }
                                 HStack {
-                                    Text("Estimated Net (85%):").fontWeight(.bold)
+                                    Text("Estimated Net (\(Int(100 - taxRate))%):").fontWeight(.bold)
                                     Spacer()
                                     Text(singlePaymentNetEUR.formatted(.currency(code: "EUR"))).fontWeight(.bold).foregroundColor(.green)
                                 }
@@ -943,20 +953,18 @@ struct AddEditEventSheet: View {
     
     var isEditing: Bool { event != nil }
     
-    // Bloque la saisie des résultats si l'événement n'est pas encore passé
     var isFutureEvent: Bool {
         date > Date()
     }
     
-    // Traducteur en temps réel pour l'heure de la Bourse (New York)
-    var usEasternTimeEquivalent: String {
+    // NOUVEAU : Calcul dynamique inverse (Tu entres l'heure ET, l'app donne l'heure Locale)
+    var localTimeConverted: String {
         let f = DateFormatter()
-        f.timeZone = TimeZone(identifier: "America/New_York")
-        f.dateFormat = "h:mm a 'ET'"
+        f.timeZone = TimeZone(identifier: viewModel.userTimeZoneIdentifier) ?? TimeZone.current
+        f.dateFormat = "h:mm a"
         return f.string(from: date)
     }
     
-    // Nettoyeur de TextFields (vide pur au lieu de "0.0")
     func bindingForOptional(value: Binding<Double?>) -> Binding<String> {
         Binding<String>(
             get: {
@@ -982,11 +990,8 @@ struct AddEditEventSheet: View {
         return Array(Set(pTickers + wTickers)).sorted()
     }
     
-    // NOUVEAU : Fonction pour charger le lien IR sauvegardé pour un ticker
     private func loadIRLink(for selectedTicker: String) {
-        // Ne charger automatiquement que si le champ urlLink est vide OU si on est en train d'ajouter un nouvel event
         guard !selectedTicker.isEmpty else { return }
-        
         if let pos = viewModel.positions.first(where: { $0.ticker == selectedTicker }), let existingURL = pos.investorRelationsURL, !existingURL.isEmpty {
             if !isEditing || urlLink.isEmpty {
                 urlLink = existingURL
@@ -1013,19 +1018,22 @@ struct AddEditEventSheet: View {
                         VStack(spacing: 16) {
                             HStack(spacing: 20) {
                                 VStack(alignment: .leading, spacing: 6) {
-                                    Text("Date & Time").font(.caption).foregroundColor(.secondary)
+                                    Text("Date & US Market Time (ET)").font(.caption).foregroundColor(.secondary)
                                     HStack {
-                                        DatePicker("", selection: $date, displayedComponents: hasTime ? [.date, .hourAndMinute] : .date).labelsHidden()
+                                        // On force le sélecteur à agir comme si on était à New York !
+                                        DatePicker("", selection: $date, displayedComponents: hasTime ? [.date, .hourAndMinute] : .date)
+                                            .environment(\.timeZone, TimeZone(identifier: "America/New_York")!)
+                                            .labelsHidden()
                                         Toggle("Precise Time", isOn: $hasTime).toggleStyle(.switch).labelsHidden().padding(.leading, 4)
                                     }
                                 }
                                 
                                 if hasTime {
                                     VStack(alignment: .leading, spacing: 6) {
-                                        Text("US Market").font(.caption).foregroundColor(.secondary)
+                                        Text("Your Local Time").font(.caption).foregroundColor(.secondary)
                                         HStack {
                                             Image(systemName: "clock.fill").foregroundColor(.blue)
-                                            Text(usEasternTimeEquivalent).fontWeight(.bold).foregroundColor(.blue)
+                                            Text(localTimeConverted).fontWeight(.bold).foregroundColor(.blue)
                                         }
                                         .padding(.horizontal, 10).padding(.vertical, 4)
                                         .background(Color.blue.opacity(0.1)).cornerRadius(6)
@@ -1047,7 +1055,6 @@ struct AddEditEventSheet: View {
                                     HStack {
                                         TextField("e.g., AAPL", text: $ticker)
                                             .textFieldStyle(.roundedBorder)
-                                            // NOUVEAU : Chargement du lien si le ticker est tapé manuellement
                                             .onChange(of: ticker) { _, newValue in
                                                 let uppercased = newValue.uppercased()
                                                 ticker = uppercased
@@ -1059,7 +1066,6 @@ struct AddEditEventSheet: View {
                                             Text("Saved...").tag("")
                                             ForEach(availableTickers, id: \.self) { t in Text(t).tag(t) }
                                         }
-                                        // NOUVEAU : Chargement du lien si le ticker est sélectionné via le menu
                                         .onChange(of: ticker) { _, newValue in
                                             loadIRLink(for: newValue)
                                         }
@@ -1153,14 +1159,17 @@ struct AddEditEventSheet: View {
                         }
                     }
                     
-                    // --- SECTION 3 : DIVIDEND DATA ---
+                    // --- SECTION 3 : DIVIDEND DATA (Utilisation de la taxe) ---
                     if type.rawValue.lowercased().contains("dividend") && !ticker.isEmpty {
                         if let pos = viewModel.positions.first(where: { $0.ticker == ticker }) {
                             let paymentsPerYear = max(1.0, Double(pos.dividendMonths.count))
                             let singlePaymentPerShareUSD = pos.annualDividendNet / paymentsPerYear
                             let totalGrossUSD = singlePaymentPerShareUSD * pos.quantity
                             let singlePaymentGrossEUR = totalGrossUSD * pos.usdToEurRate
-                            let singlePaymentNetEUR = singlePaymentGrossEUR * 0.85
+                            
+                            let taxRate = viewModel.dividendTaxRate
+                            let taxMultiplier = 1.0 - (taxRate / 100.0)
+                            let singlePaymentNetEUR = singlePaymentGrossEUR * taxMultiplier
                             
                             GroupBox("Estimated Dividend Payout") {
                                 VStack(alignment: .leading, spacing: 12) {
@@ -1181,7 +1190,7 @@ struct AddEditEventSheet: View {
                                         Text(singlePaymentGrossEUR.formatted(.currency(code: "EUR"))).font(.headline)
                                     }
                                     HStack {
-                                        Text("Estimated Net (85%):").font(.title3).fontWeight(.bold)
+                                        Text("Estimated Net (\(Int(100 - taxRate))%):").font(.title3).fontWeight(.bold)
                                         Spacer()
                                         Text(singlePaymentNetEUR.formatted(.currency(code: "EUR"))).font(.title3).fontWeight(.bold).foregroundColor(.green)
                                     }
@@ -1240,7 +1249,6 @@ struct AddEditEventSheet: View {
                 evt.actEPS = actEPS
             }
             
-            // NOUVEAU : Sauvegarde du lien IR dans la position globale si c'est un Earnings event
             if type.rawValue.lowercased().contains("earning") && !urlLink.isEmpty {
                 if let idx = viewModel.positions.firstIndex(where: { $0.ticker == safeTicker }) {
                     viewModel.positions[idx].investorRelationsURL = urlLink
@@ -1266,7 +1274,6 @@ struct AddEditEventSheet: View {
                 newEvent.actEPS = actEPS
             }
             
-            // NOUVEAU : Sauvegarde du lien IR dans la position globale si c'est un Earnings event
             if type.rawValue.lowercased().contains("earning") && !urlLink.isEmpty {
                 if let idx = viewModel.positions.firstIndex(where: { $0.ticker == safeTicker }) {
                     viewModel.positions[idx].investorRelationsURL = urlLink

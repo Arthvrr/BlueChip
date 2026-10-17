@@ -106,6 +106,64 @@ struct SettingsView: View {
                     }
                     .padding(.vertical, 8)
                 }
+                
+                
+                // NOUVELLE SECTION : GLOBAL PREFERENCES
+                Section {
+                    VStack(alignment: .leading, spacing: 8) {
+                        Text("Global Preferences")
+                            .font(.headline)
+                        
+                        // 1. Taux de taxe sur les dividendes (CORRIGÉ SANS LE 15.0 FLOTTANT)
+                        HStack {
+                            VStack(alignment: .leading, spacing: 2) {
+                                Text("Dividend Tax Rate")
+                                    .fontWeight(.medium)
+                                Text("Used to calculate net dividend payouts across the app.")
+                                    .font(.caption)
+                                    .foregroundColor(.secondary)
+                            }
+                            Spacer()
+                            HStack {
+                                // En mettant "", on supprime le label flottant au-dessus du champ !
+                                TextField("", value: $viewModel.dividendTaxRate, format: .number)
+                                    .textFieldStyle(.roundedBorder)
+                                    .frame(width: 60)
+                                    .multilineTextAlignment(.trailing)
+                                Text("%")
+                            }
+                        }
+                        
+                        Divider().padding(.vertical, 4)
+                        
+                        // 2. Fuseau horaire (SIMPLIFIÉ EN UTC)
+                        HStack {
+                            VStack(alignment: .leading, spacing: 2) {
+                                Text("Local Time Zone")
+                                    .fontWeight(.medium)
+                                Text("US Market times will be converted to this zone.")
+                                    .font(.caption)
+                                    .foregroundColor(.secondary)
+                            }
+                            Spacer()
+                            
+                            // Transforme l'identifiant en format UTC (UTC-12 à UTC+14)
+                            Picker("", selection: Binding(
+                                get: { Int(viewModel.userTimeZoneIdentifier) ?? (TimeZone.current.secondsFromGMT() / 3600) },
+                                set: { viewModel.userTimeZoneIdentifier = String($0) }
+                            )) {
+                                ForEach(-12...14, id: \.self) { offset in
+                                    let sign = offset > 0 ? "+" : ""
+                                    Text(offset == 0 ? "UTC" : "UTC\(sign)\(offset)").tag(offset)
+                                }
+                            }
+                            .frame(width: 120)
+                            .labelsHidden()
+                        }
+                    }
+                    .padding(.vertical, 8)
+                }
+                
                                 
                 // NOUVELLE SECTION : AI COPILOT
                 Section {

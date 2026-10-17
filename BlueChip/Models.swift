@@ -136,6 +136,9 @@ struct RevenueSegment: Identifiable, Codable {
     var wealthGoalTarget: Double?
     var safeWithdrawalRate: Double?
     
+    var dividendTaxRate: Double?
+    var userTimeZoneIdentifier: String?
+    
     init(availableCash: Double = 0, manuallyInvested: Double = 0) {
         self.availableCash = availableCash
         self.manuallyInvested = manuallyInvested
