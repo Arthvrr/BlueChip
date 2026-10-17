@@ -10,6 +10,7 @@ import Combine
 
 enum TxChartZoomType: String, Identifiable {
     case annualCount, typeSummary, buysOverTime, taxBreakdown
+    case capitalAllocation, holdingPeriod
     var id: String { self.rawValue }
 }
 
@@ -639,6 +640,11 @@ struct TransactionsChartsSection: View {
                 TxBuysOverTimeChart(viewModel: viewModel, tx: tx, privacyMode: $privacyMode, expandedChart: $chartToZoom)
                 TxTaxBreakdownChart(viewModel: viewModel, tx: tx, privacyMode: $privacyMode, expandedChart: $chartToZoom)
             }
+            // NOUVELLE SECTION POUR LES DEUX NOUVEAUX GRAPHIQUES
+            HStack(spacing: 24) {
+                TxCapitalAllocationChart(viewModel: viewModel, tx: tx, privacyMode: $privacyMode, expandedChart: $chartToZoom)
+                TxHoldingPeriodChart(viewModel: viewModel, tx: tx, privacyMode: $privacyMode, expandedChart: $chartToZoom)
+            }
         }
     }
 }
@@ -1189,6 +1195,235 @@ struct TxTaxBreakdownChart: View {
 }
 
 // =========================================================================
+// MARK: - CHART 5 : Deployed Capital Allocation (Donut)
+// =========================================================================
+
+struct TxCapitalAllocationChart: View {
+    @ObservedObject var viewModel: PortfolioViewModel
+    let tx: [Transaction]
+    @Binding var privacyMode: Bool
+    var isExpanded: Bool = false
+    @Binding var expandedChart: TxChartZoomType?
+
+    struct CapitalSlice: Identifiable {
+        let id = UUID()
+        let ticker: String
+        let amount: Double
+    }
+
+    var slices: [CapitalSlice] {
+        var dict: [String: Double] = [:]
+        
+        // 1. On somme tous les achats + les frais associés
+        let buys = tx.filter { $0.type == .buy }
+        for b in buys {
+            let totalTaxes = b.customFields.values.reduce(0, +)
+            dict[b.ticker, default: 0] += (b.amountEUR + totalTaxes)
+        }
+        
+        // 2. Séparation Current vs Sold
+        var result: [CapitalSlice] = []
+        var oldStocksTotal: Double = 0
+        let currentTickers = Set(viewModel.positions.map { $0.ticker })
+        
+        for (ticker, amount) in dict {
+            if currentTickers.contains(ticker) {
+                result.append(CapitalSlice(ticker: ticker, amount: amount))
+            } else {
+                oldStocksTotal += amount
+            }
+        }
+        
+        // 3. Tri et ajout de la ligne "Old Stocks"
+        result.sort { $0.amount > $1.amount }
+        if oldStocksTotal > 0 {
+            result.append(CapitalSlice(ticker: "Sold Stocks", amount: oldStocksTotal))
+        }
+        return result
+    }
+
+    @State private var selectedAngleValue: Double? = nil
+    @State private var hiddenItems: Set<String> = []
+
+    func color(for ticker: String) -> Color {
+        if ticker == "Sold Stocks" { return .gray.opacity(0.5) }
+        return viewModel.color(for: ticker)
+    }
+    
+    var filteredSlices: [CapitalSlice] {
+        slices.filter { !hiddenItems.contains($0.ticker) }
+    }
+    
+    func getSelectedSlice(for angle: Double) -> CapitalSlice? {
+        var cum = 0.0
+        for slice in filteredSlices {
+            cum += slice.amount
+            if angle <= cum { return slice }
+        }
+        return filteredSlices.last
+    }
+
+    var body: some View {
+        VStack {
+            HStack {
+                if !isExpanded { Text("Deployed Capital Allocation").font(.headline).foregroundColor(.secondary) }
+                Spacer()
+                if !isExpanded { Button(action: { expandedChart = .capitalAllocation }) { Image(systemName: "plus.magnifyingglass").foregroundColor(.secondary) }.buttonStyle(.plain) }
+            }.padding(.bottom, 4)
+            
+            InteractiveLegendView(items: slices.map { $0.ticker }, colorMap: color, hiddenItems: $hiddenItems).padding(.bottom, 8)
+            
+            if filteredSlices.isEmpty {
+                emptyState("No buy transactions recorded.")
+            } else {
+                Chart(filteredSlices) { slice in
+                    SectorMark(
+                        angle: .value("Amount", slice.amount),
+                        innerRadius: .ratio(0.65),
+                        angularInset: 1.5
+                    )
+                    .foregroundStyle(color(for: slice.ticker))
+                    .cornerRadius(4)
+                }
+                .chartLegend(.hidden)
+                .chartAngleSelection(value: $selectedAngleValue)
+                .chartBackground { proxy in
+                    GeometryReader { geometry in
+                        if let s = selectedAngleValue, let slice = getSelectedSlice(for: s) {
+                            VStack {
+                                Text(slice.ticker).font(.headline).foregroundColor(color(for: slice.ticker))
+                                Text(slice.amount.formatted(.currency(code: "EUR").precision(.fractionLength(0))))
+                                    .font(.title3).fontWeight(.bold)
+                                    .blur(radius: privacyMode ? 6 : 0)
+                            }.position(x: geometry.frame(in: .local).midX, y: geometry.frame(in: .local).midY)
+                        } else {
+                            let displayedTotal = filteredSlices.reduce(0) { $0 + $1.amount }
+                            VStack {
+                                Text("Total Spent").font(.subheadline).foregroundColor(.secondary)
+                                Text(displayedTotal.formatted(.currency(code: "EUR").precision(.fractionLength(0))))
+                                    .font(.title2).fontWeight(.bold)
+                                    .blur(radius: privacyMode ? 6 : 0)
+                            }.position(x: geometry.frame(in: .local).midX, y: geometry.frame(in: .local).midY)
+                        }
+                    }
+                }
+                .animation(.easeInOut(duration: 0.2), value: selectedAngleValue)
+            }
+            BlueChipWatermark()
+        }
+        .padding().frame(minHeight: isExpanded ? 500 : 360, maxHeight: isExpanded ? .infinity : 360).background(Color(NSColor.controlBackgroundColor)).cornerRadius(12).shadow(color: Color.black.opacity(0.05), radius: 2, x: 0, y: 1)
+    }
+}
+
+// =========================================================================
+// MARK: - CHART 6 : Days Held per Asset (Bar Chart)
+// =========================================================================
+
+struct TxHoldingPeriodChart: View {
+    @ObservedObject var viewModel: PortfolioViewModel
+    let tx: [Transaction]
+    @Binding var privacyMode: Bool
+    var isExpanded: Bool = false
+    @Binding var expandedChart: TxChartZoomType?
+
+    struct HoldingItem: Identifiable {
+        let id = UUID()
+        let ticker: String
+        let days: Int
+        let isCurrent: Bool
+    }
+
+    var data: [HoldingItem] {
+        var items: [HoldingItem] = []
+        let currentTickers = Set(viewModel.positions.map { $0.ticker })
+        let now = Date()
+        
+        // On regroupe les transactions par ticker
+        let groupedTx = Dictionary(grouping: tx.filter { $0.type == .buy || $0.type == .sell }, by: { $0.ticker })
+        
+        for (ticker, transactions) in groupedTx {
+            // Trouve le premier achat (le plus vieux)
+            guard let firstBuy = transactions.filter({ $0.type == .buy }).map({ $0.date }).min() else { continue }
+            
+            let isCurrent = currentTickers.contains(ticker)
+            var endDate = now
+            
+            // Si l'action est vendue (n'est plus en portefeuille), on trouve la date de la dernière vente
+            if !isCurrent {
+                if let lastSell = transactions.filter({ $0.type == .sell }).map({ $0.date }).max() {
+                    endDate = lastSell
+                }
+            }
+            
+            // Calcul des jours d'écart
+            let components = Calendar.current.dateComponents([.day], from: firstBuy, to: endDate)
+            let daysHeld = components.day ?? 0
+            
+            if daysHeld >= 0 {
+                items.append(HoldingItem(ticker: ticker, days: daysHeld, isCurrent: isCurrent))
+            }
+        }
+        
+        // Tri décroissant
+        return items.sorted { $0.days > $1.days }
+    }
+    
+    @State private var hiddenTickers: Set<String> = []
+    @State private var hoveredTicker: String? = nil
+
+    func color(for item: HoldingItem) -> Color {
+        if item.isCurrent {
+            return viewModel.color(for: item.ticker)
+        } else {
+            return .gray.opacity(0.5)
+        }
+    }
+
+    var body: some View {
+        let filteredData = data.filter { !hiddenTickers.contains($0.ticker) }
+        
+        VStack(alignment: .leading, spacing: 8) {
+            HStack {
+                if !isExpanded { Text("Days Held per Asset").font(.headline).foregroundColor(.secondary) }
+                Spacer()
+                if !isExpanded { Button(action: { expandedChart = .holdingPeriod }) { Image(systemName: "plus.magnifyingglass").foregroundColor(.secondary) }.buttonStyle(.plain) }
+            }.padding(.bottom, 4)
+            
+            InteractiveLegendView(items: data.map { $0.ticker }, colorMap: { ticker in
+                if let item = data.first(where: { $0.ticker == ticker }) { return color(for: item) }
+                return .gray
+            }, hiddenItems: $hiddenTickers).padding(.bottom, 8)
+
+            if filteredData.isEmpty {
+                emptyState("No buy transactions recorded.")
+            } else {
+                Chart(filteredData) { item in
+                    BarMark(
+                        x: .value("Ticker", item.ticker),
+                        y: .value("Days Held", item.days)
+                    )
+                    .foregroundStyle(color(for: item))
+                    .cornerRadius(4)
+                    .annotation(position: .top) {
+                        if hoveredTicker == item.ticker {
+                            Text("\(item.days)d")
+                                .font(.system(size: 9, weight: .bold)).foregroundColor(.secondary)
+                                .blur(radius: privacyMode ? 6 : 0)
+                        }
+                    }
+                }
+                .chartLegend(.hidden)
+                .chartXSelection(value: $hoveredTicker)
+                .chartYAxis { AxisMarks(position: .leading) { v in AxisGridLine(); AxisTick(); AxisValueLabel { if let d = v.as(Int.self) { Text("\(d)") } } } }
+            }
+            BlueChipWatermark()
+        }
+        .padding().frame(minHeight: isExpanded ? 500 : 360, maxHeight: isExpanded ? .infinity : 360).background(Color(NSColor.controlBackgroundColor)).cornerRadius(12).shadow(color: Color.black.opacity(0.05), radius: 2, x: 0, y: 1)
+    }
+}
+
+
+// =========================================================================
 // MARK: - FULL SCREEN ZOOM VIEW
 // =========================================================================
 
@@ -1206,6 +1441,8 @@ struct TransactionsFullScreenChartView: View {
         case .typeSummary: return "Summary by Type"
         case .buysOverTime: return "Buys over Time"
         case .taxBreakdown: return "Fees & Taxes Breakdown"
+        case .capitalAllocation: return "Deployed Capital Allocation" // <-- AJOUT
+        case .holdingPeriod: return "Days Held per Asset"             // <-- AJOUT
         }
     }
 
@@ -1226,6 +1463,10 @@ struct TransactionsFullScreenChartView: View {
                 TxBuysOverTimeChart(viewModel: viewModel, tx: tx, privacyMode: $privacyMode, isExpanded: true, expandedChart: .constant(nil))
             case .taxBreakdown:
                 TxTaxBreakdownChart(viewModel: viewModel, tx: tx, privacyMode: $privacyMode, isExpanded: true, expandedChart: .constant(nil))
+            case .capitalAllocation: // <-- AJOUT
+                TxCapitalAllocationChart(viewModel: viewModel, tx: tx, privacyMode: $privacyMode, isExpanded: true, expandedChart: .constant(nil))
+            case .holdingPeriod:     // <-- AJOUT
+                TxHoldingPeriodChart(viewModel: viewModel, tx: tx, privacyMode: $privacyMode, isExpanded: true, expandedChart: .constant(nil))
             }
             
         }.padding(30).frame(minWidth: 900, minHeight: 700)

@@ -1,9 +1,5 @@
 FINISH V1.0 BlueChip :
 
-- graphe montant en transactions par actions
-
-- graphe montant en taxes par actions et nombre d'achats/ventes effectués par actions du pf
-
 - ROI % by Assets manquant 2eme graphe Wealth page
 
 2. icone barre des menus : 3 prochains évents, chaque position avec prix actuel + target price, refresh api yahoo finance
