@@ -85,6 +85,26 @@ class PortfolioViewModel: ObservableObject {
     
     init() {}
     
+    // MÉTHODE POUR LA BARRE DES MENUS
+    func fetchData(context: ModelContext) {
+        do {
+            let positionDescriptor = FetchDescriptor<Position>()
+            self.positions = try context.fetch(positionDescriptor)
+            
+            let eventDescriptor = FetchDescriptor<CalendarEvent>()
+            self.calendarEvents = try context.fetch(eventDescriptor)
+            
+            let settingsFetch = FetchDescriptor<AppSettings>()
+            if let existingSettings = try? context.fetch(settingsFetch).first {
+                self.settings = existingSettings
+                if let tax = existingSettings.dividendTaxRate { self.dividendTaxRate = tax }
+                self.availableCash = existingSettings.availableCash
+            }
+        } catch {
+            print("Erreur de chargement des données dans le ViewModel (Menu Bar) : \(error)")
+        }
+    }
+    
     func initializeData(context: ModelContext) {
         guard modelContext == nil else { return } // Évite la double initialisation
         self.modelContext = context

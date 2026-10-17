@@ -4,14 +4,10 @@ import SwiftData
 @main
 struct BlueChipApp: App {
     
-    @StateObject private var viewModel = PortfolioViewModel()
-    
-    var body: some Scene {
-        WindowGroup {
-            ContentView()
-        }
-        .windowStyle(.hiddenTitleBar) // Enlève la barre de titre moche de macOS
-        .modelContainer(for: [
+    // 1. CRÉATION DU CONTENEUR PARTAGÉ
+    // On le déclare en static pour qu'il soit accessible partout de manière fiable
+    static let sharedModelContainer: ModelContainer = {
+        let schema = Schema([
             AppSettings.self,
             Position.self,
             DividendYear.self,
@@ -24,9 +20,27 @@ struct BlueChipApp: App {
             WealthLiability.self,
             WatchlistItem.self
         ])
+        let modelConfiguration = ModelConfiguration(schema: schema, isStoredInMemoryOnly: false)
+
+        do {
+            return try ModelContainer(for: schema, configurations: [modelConfiguration])
+        } catch {
+            fatalError("Could not create ModelContainer: \(error)")
+        }
+    }()
+    
+    // 2. VIEWMODEL SPÉCIFIQUE POUR LE MENU
+    @StateObject private var menuViewModel = PortfolioViewModel()
+    
+    var body: some Scene {
+        WindowGroup {
+            ContentView()
+        }
+        .windowStyle(.hiddenTitleBar) // Enlève la barre de titre moche de macOS
+        // 3. ON ATTACHE LE CONTENEUR PARTAGÉ À L'APPLICATION
+        .modelContainer(BlueChipApp.sharedModelContainer)
         
         .commands {
-            
             
             CommandGroup(replacing: .appInfo) {
                 Button("About BlueChip") {
@@ -124,10 +138,16 @@ struct BlueChipApp: App {
             }
         }
         
+        // 4. BARRE DES MENUS
         MenuBarExtra("BlueChip", image: "MenuBarIcon") {
-            MenuBarDashboardView(viewModel: viewModel)
+            MenuBarDashboardView(viewModel: menuViewModel)
+                // 5. HYDRATATION DES DONNÉES
+                // À chaque fois que le popover s'ouvre, on récupère le contexte partagé et on fetch
+                .onAppear {
+                    let context = BlueChipApp.sharedModelContainer.mainContext
+                    menuViewModel.fetchData(context: context)
+                }
         }
         .menuBarExtraStyle(.window) // Crée le popover
     }
 }
-

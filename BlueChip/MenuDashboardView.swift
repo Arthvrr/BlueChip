@@ -50,7 +50,9 @@ struct MenuBarDashboardView: View {
                 VStack(alignment: .leading, spacing: 2) {
                     Text("Total Portfolio").font(.caption).foregroundColor(.secondary)
                     // TODO: Remplacer par la vraie variable de valeur totale de ton viewModel
-                    Text("€ 45,230.00").font(.headline).fontWeight(.bold)
+                    Text(viewModel.currentTotalCapital.formatted(.currency(code: "EUR")))
+                        .font(.headline)
+                        .fontWeight(.bold)
                 }
                 
                 Spacer()
