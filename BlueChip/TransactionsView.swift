@@ -11,6 +11,7 @@ import Combine
 enum TxChartZoomType: String, Identifiable {
     case annualCount, typeSummary, buysOverTime, taxBreakdown
     case capitalAllocation, holdingPeriod
+    case tradeBalance, cumulativeCapital, taxDrag, activityHeatmap
     var id: String { self.rawValue }
 }
 
@@ -632,6 +633,7 @@ struct TransactionsChartsSection: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
             Text("Transaction Analytics").font(.title2).fontWeight(.bold).foregroundColor(.secondary)
+            
             HStack(spacing: 24) {
                 TxAnnualCountChart(viewModel: viewModel, tx: tx, privacyMode: $privacyMode, expandedChart: $chartToZoom)
                 TxTotalByTypeChart(viewModel: viewModel, tx: tx, privacyMode: $privacyMode, expandedChart: $chartToZoom)
@@ -640,10 +642,18 @@ struct TransactionsChartsSection: View {
                 TxBuysOverTimeChart(viewModel: viewModel, tx: tx, privacyMode: $privacyMode, expandedChart: $chartToZoom)
                 TxTaxBreakdownChart(viewModel: viewModel, tx: tx, privacyMode: $privacyMode, expandedChart: $chartToZoom)
             }
-            // NOUVELLE SECTION POUR LES DEUX NOUVEAUX GRAPHIQUES
             HStack(spacing: 24) {
                 TxCapitalAllocationChart(viewModel: viewModel, tx: tx, privacyMode: $privacyMode, expandedChart: $chartToZoom)
                 TxHoldingPeriodChart(viewModel: viewModel, tx: tx, privacyMode: $privacyMode, expandedChart: $chartToZoom)
+            }
+            // --- NOUVELLES SECTIONS PRO ---
+            HStack(spacing: 24) {
+                TxTradeBalanceChart(viewModel: viewModel, tx: tx, privacyMode: $privacyMode, expandedChart: $chartToZoom)
+                TxCumulativeCapitalChart(viewModel: viewModel, tx: tx, privacyMode: $privacyMode, expandedChart: $chartToZoom)
+            }
+            HStack(spacing: 24) {
+                TxTaxDragChart(viewModel: viewModel, tx: tx, privacyMode: $privacyMode, expandedChart: $chartToZoom)
+                TxActivityHeatmapChart(viewModel: viewModel, tx: tx, privacyMode: $privacyMode, expandedChart: $chartToZoom)
             }
         }
     }
@@ -1422,6 +1432,400 @@ struct TxHoldingPeriodChart: View {
     }
 }
 
+// =========================================================================
+// MARK: - CHART 7 : Trade Balance (Diverging Bar Chart)
+// =========================================================================
+
+// =========================================================================
+// MARK: - CHART 7 : Trade Balance (Diverging Bar Chart)
+// =========================================================================
+
+struct TxTradeBalanceChart: View {
+    @ObservedObject var viewModel: PortfolioViewModel
+    let tx: [Transaction]
+    @Binding var privacyMode: Bool
+    var isExpanded: Bool = false
+    @Binding var expandedChart: TxChartZoomType?
+
+    struct BalanceItem: Identifiable {
+        let id = UUID()
+        let year: String
+        let type: String
+        let amount: Double
+    }
+
+    var data: [BalanceItem] {
+        let cal = Calendar.current
+        var dict: [Int: (buys: Double, sells: Double)] = [:]
+        
+        for t in tx {
+            let year = cal.component(.year, from: t.date)
+            if t.type == .buy { dict[year, default: (0,0)].buys += t.amountEUR }
+            if t.type == .sell { dict[year, default: (0,0)].sells -= t.amountEUR }
+        }
+        
+        var result: [BalanceItem] = []
+        for year in dict.keys.sorted() {
+            result.append(BalanceItem(year: String(year), type: "Buy", amount: dict[year]!.buys))
+            result.append(BalanceItem(year: String(year), type: "Sell", amount: dict[year]!.sells))
+        }
+        return result
+    }
+
+    @State private var hoveredYear: String? = nil
+    @State private var hiddenTypes: Set<String> = [] // NOUVEAU : Gère la légende interactive
+
+    var body: some View {
+        let filteredData = data.filter { !hiddenTypes.contains($0.type) } // Filtre appliqué
+        
+        VStack(alignment: .leading, spacing: 8) {
+            HStack {
+                if !isExpanded { Text("Trade Balance (Buys vs Sells)").font(.headline).foregroundColor(.secondary) }
+                Spacer()
+                if !isExpanded { Button(action: { expandedChart = .tradeBalance }) { Image(systemName: "plus.magnifyingglass").foregroundColor(.secondary) }.buttonStyle(.plain) }
+            }.padding(.bottom, 4)
+            
+            // NOUVEAU : On passe $hiddenTypes à la légende !
+            InteractiveLegendView(items: ["Buy", "Sell"], colorMap: { $0 == "Buy" ? .blue : .orange }, hiddenItems: $hiddenTypes).padding(.bottom, 8)
+
+            if filteredData.isEmpty { emptyState("No trading activity found.") } else {
+                Chart(filteredData) { item in
+                    BarMark(
+                        x: .value("Year", item.year),
+                        y: .value("Amount", item.amount)
+                    )
+                    .foregroundStyle(item.type == "Buy" ? Color.blue.opacity(0.8) : Color.orange.opacity(0.8))
+                    .cornerRadius(2)
+                    
+                    if let h = hoveredYear, h == item.year {
+                        RuleMark(x: .value("Year", h)).foregroundStyle(Color.secondary.opacity(0.3)).zIndex(-1)
+                    }
+                }
+                .chartOverlay { proxy in
+                    GeometryReader { geometry in
+                        Rectangle().fill(.clear).contentShape(Rectangle()).onContinuousHover { phase in
+                            switch phase {
+                            case .active(let location): if let year: String = proxy.value(atX: location.x) { hoveredYear = year }
+                            case .ended: hoveredYear = nil
+                            }
+                        }
+                        
+                        if let h = hoveredYear, let xPosition = proxy.position(forX: h) {
+                            let b = filteredData.first { $0.year == h && $0.type == "Buy" }?.amount ?? 0
+                            let s = abs(filteredData.first { $0.year == h && $0.type == "Sell" }?.amount ?? 0)
+                            VStack(alignment: .leading, spacing: 4) {
+                                Text(h).font(.caption.bold())
+                                Divider()
+                                if !hiddenTypes.contains("Buy") {
+                                    HStack { Circle().fill(Color.blue).frame(width: 6, height: 6); Text("Buys:").font(.caption2); Spacer(); Text(b.formatted(.currency(code: "EUR").precision(.fractionLength(0)))).font(.caption2.bold()).blur(radius: privacyMode ? 6 : 0) }
+                                }
+                                if !hiddenTypes.contains("Sell") {
+                                    HStack { Circle().fill(Color.orange).frame(width: 6, height: 6); Text("Sells:").font(.caption2); Spacer(); Text(s.formatted(.currency(code: "EUR").precision(.fractionLength(0)))).font(.caption2.bold()).blur(radius: privacyMode ? 6 : 0) }
+                                }
+                            }
+                            .frame(width: 140).padding(8).background(Color(NSColor.windowBackgroundColor).opacity(0.95)).cornerRadius(8).shadow(radius: 4).overlay(RoundedRectangle(cornerRadius: 8).stroke(Color.gray.opacity(0.2), lineWidth: 1))
+                            // NOUVEAU : Position absolue fixe (y: 50) pour ne pas décaler le graphe
+                            .position(x: max(70, min(geometry.size.width - 70, xPosition)), y: 50)
+                        }
+                    }
+                }
+                .chartLegend(.hidden).chartYAxis { AxisMarks(position: .leading) { v in AxisGridLine(); AxisTick(); AxisValueLabel { if let d = v.as(Double.self) { Text(d.formatted(.currency(code: "EUR").notation(.compactName))) } } } }
+            }
+            HStack { Text("Shows your net accumulation vs distribution phases").font(.caption2).foregroundColor(.secondary); Spacer(); BlueChipWatermark() }
+        }.padding().frame(minHeight: isExpanded ? 500 : 360, maxHeight: isExpanded ? .infinity : 360).background(Color(NSColor.controlBackgroundColor)).cornerRadius(12).shadow(color: Color.black.opacity(0.05), radius: 2, x: 0, y: 1)
+    }
+}
+
+// =========================================================================
+// MARK: - CHART 8 : Cumulative Capital Injected (Area Chart)
+// =========================================================================
+
+// =========================================================================
+// MARK: - CHART 8 : Cumulative Capital Injected (Area Chart)
+// =========================================================================
+
+struct TxCumulativeCapitalChart: View {
+    @ObservedObject var viewModel: PortfolioViewModel
+    let tx: [Transaction]
+    @Binding var privacyMode: Bool
+    var isExpanded: Bool = false
+    @Binding var expandedChart: TxChartZoomType?
+
+    struct CumulItem: Identifiable {
+        let id = UUID()
+        let date: Date
+        let total: Double
+    }
+
+    var data: [CumulItem] {
+        let cashTx = tx.filter { $0.type == .deposit || $0.type == .withdrawal }.sorted { $0.date < $1.date }
+        var runningTotal = 0.0
+        var items: [CumulItem] = []
+        
+        for t in cashTx {
+            runningTotal += (t.type == .deposit ? t.amountEUR : -t.amountEUR)
+            items.append(CumulItem(date: t.date, total: runningTotal))
+        }
+        
+        if let last = items.last { items.append(CumulItem(date: Date(), total: last.total)) }
+        return items
+    }
+    
+    var maxAmount: Double { data.map { $0.total }.max() ?? 100 }
+
+    @State private var hoveredDate: Date? = nil
+    
+    var hoveredItem: CumulItem? {
+        guard let hDate = hoveredDate else { return nil }
+        return data.min(by: { abs($0.date.timeIntervalSince(hDate)) < abs($1.date.timeIntervalSince(hDate)) })
+    }
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            HStack {
+                if !isExpanded { Text("Cumulative Capital Injected").font(.headline).foregroundColor(.secondary) }
+                Spacer()
+                if !isExpanded { Button(action: { expandedChart = .cumulativeCapital }) { Image(systemName: "plus.magnifyingglass").foregroundColor(.secondary) }.buttonStyle(.plain) }
+            }.padding(.bottom, 8)
+            
+            if data.isEmpty { emptyState("No deposits or withdrawals recorded.") } else {
+                Chart {
+                    ForEach(data) { item in
+                        AreaMark(
+                            x: .value("Date", item.date),
+                            y: .value("Capital", item.total)
+                        )
+                        .foregroundStyle(LinearGradient(colors: [Color.green.opacity(0.4), .clear], startPoint: .top, endPoint: .bottom))
+                        .interpolationMethod(.stepCenter)
+                        
+                        LineMark(
+                            x: .value("Date", item.date),
+                            y: .value("Capital", item.total)
+                        )
+                        .foregroundStyle(Color.green)
+                        .lineStyle(StrokeStyle(lineWidth: 2))
+                        .interpolationMethod(.stepCenter)
+                    }
+                    
+                    if let item = hoveredItem {
+                        RuleMark(x: .value("Date", item.date))
+                            .foregroundStyle(Color.secondary.opacity(0.4))
+                            .lineStyle(StrokeStyle(lineWidth: 1, dash: [4]))
+                    }
+                }
+                .chartOverlay { proxy in
+                    GeometryReader { geometry in
+                        // NOUVEAU : Info-bulle dessinée par-dessus à une hauteur sûre (y: 50)
+                        if let item = hoveredItem, let xPosition = proxy.position(forX: item.date) {
+                            VStack(alignment: .leading, spacing: 2) {
+                                Text(item.date.formatted(date: .abbreviated, time: .omitted)).font(.caption.bold())
+                                Text(item.total.formatted(.currency(code: "EUR"))).font(.caption2.bold()).foregroundColor(.green).blur(radius: privacyMode ? 6 : 0)
+                            }
+                            .padding(6).background(Color(NSColor.windowBackgroundColor).opacity(0.95)).cornerRadius(6).shadow(radius: 3)
+                            .position(x: max(60, min(geometry.size.width - 60, xPosition)), y: 50)
+                        }
+                    }
+                }
+                .chartLegend(.hidden).chartXSelection(value: $hoveredDate)
+                .chartYScale(domain: 0...(maxAmount * 1.2))
+                .chartYAxis { AxisMarks(position: .leading) { v in AxisGridLine(); AxisTick(); AxisValueLabel { if let d = v.as(Double.self) { Text(d.formatted(.currency(code: "EUR").notation(.compactName))) } } } }
+            }
+            HStack { Text("Total deposits minus withdrawals over time (Dry Powder)").font(.caption2).foregroundColor(.secondary); Spacer(); BlueChipWatermark() }
+        }.padding().frame(minHeight: isExpanded ? 500 : 360, maxHeight: isExpanded ? .infinity : 360).background(Color(NSColor.controlBackgroundColor)).cornerRadius(12).shadow(color: Color.black.opacity(0.05), radius: 2, x: 0, y: 1)
+    }
+}
+
+// =========================================================================
+// MARK: - CHART 9 : Tax Drag Index (Line Chart %)
+// =========================================================================
+
+// =========================================================================
+// MARK: - CHART 9 : Tax Drag Index (Line Chart %)
+// =========================================================================
+
+struct TxTaxDragChart: View {
+    @ObservedObject var viewModel: PortfolioViewModel
+    let tx: [Transaction]
+    @Binding var privacyMode: Bool
+    var isExpanded: Bool = false
+    @Binding var expandedChart: TxChartZoomType?
+
+    struct TaxDragItem: Identifiable {
+        let id = UUID()
+        let year: String
+        let percent: Double
+        let totalFees: Double
+    }
+
+    var data: [TaxDragItem] {
+        let cal = Calendar.current
+        var dict: [Int: (vol: Double, fees: Double)] = [:]
+        
+        for t in tx {
+            let year = cal.component(.year, from: t.date)
+            let fees = t.customFields.values.reduce(0, +)
+            if t.type == .buy || t.type == .sell { dict[year, default: (0,0)].vol += t.amountEUR }
+            dict[year, default: (0,0)].fees += fees
+        }
+        
+        var result: [TaxDragItem] = []
+        for year in dict.keys.sorted() {
+            let volume = dict[year]!.vol
+            let fees = dict[year]!.fees
+            if volume > 0 {
+                result.append(TaxDragItem(year: String(year), percent: (fees / volume), totalFees: fees))
+            }
+        }
+        return result
+    }
+
+    @State private var hoveredYear: String? = nil
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            HStack {
+                if !isExpanded { Text("Tax Drag Index (Fees / Volume)").font(.headline).foregroundColor(.secondary) }
+                Spacer()
+                if !isExpanded { Button(action: { expandedChart = .taxDrag }) { Image(systemName: "plus.magnifyingglass").foregroundColor(.secondary) }.buttonStyle(.plain) }
+            }.padding(.bottom, 8)
+
+            if data.isEmpty { emptyState("No trading volume or fees found.") } else {
+                Chart(data) { item in
+                    LineMark(x: .value("Year", item.year), y: .value("Drag", item.percent))
+                        .foregroundStyle(Color.red).lineStyle(StrokeStyle(lineWidth: 2)).interpolationMethod(.monotone)
+                        .symbol { Circle().fill(Color.red).frame(width: 8, height: 8) }
+                    
+                    if let h = hoveredYear, h == item.year {
+                        // NOUVEAU : On ne met PLUS de .annotation ici pour ne pas décaler le graphe !
+                        RuleMark(x: .value("Year", h)).foregroundStyle(Color.secondary.opacity(0.3))
+                    }
+                }
+                .chartOverlay { proxy in
+                    GeometryReader { geometry in
+                        // NOUVEAU : Tooltip géré ici en absolu
+                        if let h = hoveredYear, let item = data.first(where: { $0.year == h }), let xPosition = proxy.position(forX: h) {
+                            VStack(spacing: 2) {
+                                Text(h).font(.caption.bold())
+                                Text(item.percent.formatted(.percent.precision(.fractionLength(2)))).font(.caption2.bold()).foregroundColor(.red)
+                                Text("Cost: \(item.totalFees.formatted(.currency(code: "EUR").precision(.fractionLength(0))))").font(.system(size: 8)).foregroundColor(.secondary).blur(radius: privacyMode ? 6 : 0)
+                            }
+                            .padding(6).background(Color(NSColor.windowBackgroundColor).opacity(0.95)).cornerRadius(6).shadow(radius: 3)
+                            .position(x: max(60, min(geometry.size.width - 60, xPosition)), y: 50)
+                        }
+                    }
+                }
+                .chartXSelection(value: $hoveredYear)
+                .chartYAxis { AxisMarks(position: .leading) { v in AxisGridLine(); AxisTick(); AxisValueLabel { if let d = v.as(Double.self) { Text(d.formatted(.percent.precision(.fractionLength(1)))) } } } }
+            }
+            HStack { Text("Percentage of trading volume lost to friction (broker, state taxes)").font(.caption2).foregroundColor(.secondary); Spacer(); BlueChipWatermark() }
+        }.padding().frame(minHeight: isExpanded ? 500 : 360, maxHeight: isExpanded ? .infinity : 360).background(Color(NSColor.controlBackgroundColor)).cornerRadius(12).shadow(color: Color.black.opacity(0.05), radius: 2, x: 0, y: 1)
+    }
+}
+
+// =========================================================================
+// MARK: - CHART 10 : Activity Heatmap
+// =========================================================================
+
+struct TxActivityHeatmapChart: View {
+    @ObservedObject var viewModel: PortfolioViewModel
+    let tx: [Transaction]
+    @Binding var privacyMode: Bool
+    var isExpanded: Bool = false
+    @Binding var expandedChart: TxChartZoomType?
+
+    let allMonths = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"]
+    
+    struct HeatItem: Identifiable {
+        let id = UUID()
+        let year: String
+        let month: String
+        let count: Int
+    }
+
+    var data: [HeatItem] {
+        let cal = Calendar.current
+        var dict: [String: [String: Int]] = [:]
+        
+        // Initialisation de toutes les années existantes avec 0 pour chaque mois
+        let years = Array(Set(tx.map { String(cal.component(.year, from: $0.date)) })).sorted(by: >)
+        for y in years {
+            dict[y] = [:]
+            for m in allMonths { dict[y]![m] = 0 }
+        }
+        
+        for t in tx {
+            let y = String(cal.component(.year, from: t.date))
+            let mIdx = cal.component(.month, from: t.date) - 1
+            let m = allMonths[mIdx]
+            dict[y]?[m]? += 1
+        }
+        
+        var result: [HeatItem] = []
+        for y in years {
+            for m in allMonths {
+                result.append(HeatItem(year: y, month: m, count: dict[y]![m]!))
+            }
+        }
+        return result
+    }
+    
+    var maxCount: Int { data.map { $0.count }.max() ?? 1 }
+    @State private var hoveredMonth: String? = nil
+    @State private var hoveredYear: String? = nil
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            HStack {
+                if !isExpanded { Text("Activity Heatmap").font(.headline).foregroundColor(.secondary) }
+                Spacer()
+                if !isExpanded { Button(action: { expandedChart = .activityHeatmap }) { Image(systemName: "plus.magnifyingglass").foregroundColor(.secondary) }.buttonStyle(.plain) }
+            }.padding(.bottom, 8)
+
+            if data.isEmpty { emptyState("No transactions to map.") } else {
+                Chart(data) { item in
+                    RectangleMark(
+                        x: .value("Month", item.month),
+                        y: .value("Year", item.year)
+                    )
+                    .foregroundStyle(item.count == 0 ? Color.gray.opacity(0.1) : Color.blue.opacity(0.2 + 0.8 * (Double(item.count) / Double(maxCount))))
+                    .cornerRadius(2)
+                }
+                .chartLegend(.hidden)
+                .chartXScale(domain: allMonths)
+                .chartYScale(domain: Array(Set(data.map { $0.year })).sorted(by: >)) // Années décroissantes
+                .chartOverlay { proxy in
+                    GeometryReader { geometry in
+                        Rectangle().fill(.clear).contentShape(Rectangle()).onContinuousHover { phase in
+                            switch phase {
+                            case .active(let location):
+                                if let (m, y) = proxy.value(at: location, as: (String, String).self) {
+                                    hoveredMonth = m
+                                    hoveredYear = y
+                                }
+                            case .ended:
+                                hoveredMonth = nil
+                                hoveredYear = nil
+                            }
+                        }
+                        
+                        if let hm = hoveredMonth, let hy = hoveredYear {
+                            if let count = data.first(where: { $0.month == hm && $0.year == hy })?.count {
+                                VStack(spacing: 2) {
+                                    Text("\(hm) \(hy)").font(.caption.bold())
+                                    Text("\(count) transactions").font(.caption2).foregroundColor(.secondary).blur(radius: privacyMode ? 6 : 0)
+                                }
+                                .padding(6).background(Color(NSColor.windowBackgroundColor).opacity(0.95)).cornerRadius(6).shadow(radius: 3)
+                                .position(x: proxy.position(forX: hm) ?? 0, y: proxy.position(forY: hy) ?? 0)
+                                .allowsHitTesting(false)
+                            }
+                        }
+                    }
+                }
+            }
+            HStack { Text("Darker color indicates a higher number of transactions").font(.caption2).foregroundColor(.secondary); Spacer(); BlueChipWatermark() }
+        }.padding().frame(minHeight: isExpanded ? 500 : 360, maxHeight: isExpanded ? .infinity : 360).background(Color(NSColor.controlBackgroundColor)).cornerRadius(12).shadow(color: Color.black.opacity(0.05), radius: 2, x: 0, y: 1)
+    }
+}
 
 // =========================================================================
 // MARK: - FULL SCREEN ZOOM VIEW
@@ -1434,15 +1838,18 @@ struct TransactionsFullScreenChartView: View {
     let tx: [Transaction]
     @Binding var privacyMode: Bool
     
-    // NOUVEAU : Récupération du vrai titre en fonction du graphique zoomé
     var titleForZoom: String {
         switch zoomType {
         case .annualCount: return "Transactions per Year"
         case .typeSummary: return "Summary by Type"
         case .buysOverTime: return "Buys over Time"
         case .taxBreakdown: return "Fees & Taxes Breakdown"
-        case .capitalAllocation: return "Deployed Capital Allocation" // <-- AJOUT
-        case .holdingPeriod: return "Days Held per Asset"             // <-- AJOUT
+        case .capitalAllocation: return "Deployed Capital Allocation"
+        case .holdingPeriod: return "Days Held per Asset"
+        case .tradeBalance: return "Trade Balance (Buys vs Sells)"          // <-- AJOUT
+        case .cumulativeCapital: return "Cumulative Capital Injected"       // <-- AJOUT
+        case .taxDrag: return "Tax Drag Index (Fees / Volume)"              // <-- AJOUT
+        case .activityHeatmap: return "Activity Heatmap"                    // <-- AJOUT
         }
     }
 
@@ -1455,18 +1862,16 @@ struct TransactionsFullScreenChartView: View {
             }
             
             switch zoomType {
-            case .annualCount:
-                TxAnnualCountChart(viewModel: viewModel, tx: tx, privacyMode: $privacyMode, isExpanded: true, expandedChart: .constant(nil))
-            case .typeSummary:
-                TxTotalByTypeChart(viewModel: viewModel, tx: tx, privacyMode: $privacyMode, isExpanded: true, expandedChart: .constant(nil))
-            case .buysOverTime:
-                TxBuysOverTimeChart(viewModel: viewModel, tx: tx, privacyMode: $privacyMode, isExpanded: true, expandedChart: .constant(nil))
-            case .taxBreakdown:
-                TxTaxBreakdownChart(viewModel: viewModel, tx: tx, privacyMode: $privacyMode, isExpanded: true, expandedChart: .constant(nil))
-            case .capitalAllocation: // <-- AJOUT
-                TxCapitalAllocationChart(viewModel: viewModel, tx: tx, privacyMode: $privacyMode, isExpanded: true, expandedChart: .constant(nil))
-            case .holdingPeriod:     // <-- AJOUT
-                TxHoldingPeriodChart(viewModel: viewModel, tx: tx, privacyMode: $privacyMode, isExpanded: true, expandedChart: .constant(nil))
+            case .annualCount: TxAnnualCountChart(viewModel: viewModel, tx: tx, privacyMode: $privacyMode, isExpanded: true, expandedChart: .constant(nil))
+            case .typeSummary: TxTotalByTypeChart(viewModel: viewModel, tx: tx, privacyMode: $privacyMode, isExpanded: true, expandedChart: .constant(nil))
+            case .buysOverTime: TxBuysOverTimeChart(viewModel: viewModel, tx: tx, privacyMode: $privacyMode, isExpanded: true, expandedChart: .constant(nil))
+            case .taxBreakdown: TxTaxBreakdownChart(viewModel: viewModel, tx: tx, privacyMode: $privacyMode, isExpanded: true, expandedChart: .constant(nil))
+            case .capitalAllocation: TxCapitalAllocationChart(viewModel: viewModel, tx: tx, privacyMode: $privacyMode, isExpanded: true, expandedChart: .constant(nil))
+            case .holdingPeriod: TxHoldingPeriodChart(viewModel: viewModel, tx: tx, privacyMode: $privacyMode, isExpanded: true, expandedChart: .constant(nil))
+            case .tradeBalance: TxTradeBalanceChart(viewModel: viewModel, tx: tx, privacyMode: $privacyMode, isExpanded: true, expandedChart: .constant(nil))           // <-- AJOUT
+            case .cumulativeCapital: TxCumulativeCapitalChart(viewModel: viewModel, tx: tx, privacyMode: $privacyMode, isExpanded: true, expandedChart: .constant(nil)) // <-- AJOUT
+            case .taxDrag: TxTaxDragChart(viewModel: viewModel, tx: tx, privacyMode: $privacyMode, isExpanded: true, expandedChart: .constant(nil))                     // <-- AJOUT
+            case .activityHeatmap: TxActivityHeatmapChart(viewModel: viewModel, tx: tx, privacyMode: $privacyMode, isExpanded: true, expandedChart: .constant(nil))     // <-- AJOUT
             }
             
         }.padding(30).frame(minWidth: 900, minHeight: 700)
