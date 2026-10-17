@@ -1,16 +1,20 @@
 FINISH V1.0 BlueChip :
 
+- fuseau horaire actuel et % de taxe dividendes dans les réglages
+
+- tableau yearly summary responsive avec nombre d'années et connecté à année début investissements et année en cours (remplir de 0 si pas de données)
+
+- zoom graphes transaction avoir titre du graphe !!
+
+- transactions per year régler souci survol de données bcp trop large encore une fois
+
+- ROI % by Assets manquant 2eme graphe Wealth page
+
 2. icone barre des menus : 3 prochains évents, chaque position avec prix actuel + target price, refresh api yahoo finance
 
 3. notifs apple : ce qu'il se passe demain et aujourd'hui calendar, price target se rapproche du prix actuel, goal dépassé, dividende reçu
 
 4. demander à l'IA des idées d'ajouts !! que ce soit Pages ou features
-
-- ajouter lien et heure earnings trimestriels (avec fuseau horaire)
-
-- tableau yearly summary responsive avec nombre d'années et connecté à année début investissements et année en cours (remplir de 0 si pas de données)
-
-- fuseau horaire actuel et % de taxe dividendes dans les réglages 
 
 PLUS TARD :
 
@@ -23,3 +27,5 @@ ajouter lignes de tendances à certains graphes
 si recherche de graphe ouvre graphe en mode zoom, si recherche event ouvre event en mode zoom
 
 ajouter icône à chaque case d'header et ajouter mini description à chaque graphe de l'appli
+
+export en csv pour pouvoir après redéposer dessus
