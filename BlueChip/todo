@@ -1,6 +1,6 @@
 FINISH V1.0 BlueChip :
 
-1. icone barre des menus : 3 prochains évents, chaque position avec prix actuel + target price, refresh api yahoo finance
+1. icone barre des menus : prochains évents du mois en cours, chaque position avec prix actuel + target price, refresh api yahoo finance, dividendes prévus ce mois (ticker + montant estimé)
 
 2. notifs apple : ce qu'il se passe demain et aujourd'hui calendar, price target se rapproche du prix actuel, goal dépassé, dividende reçu
 

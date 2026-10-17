@@ -3,6 +3,9 @@ import SwiftData
 
 @main
 struct BlueChipApp: App {
+    
+    @StateObject private var viewModel = PortfolioViewModel()
+    
     var body: some Scene {
         WindowGroup {
             ContentView()
@@ -21,6 +24,7 @@ struct BlueChipApp: App {
             WealthLiability.self,
             WatchlistItem.self
         ])
+        
         .commands {
             
             
@@ -119,6 +123,11 @@ struct BlueChipApp: App {
                 .keyboardShortcut("/", modifiers: .command) // Cmd + /
             }
         }
+        
+        MenuBarExtra("BlueChip", image: "MenuBarIcon") {
+            MenuBarDashboardView(viewModel: viewModel)
+        }
+        .menuBarExtraStyle(.window) // Crée le popover
     }
 }
 
