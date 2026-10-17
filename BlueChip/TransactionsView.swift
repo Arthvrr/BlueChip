@@ -452,7 +452,7 @@ struct TransactionRowView: View {
 }
 
 // =========================================================================
-// MARK: - YEARLY SUMMARY
+// MARK: - YEARLY SUMMARY (RESPONSIVE)
 // =========================================================================
 
 struct TransactionsYearlySummarySection: View {
@@ -460,9 +460,14 @@ struct TransactionsYearlySummarySection: View {
     let tx: [Transaction]
     @Binding var privacyMode: Bool
 
+    // NOUVEAU : Récupère les années depuis le réglage de départ jusqu'à aujourd'hui
     var years: [Int] {
-        Array(Set(tx.map { Calendar.current.component(.year, from: $0.date) })).sorted(by: >)
+        let currentYear = Calendar.current.component(.year, from: Date())
+        let startYear = viewModel.dividendStartYear
+        guard currentYear >= startYear else { return [] }
+        return Array(startYear...currentYear).reversed()
     }
+    
     func txForYear(_ year: Int) -> [Transaction] {
         tx.filter { Calendar.current.component(.year, from: $0.date) == year }
     }
@@ -474,25 +479,25 @@ struct TransactionsYearlySummarySection: View {
                 Text("No data for this period.").foregroundColor(.secondary).padding()
             } else {
                 GeometryReader { geo in
-                    ScrollView(.horizontal, showsIndicators: false) {
+                    ScrollView(.horizontal, showsIndicators: true) {
                         VStack(spacing: 0) {
                             summaryHeaderRow()
                                 .background(Color(NSColor.windowBackgroundColor))
                             Divider()
-                            ScrollView(.vertical) {
-                                VStack(spacing: 0) {
-                                    ForEach(years, id: \.self) { year in
-                                        YearlySummaryRowView(year: year, transactions: txForYear(year), columns: viewModel.transactionCustomColumns, privacyMode: privacyMode)
-                                        Divider()
-                                    }
-                                    YearlyTotalsRowView(transactions: tx, columns: viewModel.transactionCustomColumns, privacyMode: privacyMode)
+                            
+                            // NOUVEAU : On a retiré le ScrollView vertical interne pour laisser la vue s'étirer
+                            VStack(spacing: 0) {
+                                ForEach(years, id: \.self) { year in
+                                    YearlySummaryRowView(year: year, transactions: txForYear(year), columns: viewModel.transactionCustomColumns, privacyMode: privacyMode)
+                                    Divider()
                                 }
+                                YearlyTotalsRowView(transactions: tx, columns: viewModel.transactionCustomColumns, privacyMode: privacyMode)
                             }
                         }
                         .frame(minWidth: geo.size.width)
                     }
                 }
-                .frame(height: 250)
+                .frame(height: CGFloat(years.count + 2) * 36 + 18)
                 .background(Color(NSColor.controlBackgroundColor)).cornerRadius(8)
                 .overlay(RoundedRectangle(cornerRadius: 8).stroke(Color.gray.opacity(0.2), lineWidth: 1))
             }
@@ -727,6 +732,7 @@ struct TxAnnualCountChart: View {
                         
                         if let h = hoveredYear {
                             if let xPosition = proxy.position(forX: h) {
+                                // NOUVEAU : Format compact et aligné comme dans "Summary by Type"
                                 VStack(alignment: .leading, spacing: 4) {
                                     Text(h).font(.caption.bold())
                                     Divider()
@@ -734,13 +740,16 @@ struct TxAnnualCountChart: View {
                                         let c = data.first { $0.year == h && $0.type.rawValue == label }?.count ?? 0
                                         HStack {
                                             Circle().fill(color(for: label)).frame(width: 6, height: 6)
-                                            Text("\(label): \(c)").font(.caption2)
-                                                .blur(radius: privacyMode ? 6 : 0)
+                                            Text(label).font(.caption2).foregroundColor(color(for: label))
+                                            Spacer()
+                                            Text("\(c)").font(.caption2.bold()).blur(radius: privacyMode ? 6 : 0)
                                         }
                                     }
                                 }
+                                .frame(width: 100) // NOUVEAU : Largeur fixée pour éviter que l'infobulle ne s'étire !
                                 .padding(8).background(Color(NSColor.windowBackgroundColor).opacity(0.95)).cornerRadius(8).shadow(radius: 4)
-                                .position(x: max(60, min(geometry.size.width - 60, xPosition)), y: 50)
+                                .overlay(RoundedRectangle(cornerRadius: 8).stroke(Color.gray.opacity(0.2), lineWidth: 1))
+                                .position(x: max(60, min(geometry.size.width - 60, xPosition)), y: 60)
                             }
                         }
                     }
@@ -1189,11 +1198,21 @@ struct TransactionsFullScreenChartView: View {
     @ObservedObject var viewModel: PortfolioViewModel
     let tx: [Transaction]
     @Binding var privacyMode: Bool
+    
+    // NOUVEAU : Récupération du vrai titre en fonction du graphique zoomé
+    var titleForZoom: String {
+        switch zoomType {
+        case .annualCount: return "Transactions per Year"
+        case .typeSummary: return "Summary by Type"
+        case .buysOverTime: return "Buys over Time"
+        case .taxBreakdown: return "Fees & Taxes Breakdown"
+        }
+    }
 
     var body: some View {
         VStack(spacing: 20) {
             HStack {
-                Text("Analysis Detail").font(.title).fontWeight(.bold)
+                Text(titleForZoom).font(.title).fontWeight(.bold)
                 Spacer()
                 Button(action: { dismiss() }) { Image(systemName: "xmark.circle.fill").font(.title).foregroundColor(.secondary) }.buttonStyle(.plain)
             }

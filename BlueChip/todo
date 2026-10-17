@@ -1,10 +1,8 @@
 FINISH V1.0 BlueChip :
 
-- tableau yearly summary responsive avec nombre d'années et connecté à année début investissements et année en cours (remplir de 0 si pas de données)
+- graphe montant en transactions par actions
 
-- zoom graphes transaction avoir titre du graphe !!
-
-- transactions per year régler souci survol de données bcp trop large encore une fois
+- graphe montant en taxes par actions et nombre d'achats/ventes effectués par actions du pf
 
 - ROI % by Assets manquant 2eme graphe Wealth page
 
