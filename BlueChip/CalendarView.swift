@@ -899,10 +899,6 @@ struct EventDetailSheet: View {
 }
 
 // =========================================================================
-// MARK: - FORMULAIRE D'AJOUT / ÉDITION (PRO, GRILLE ALIGNÉE)
-// =========================================================================
-
-// =========================================================================
 // MARK: - FORMULAIRE D'AJOUT / ÉDITION (PRO & STRUCTURÉ)
 // =========================================================================
 
@@ -986,6 +982,18 @@ struct AddEditEventSheet: View {
         return Array(Set(pTickers + wTickers)).sorted()
     }
     
+    // NOUVEAU : Fonction pour charger le lien IR sauvegardé pour un ticker
+    private func loadIRLink(for selectedTicker: String) {
+        // Ne charger automatiquement que si le champ urlLink est vide OU si on est en train d'ajouter un nouvel event
+        guard !selectedTicker.isEmpty else { return }
+        
+        if let pos = viewModel.positions.first(where: { $0.ticker == selectedTicker }), let existingURL = pos.investorRelationsURL, !existingURL.isEmpty {
+            if !isEditing || urlLink.isEmpty {
+                urlLink = existingURL
+            }
+        }
+    }
+    
     var body: some View {
         VStack(spacing: 0) {
             // HEADER
@@ -1039,13 +1047,23 @@ struct AddEditEventSheet: View {
                                     HStack {
                                         TextField("e.g., AAPL", text: $ticker)
                                             .textFieldStyle(.roundedBorder)
-                                            .onChange(of: ticker) { ticker = ticker.uppercased() }
+                                            // NOUVEAU : Chargement du lien si le ticker est tapé manuellement
+                                            .onChange(of: ticker) { _, newValue in
+                                                let uppercased = newValue.uppercased()
+                                                ticker = uppercased
+                                                loadIRLink(for: uppercased)
+                                            }
                                             .frame(width: 100)
                                         
                                         Picker("", selection: $ticker) {
                                             Text("Saved...").tag("")
                                             ForEach(availableTickers, id: \.self) { t in Text(t).tag(t) }
-                                        }.labelsHidden().frame(width: 100)
+                                        }
+                                        // NOUVEAU : Chargement du lien si le ticker est sélectionné via le menu
+                                        .onChange(of: ticker) { _, newValue in
+                                            loadIRLink(for: newValue)
+                                        }
+                                        .labelsHidden().frame(width: 100)
                                     }
                                 }
                                 Spacer()
@@ -1198,14 +1216,16 @@ struct AddEditEventSheet: View {
                     .disabled(ticker.isEmpty)
             }.padding()
         }
-        .frame(width: 550, height: 780) // Fenêtre plus large et plus haute
+        .frame(width: 550, height: 780)
     }
     
     func save() {
+        let safeTicker = ticker.uppercased()
+        
         if isEditing, let evt = event {
             evt.date = date
             evt.type = type
-            evt.ticker = ticker.uppercased()
+            evt.ticker = safeTicker
             evt.note = note
             evt.hasTime = hasTime
             evt.urlLink = urlLink
@@ -1220,13 +1240,20 @@ struct AddEditEventSheet: View {
                 evt.actEPS = actEPS
             }
             
+            // NOUVEAU : Sauvegarde du lien IR dans la position globale si c'est un Earnings event
+            if type.rawValue.lowercased().contains("earning") && !urlLink.isEmpty {
+                if let idx = viewModel.positions.firstIndex(where: { $0.ticker == safeTicker }) {
+                    viewModel.positions[idx].investorRelationsURL = urlLink
+                }
+            }
+            
             viewModel.objectWillChange.send()
         } else {
             let newEvent = CalendarEvent(
                 id: UUID(),
                 date: date,
                 type: type,
-                ticker: ticker.uppercased(),
+                ticker: safeTicker,
                 note: note
             )
             newEvent.hasTime = hasTime
@@ -1237,6 +1264,13 @@ struct AddEditEventSheet: View {
             if !isFutureEvent {
                 newEvent.actRevenue = actRevenue
                 newEvent.actEPS = actEPS
+            }
+            
+            // NOUVEAU : Sauvegarde du lien IR dans la position globale si c'est un Earnings event
+            if type.rawValue.lowercased().contains("earning") && !urlLink.isEmpty {
+                if let idx = viewModel.positions.firstIndex(where: { $0.ticker == safeTicker }) {
+                    viewModel.positions[idx].investorRelationsURL = urlLink
+                }
             }
             
             context.insert(newEvent)
