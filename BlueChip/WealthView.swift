@@ -533,7 +533,7 @@ struct WealthROIChart: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 16) {
             HStack {
-                if !isExpanded { Text("Return on Investment (ROI % by Asset)").font(.headline).foregroundColor(.secondary) }
+                if !isExpanded { Text("Return on Investment by Asset").font(.headline).foregroundColor(.secondary) }
                 Spacer()
                 if !isExpanded { Button(action: { expandedChart = .roi }) { Image(systemName: "plus.magnifyingglass").foregroundColor(.secondary) }.buttonStyle(.plain) }
             }
@@ -589,7 +589,7 @@ struct WealthFullScreenChartView: View {
     var body: some View {
         VStack(spacing: 20) {
             HStack {
-                Text(zoomType == .allocation ? "Assets Allocation" : "Return on Investment").font(.title).fontWeight(.bold)
+                Text(zoomType == .allocation ? "Assets Allocation" : "Return on Investment by Asset").font(.title).fontWeight(.bold)
                 Spacer()
                 Button(action: { dismiss() }) { Image(systemName: "xmark.circle.fill").font(.title).foregroundColor(.secondary) }.buttonStyle(.plain)
             }

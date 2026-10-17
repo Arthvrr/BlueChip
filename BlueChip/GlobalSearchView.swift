@@ -232,7 +232,7 @@ struct GlobalSearchView: View {
             ("Global Exposure Heatmap (Treemap)", "Chart • Exposure", "treemap square map regions exposure", "squareshape.split.3x3", .orange, .exposure),
             ("Sector × Geography Risk Matrix", "Chart • Exposure", "heatmap risk concentration sector exposure", "square.grid.3x3.fill", .red, .exposure),
             
-            // ================= TRANSACTIONS =================
+            /// ================= TRANSACTIONS =================
             ("Total Deposited", "Dashboard Metric • Transactions", "cash in deposit add funds transactions", "arrow.down.circle.fill", .green, .transactions),
             ("Total Withdrawn", "Dashboard Metric • Transactions", "cash out withdraw funds transactions", "arrow.up.circle.fill", .red, .transactions),
             ("Net Cash Flow", "Dashboard Metric • Transactions", "cash balance in out transactions", "arrow.left.arrow.right.circle.fill", .blue, .transactions),
@@ -248,6 +248,12 @@ struct GlobalSearchView: View {
             ("Summary by Type", "Chart • Transactions", "type buy sell deposit withdraw combo chart transactions", "chart.xyaxis.line", .purple, .transactions),
             ("Buys over Time", "Chart • Transactions", "timeline purchases chronological bar trend transactions", "chart.bar.xaxis", .green, .transactions),
             ("Fees & Taxes Breakdown", "Chart • Transactions", "cost taxes broker state donut pie chart transactions", "chart.pie.fill", .red, .transactions),
+            ("Deployed Capital Allocation", "Chart • Transactions", "cumulative donut pie chart spent allocation transactions", "chart.pie.fill", .blue, .transactions),
+            ("Days Held per Asset", "Chart • Transactions", "holding period time days bar chart transactions", "chart.bar.xaxis", .purple, .transactions),
+            ("Trade Balance (Buys vs Sells)", "Chart • Transactions", "diverging bar chart buys sells balance transactions", "chart.bar.fill", .orange, .transactions),
+            ("Cumulative Capital Injected", "Chart • Transactions", "area chart dry powder deposits withdrawals transactions", "chart.xyaxis.line", .green, .transactions),
+            ("Tax Drag Index (Fees / Volume)", "Chart • Transactions", "line chart fees volume percentage friction transactions", "chart.xyaxis.line", .red, .transactions),
+            ("Activity Heatmap", "Chart • Transactions", "matrix squares treemap frequency months years transactions", "squareshape.split.3x3", .blue, .transactions),
             
             // ================= BENCHMARK =================
             ("Portfolio Return", "Dashboard Metric • Benchmark", "current year ytd performance benchmark", "chart.line.uptrend.xyaxis", .green, .benchmark),

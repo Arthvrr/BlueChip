@@ -360,20 +360,26 @@ struct TutorialView: View {
                 
                 **Transaction History (The Ledger)**
                 Below the progress bar is your interactive transaction history table. 
-                • **Adding Transactions:** Click the **+ Add** button (or use the **⌘ + T** shortcut) to log a new transaction. You can record the date, type (Buy, Sell, Deposit, Withdrawal), ticker, quantity, amount in €, and add optional notes.
-                • **Custom Columns:** Click the **+ Column** button to add custom tracking fields, such as specific taxes (e.g., TOB) or broker fees.
-                • **Filtering & Search:** The table is highly interactive. Use the *Time Filter* dropdown to view transactions from "This Month," "Year to Date," or a "Custom Range." You can also quickly filter by transaction type using the pill buttons (Buy, Sell, Deposit, etc.) or search for specific tickers or notes using the search bar.
-                • **Editing:** **Double-click** any transaction row to modify or delete it.
+                - **Adding Transactions:** Click the **+ Add** button (or use the **⌘ + T** shortcut) to log a new transaction. You can record the date, type (Buy, Sell, Deposit, Withdrawal), ticker, quantity, amount in €, and add optional notes.
+                - **Custom Columns:** Click the **+ Column** button to add custom tracking fields, such as specific taxes (e.g., TOB) or broker fees.
+                - **Filtering & Search:** The table is highly interactive. Use the *Time Filter* dropdown to view transactions from "This Month," "Year to Date," or a "Custom Range." You can also quickly filter by transaction type using the pill buttons (Buy, Sell, Deposit, etc.) or search for specific tickers or notes using the search bar.
+                - **Editing:** **Double-click** any transaction row to modify or delete it.
                 
                 **Yearly Summary**
                 A consolidated table breaks down your transaction history year by year. It provides a clean aggregation of your total buys, sells, deposits, and withdrawals, alongside your total invested capital and any custom fee columns you've created.
                 
                 **Visual Analytics & Charts**
-                Scroll down to explore 4 analytical charts that visualize your trading behavior:
-                • **Transactions per Year:** A stacked bar chart showing the volume of each transaction type executed annually.
-                • **Summary by Type:** A dual-axis chart comparing the total monetary amount (€) versus the absolute count of each transaction type.
-                • **Buys over Time:** A bar chart tracking your historical buy orders, complete with an algorithmic trendline to visualize your capital deployment velocity.
-                • **Fees & Taxes Breakdown:** A donut chart illustrating exactly where your frictional costs (custom fee columns) are accumulating.
+                Scroll down to explore 10 analytical charts that visualize your trading behavior:
+                - **Transactions per Year:** A stacked bar chart showing the volume of each transaction type executed annually.
+                - **Summary by Type:** A dual-axis chart comparing the total monetary amount (€) versus the absolute count of each transaction type.
+                - **Buys over Time:** A bar chart tracking your historical buy orders, complete with an algorithmic trendline to visualize your capital deployment velocity.
+                - **Fees & Taxes Breakdown:** A donut chart illustrating exactly where your frictional costs (custom fee columns) are accumulating.
+                - **Deployed Capital Allocation:** A donut chart illustrating how your total invested capital is distributed across your current holdings, grouping all sold assets into a single category.
+                - **Days Held per Asset:** A bar chart tracking the holding period (in days) for each stock in your portfolio, sorted from longest to shortest duration.
+                - **Trade Balance (Buys vs Sells):** A diverging bar chart comparing your annual accumulation (buys) against distribution (sells) phases to visualize your net trading activity.
+                - **Cumulative Capital Injected:** An area chart tracking your "dry powder" by plotting total deposits minus withdrawals over time.
+                - **Tax Drag Index (Fees / Volume):** A line chart revealing the percentage of your trading volume lost to frictional costs (broker fees, state taxes) year over year.
+                - **Activity Heatmap:** A GitHub-style heatmap displaying your transaction frequency by month and year to identify seasonal trading behaviors.
                 
                 *Pro-tip: Click the magnifying glass icon on any chart to open a detailed full-screen view!*
                 """

@@ -1,12 +1,10 @@
 FINISH V1.0 BlueChip :
 
-- ROI % by Assets manquant 2eme graphe Wealth page
+1. icone barre des menus : 3 prochains évents, chaque position avec prix actuel + target price, refresh api yahoo finance
 
-2. icone barre des menus : 3 prochains évents, chaque position avec prix actuel + target price, refresh api yahoo finance
+2. notifs apple : ce qu'il se passe demain et aujourd'hui calendar, price target se rapproche du prix actuel, goal dépassé, dividende reçu
 
-3. notifs apple : ce qu'il se passe demain et aujourd'hui calendar, price target se rapproche du prix actuel, goal dépassé, dividende reçu
-
-4. demander à l'IA des idées d'ajouts !! que ce soit Pages ou features
+3. demander à l'IA des idées d'ajouts !! que ce soit Pages ou features
 
 PLUS TARD :
 

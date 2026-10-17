@@ -720,10 +720,6 @@ struct FullWidthDayCellView: View {
     }
 }
 
-// =========================================================================
-// MARK: - SHEET FICHE DÉTAILLÉE D'UN ÉVÉNEMENT
-// =========================================================================
-
 struct EventDetailSheet: View {
     @Environment(\.dismiss) var dismiss
     @ObservedObject var viewModel: PortfolioViewModel
@@ -738,21 +734,19 @@ struct EventDetailSheet: View {
         return f.string(from: event.date)
     }
     
-    // NOUVEAU : Convertisseur dynamique ET -> Heure Locale (via UTC)
+    // Calcul natif ultra-précis qui respecte les changements d'heure d'été/hiver (DST)
     var localTimeConverted: String {
         guard event.hasTime else { return "" }
-        let f = DateFormatter()
-        
-        // On récupère le réglage UTC (ex: 2 pour UTC+2)
-        let offsetHours = Int(viewModel.userTimeZoneIdentifier) ?? (TimeZone.current.secondsFromGMT() / 3600)
-        f.timeZone = TimeZone(secondsFromGMT: offsetHours * 3600)
-        f.dateFormat = "h:mm a"
         
         let usFormatter = DateFormatter()
         usFormatter.timeZone = TimeZone(identifier: "America/New_York")
         usFormatter.dateFormat = "h:mm a"
         
-        let localStr = f.string(from: event.date)
+        let localFormatter = DateFormatter()
+        localFormatter.timeZone = TimeZone.current // L'appareil gère le DST automatiquement
+        localFormatter.dateFormat = "h:mm a"
+        
+        let localStr = localFormatter.string(from: event.date)
         let usStr = usFormatter.string(from: event.date)
         
         return "(\(usStr) ET = \(localStr) Local)"
@@ -804,17 +798,14 @@ struct EventDetailSheet: View {
                     }
                 }
                 
-                // --- SECTION DIVIDENDES (Utilisation du Taux des Paramètres) ---
+                // --- SECTION DIVIDENDES ---
                 if event.type.rawValue.lowercased().contains("dividend") {
                     if let pos = viewModel.positions.first(where: { $0.ticker == event.ticker }) {
                         let paymentsPerYear = max(1.0, Double(pos.dividendMonths.count))
                         let singlePaymentPerShareUSD = pos.annualDividendNet / paymentsPerYear
                         let totalGrossUSD = singlePaymentPerShareUSD * pos.quantity
                         let singlePaymentGrossEUR = totalGrossUSD * pos.usdToEurRate
-                        
-                        let taxRate = viewModel.dividendTaxRate
-                        let taxMultiplier = 1.0 - (taxRate / 100.0)
-                        let singlePaymentNetEUR = singlePaymentGrossEUR * taxMultiplier
+                        let singlePaymentNetEUR = singlePaymentGrossEUR * 0.85
                         
                         GroupBox("Estimated Dividend Payout") {
                             VStack(spacing: 12) {
@@ -830,7 +821,7 @@ struct EventDetailSheet: View {
                                     Text(singlePaymentGrossEUR.formatted(.currency(code: "EUR")))
                                 }
                                 HStack {
-                                    Text("Estimated Net (\(Int(100 - taxRate))%):").fontWeight(.bold)
+                                    Text("Estimated Net (85%):").fontWeight(.bold)
                                     Spacer()
                                     Text(singlePaymentNetEUR.formatted(.currency(code: "EUR"))).fontWeight(.bold).foregroundColor(.green)
                                 }
@@ -909,7 +900,7 @@ struct EventDetailSheet: View {
 }
 
 // =========================================================================
-// MARK: - FORMULAIRE D'AJOUT / ÉDITION (PRO & STRUCTURÉ)
+// MARK: - FORMULAIRE D'AJOUT / ÉDITION (PRO, GRILLE ALIGNÉE)
 // =========================================================================
 
 struct AddEditEventSheet: View {
@@ -957,10 +948,18 @@ struct AddEditEventSheet: View {
         date > Date()
     }
     
-    // NOUVEAU : Calcul dynamique inverse (Tu entres l'heure ET, l'app donne l'heure Locale)
+    // Heure affichée comme heure de New York
+    var usEasternTimeEquivalent: String {
+        let f = DateFormatter()
+        f.timeZone = TimeZone(identifier: "America/New_York")
+        f.dateFormat = "h:mm a 'ET'"
+        return f.string(from: date)
+    }
+    
+    // Heure affichée en heure locale
     var localTimeConverted: String {
         let f = DateFormatter()
-        f.timeZone = TimeZone(identifier: viewModel.userTimeZoneIdentifier) ?? TimeZone.current
+        f.timeZone = TimeZone.current
         f.dateFormat = "h:mm a"
         return f.string(from: date)
     }
@@ -1020,7 +1019,7 @@ struct AddEditEventSheet: View {
                                 VStack(alignment: .leading, spacing: 6) {
                                     Text("Date & US Market Time (ET)").font(.caption).foregroundColor(.secondary)
                                     HStack {
-                                        // On force le sélecteur à agir comme si on était à New York !
+                                        // Le sélecteur enregistre la date en heure de New York
                                         DatePicker("", selection: $date, displayedComponents: hasTime ? [.date, .hourAndMinute] : .date)
                                             .environment(\.timeZone, TimeZone(identifier: "America/New_York")!)
                                             .labelsHidden()
@@ -1159,17 +1158,14 @@ struct AddEditEventSheet: View {
                         }
                     }
                     
-                    // --- SECTION 3 : DIVIDEND DATA (Utilisation de la taxe) ---
+                    // --- SECTION 3 : DIVIDEND DATA ---
                     if type.rawValue.lowercased().contains("dividend") && !ticker.isEmpty {
                         if let pos = viewModel.positions.first(where: { $0.ticker == ticker }) {
                             let paymentsPerYear = max(1.0, Double(pos.dividendMonths.count))
                             let singlePaymentPerShareUSD = pos.annualDividendNet / paymentsPerYear
                             let totalGrossUSD = singlePaymentPerShareUSD * pos.quantity
                             let singlePaymentGrossEUR = totalGrossUSD * pos.usdToEurRate
-                            
-                            let taxRate = viewModel.dividendTaxRate
-                            let taxMultiplier = 1.0 - (taxRate / 100.0)
-                            let singlePaymentNetEUR = singlePaymentGrossEUR * taxMultiplier
+                            let singlePaymentNetEUR = singlePaymentGrossEUR * 0.85
                             
                             GroupBox("Estimated Dividend Payout") {
                                 VStack(alignment: .leading, spacing: 12) {
@@ -1190,7 +1186,7 @@ struct AddEditEventSheet: View {
                                         Text(singlePaymentGrossEUR.formatted(.currency(code: "EUR"))).font(.headline)
                                     }
                                     HStack {
-                                        Text("Estimated Net (\(Int(100 - taxRate))%):").font(.title3).fontWeight(.bold)
+                                        Text("Estimated Net (85%):").font(.title3).fontWeight(.bold)
                                         Spacer()
                                         Text(singlePaymentNetEUR.formatted(.currency(code: "EUR"))).font(.title3).fontWeight(.bold).foregroundColor(.green)
                                     }
