@@ -505,9 +505,13 @@ class PortfolioViewModel: ObservableObject {
     private var notifiedAlerts: Set<String> = []
     
     func checkAlertsAndNotify() {
-        // 1. Target Price : Positions (Drop to or below target)
+        
+        // -----------------------------------------------------
+        // 1. Target Prices (Opportunités d'achat / Vente)
+        // -----------------------------------------------------
+        
+        // Portfolio Positions (Drop to or below target)
         for pos in positions {
-            // CORRECTION : On vérifie que le prix est inférieur ou égal (<=) au target
             if let target = pos.targetPrice, target > 0, pos.currentPrice <= target {
                 let alertId = "pos_target_\(pos.ticker)"
                 if !notifiedAlerts.contains(alertId) {
@@ -521,7 +525,7 @@ class PortfolioViewModel: ObservableObject {
             }
         }
         
-        // 2. Target Price : Watchlist (Buying Opportunity)
+        // Watchlist (Buying Opportunity)
         for item in watchlistItems {
             if item.targetPrice > 0, item.currentPrice <= item.targetPrice {
                 let alertId = "watch_target_\(item.ticker)"
@@ -536,14 +540,96 @@ class PortfolioViewModel: ObservableObject {
             }
         }
         
-        // 3. Objectif Principal (Goal)
+        // -----------------------------------------------------
+        // 2. Page Goals (Vérification de tous les objectifs)
+        // -----------------------------------------------------
+        
+        // A. GROWTH GOAL (Total Portfolio Value ou Invested)
         if currentGoalTarget > 0, currentGoalValue >= currentGoalTarget {
-            let alertId = "goal_reached_\(currentGoalTarget)"
+            let alertId = "growth_goal_reached_\(currentGoalTarget)"
             if !notifiedAlerts.contains(alertId) {
                 NotificationManager.shared.sendImmediateNotification(
-                    title: "🏆 Goal Reached!",
-                    subtitle: "Congratulations!",
-                    body: "Your portfolio has surpassed your goal of \(currentGoalTarget.formatted(.currency(code: "EUR")))."
+                    title: "🚀 Growth Goal Reached!",
+                    subtitle: "Composition Dashboard",
+                    body: "Your portfolio has surpassed your growth goal of \(currentGoalTarget.formatted(.currency(code: "EUR")))."
+                )
+                notifiedAlerts.insert(alertId)
+            }
+        }
+        
+        // B. DIVIDEND GOAL (Annual Income ou Yield)
+        if dividendGoalTarget > 0 {
+            let isYield = dividendGoalType == .portfolioYield
+            let currentValue = isYield ? portfolioYield * 100 : totalDividends // On multiplie le yield par 100 pour le comparer au Target (ex: 4.5%)
+            
+            if currentValue >= dividendGoalTarget {
+                let alertId = "dividend_goal_reached_\(dividendGoalTarget)_\(isYield)"
+                if !notifiedAlerts.contains(alertId) {
+                    let formattedGoal = isYield ? "\(dividendGoalTarget.formatted(.number.precision(.fractionLength(2))))%" : dividendGoalTarget.formatted(.currency(code: "EUR"))
+                    NotificationManager.shared.sendImmediateNotification(
+                        title: "💸 Dividend Goal Reached!",
+                        subtitle: "Passive Income Tracker",
+                        body: "Congratulations! You have hit your dividend goal of \(formattedGoal)."
+                    )
+                    notifiedAlerts.insert(alertId)
+                }
+            }
+        }
+        
+        // C. TRANSACTION GOAL (Nombre de transactions)
+        if transactionGoalTarget > 0, Double(transactions.count) >= transactionGoalTarget {
+            let alertId = "transaction_goal_reached_\(transactionGoalTarget)"
+            if !notifiedAlerts.contains(alertId) {
+                NotificationManager.shared.sendImmediateNotification(
+                    title: "🧾 Transaction Goal Reached!",
+                    subtitle: "Ledger History",
+                    body: "You have logged \(transactions.count) transactions, reaching your target of \(Int(transactionGoalTarget))."
+                )
+                notifiedAlerts.insert(alertId)
+            }
+        }
+        
+        // D. BENCHMARK GOAL (Alpha / Outperformance)
+        if benchmarkGoalTarget > 0 {
+            let currentYear = Calendar.current.component(.year, from: Date())
+            let activeYears = Array(dividendStartYear...currentYear)
+            
+            // On calcule le retour moyen du portfolio sur les années actives
+            var vals: [Double] = []
+            for year in activeYears {
+                guard let yearData = growthYears.first(where: { $0.year == year }) else { vals.append(0); continue }
+                let effectiveEnd = (year == currentYear) ? currentTotalCapital : yearData.endWallet
+                let base = yearData.startWallet + yearData.invested
+                vals.append(base > 0 ? ((effectiveEnd - base) / base) * 100.0 : 0)
+            }
+            let portfolioAvgReturn = vals.isEmpty ? 0 : vals.reduce(0, +) / Double(vals.count)
+            
+            // On trouve le meilleur indice
+            let bestIndexAvgReturn = benchmarkIndices.max { $0.averageReturn(years: activeYears) < $1.averageReturn(years: activeYears) }?.averageReturn(years: activeYears) ?? 0
+            
+            let alpha = portfolioAvgReturn - bestIndexAvgReturn
+            
+            if alpha >= benchmarkGoalTarget {
+                let alertId = "benchmark_goal_reached_\(benchmarkGoalTarget)"
+                if !notifiedAlerts.contains(alertId) {
+                    NotificationManager.shared.sendImmediateNotification(
+                        title: "📈 Alpha Goal Reached!",
+                        subtitle: "Benchmark Analytics",
+                        body: "You are currently outperforming your best benchmark by \(alpha.formatted(.number.precision(.fractionLength(2))))%!"
+                    )
+                    notifiedAlerts.insert(alertId)
+                }
+            }
+        }
+        
+        // E. WEALTH GOAL (True Net Worth)
+        if wealthGoalTarget > 0, trueNetWorth >= wealthGoalTarget {
+            let alertId = "wealth_goal_reached_\(wealthGoalTarget)"
+            if !notifiedAlerts.contains(alertId) {
+                NotificationManager.shared.sendImmediateNotification(
+                    title: "🏛️ Net Worth Goal Reached!",
+                    subtitle: "Wealth & FIRE",
+                    body: "Incredible! Your True Net Worth has reached \(trueNetWorth.formatted(.currency(code: "EUR"))), surpassing your goal."
                 )
                 notifiedAlerts.insert(alertId)
             }
