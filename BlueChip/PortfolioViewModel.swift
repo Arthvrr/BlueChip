@@ -94,11 +94,18 @@ class PortfolioViewModel: ObservableObject {
             let eventDescriptor = FetchDescriptor<CalendarEvent>()
             self.calendarEvents = try context.fetch(eventDescriptor)
             
+            // NOUVEAU : On fetch la Watchlist !
+            let watchlistDescriptor = FetchDescriptor<WatchlistItem>()
+            self.watchlistItems = try context.fetch(watchlistDescriptor)
+            
             let settingsFetch = FetchDescriptor<AppSettings>()
             if let existingSettings = try? context.fetch(settingsFetch).first {
                 self.settings = existingSettings
                 if let tax = existingSettings.dividendTaxRate { self.dividendTaxRate = tax }
                 self.availableCash = existingSettings.availableCash
+                
+                // NOUVEAU : On fetch l'investissement manuel pour le calcul correct du ROI
+                self.manuallyInvested = existingSettings.manuallyInvested
             }
         } catch {
             print("Erreur de chargement des données dans le ViewModel (Menu Bar) : \(error)")
@@ -301,13 +308,35 @@ class PortfolioViewModel: ObservableObject {
     }
     
     func refreshPrices() async {
-        isLoading = true; let rate = await yahooService.fetchUSDEURRate(); let tickers = Array(Set(positions.map { $0.ticker }))
-        for ticker in tickers {
+        isLoading = true
+        let rate = await yahooService.fetchUSDEURRate()
+        
+        // On combine les tickers des positions ET de la watchlist
+        let positionTickers = positions.map { $0.ticker }
+        let watchlistTickers = watchlistItems.map { $0.ticker }
+        let allTickers = Array(Set(positionTickers + watchlistTickers))
+        
+        for ticker in allTickers {
             if let data = await yahooService.fetchStockData(for: ticker) {
-                for i in 0..<positions.count where positions[i].ticker == ticker { positions[i].currentPrice = data.price; positions[i].currency = data.currency; positions[i].usdToEurRate = rate }
+                
+                // Mise à jour des positions
+                for i in 0..<positions.count where positions[i].ticker == ticker {
+                    positions[i].currentPrice = data.price
+                    positions[i].currency = data.currency
+                    positions[i].usdToEurRate = rate
+                }
+                
+                // Mise à jour de la watchlist (en supposant que WatchlistItem a les propriétés currentPrice et currency)
+                for i in 0..<watchlistItems.count where watchlistItems[i].ticker == ticker {
+                    watchlistItems[i].currentPrice = data.price
+                    watchlistItems[i].currency = data.currency
+                }
             }
         }
-        positions.sort(using: sortOrder); updateDividendsViewData(); isLoading = false
+        
+        positions.sort(using: sortOrder)
+        updateDividendsViewData()
+        isLoading = false
     }
     
     func updateDividendsViewData() {

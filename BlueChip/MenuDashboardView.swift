@@ -41,6 +41,10 @@ struct MenuBarDashboardView: View {
         viewModel.positions.sorted { $0.ticker < $1.ticker }
     }
     
+    var sortedWatchlist: [WatchlistItem] {
+        viewModel.watchlistItems.sorted { $0.ticker < $1.ticker }
+    }
+    
     // --- FORMATEUR HEURE LOCALE ---
     var localTimeFormatter: DateFormatter {
         let f = DateFormatter()
@@ -49,7 +53,7 @@ struct MenuBarDashboardView: View {
         } else {
             f.timeZone = TimeZone(identifier: viewModel.userTimeZoneIdentifier) ?? TimeZone.current
         }
-        f.dateFormat = "HH:mm" // Format 24h
+        f.dateFormat = "HH:mm"
         return f
     }
     
@@ -58,20 +62,16 @@ struct MenuBarDashboardView: View {
         guard let nyTimeZone = TimeZone(identifier: "America/New_York") else { return false }
         var cal = Calendar.current
         cal.timeZone = nyTimeZone
-        
         let now = Date()
         
-        // 1. Week-end ?
         if cal.isDateInWeekend(now) { return false }
         
-        // 2. Jour férié US ?
         let currentYear = cal.component(.year, from: now)
         let holidays = USMarketHolidayHelper.getHolidays(forYear: currentYear)
         if holidays.contains(where: { cal.isDate($0.date, inSameDayAs: now) }) {
             return false
         }
         
-        // 3. Heures d'ouverture (9h30 à 16h00 NY Time)
         let hour = cal.component(.hour, from: now)
         let minute = cal.component(.minute, from: now)
         let totalMinutes = hour * 60 + minute
@@ -94,11 +94,26 @@ struct MenuBarDashboardView: View {
                     Text(privacyMode ? "€ ****" : viewModel.currentTotalCapital.formatted(.currency(code: "EUR")))
                         .font(.headline)
                         .fontWeight(.bold)
+                    
+                    // --- ROI GLOBAL (Corrigé pour correspondre au dashboard Composition) ---
+                    let roiValue = viewModel.currentTotalCapital - viewModel.manuallyInvested
+                    let roiPercent = viewModel.manuallyInvested > 0 ? (roiValue / viewModel.manuallyInvested) : 0
+                    let isPositive = roiValue >= 0
+                    let sign = isPositive ? "+" : ""
+                    let color = isPositive ? Color.green : Color.red
+                    
+                    // On ne retire plus le HStack en mode privé, on remplace juste le texte pour garder la hauteur
+                    HStack(spacing: 4) {
+                        Text(privacyMode ? "****" : "\(sign)\(roiValue.formatted(.currency(code: "EUR")))")
+                        Text(privacyMode ? "(***%)" : "(\(sign)\(roiPercent.formatted(.percent.precision(.fractionLength(1)))))")
+                    }
+                    .font(.caption2)
+                    .foregroundColor(privacyMode ? .secondary : color)
+                    .fontWeight(.semibold)
                 }
                 
                 Spacer()
                 
-                // Statut du Marché (Véridique)
                 HStack(spacing: 4) {
                     Circle()
                         .fill(viewModel.isLoading ? Color.orange : (isMarketOpen ? Color.green : Color.red))
@@ -110,9 +125,9 @@ struct MenuBarDashboardView: View {
                         .foregroundColor(.secondary)
                 }.padding(.trailing, 8)
                 
-                // Bouton Privacy
                 Button(action: {
-                    withAnimation { privacyMode.toggle() }
+                    // Pas besoin d'animation ici pour éviter un effet de saut étrange du texte masqué
+                    privacyMode.toggle()
                 }) {
                     Image(systemName: privacyMode ? "eye.slash" : "eye")
                 }
@@ -120,7 +135,6 @@ struct MenuBarDashboardView: View {
                 .help(privacyMode ? "Show Values" : "Hide Values")
                 .padding(.trailing, 4)
                 
-                // Bouton Refresh
                 Button(action: {
                     Task { await viewModel.refreshPrices() }
                 }) {
@@ -173,29 +187,64 @@ struct MenuBarDashboardView: View {
                     }
                     
                     // --- SECTION 1 : POSITIONS & TARGETS ---
-                    // On ne l'affiche que si le portefeuille contient des positions pour éviter un espace vide
-                    if !sortedPositions.isEmpty {
+                    VStack(alignment: .leading, spacing: 8) {
+                        Text("Holdings & Targets").font(.subheadline).fontWeight(.bold).foregroundColor(.secondary)
+                        
+                        VStack(spacing: 6) {
+                            ForEach(sortedPositions) { pos in
+                                HStack {
+                                    Text(pos.ticker).font(.system(.body, design: .monospaced)).fontWeight(.bold)
+                                    Spacer()
+                                    VStack(alignment: .trailing) {
+                                        Text(privacyMode ? "****" : pos.currentPrice.formatted(.currency(code: pos.currency.isEmpty ? "USD" : pos.currency)))
+                                            .font(.subheadline)
+                                        
+                                        HStack(spacing: 4) {
+                                            Text("Target: \(privacyMode ? "****" : (pos.targetPrice?.formatted() ?? "-"))")
+                                            
+                                            if let target = pos.targetPrice, target > 0 {
+                                                let gap = ((pos.currentPrice - target) / target) * 100
+                                                let gapColor = gap <= 0 ? Color.green : Color.red
+                                                let sign = gap > 0 ? "+" : ""
+                                                // Remplacement fixe pour éviter le saut
+                                                Text(privacyMode ? "(***%)" : "(\(sign)\(gap.formatted(.number.precision(.fractionLength(1))))%)")
+                                                    .foregroundColor(privacyMode ? .secondary : gapColor)
+                                            }
+                                        }
+                                        .font(.caption2)
+                                        .foregroundColor(.secondary)
+                                    }
+                                }
+                                Divider().opacity(0.5)
+                            }
+                        }
+                    }
+                    
+                    // --- SECTION 1.5 : WATCHLIST ---
+                    if !sortedWatchlist.isEmpty {
                         VStack(alignment: .leading, spacing: 8) {
-                            Text("Holdings & Targets").font(.subheadline).fontWeight(.bold).foregroundColor(.secondary)
+                            Text("Watchlist").font(.subheadline).fontWeight(.bold).foregroundColor(.secondary)
                             
                             VStack(spacing: 6) {
-                                ForEach(sortedPositions) { pos in
+                                ForEach(sortedWatchlist) { item in
                                     HStack {
-                                        Text(pos.ticker).font(.system(.body, design: .monospaced)).fontWeight(.bold)
+                                        Text(item.ticker).font(.system(.body, design: .monospaced)).fontWeight(.bold)
                                         Spacer()
                                         VStack(alignment: .trailing) {
-                                            Text(privacyMode ? "****" : pos.currentPrice.formatted(.currency(code: pos.currency.isEmpty ? "USD" : pos.currency)))
+                                            Text(privacyMode ? "****" : item.currentPrice.formatted(.currency(code: item.currency.isEmpty ? "USD" : item.currency)))
                                                 .font(.subheadline)
                                             
                                             HStack(spacing: 4) {
-                                                Text("Target: \(privacyMode ? "****" : (pos.targetPrice?.formatted() ?? "-"))")
+                                                let targetText = item.targetPrice > 0 ? item.targetPrice.formatted() : "-"
+                                                Text("Target: \(privacyMode ? "****" : targetText)")
                                                 
-                                                if !privacyMode, let target = pos.targetPrice, target > 0 {
-                                                    let gap = ((pos.currentPrice - target) / target) * 100
+                                                if item.targetPrice > 0 {
+                                                    let target = item.targetPrice
+                                                    let gap = ((item.currentPrice - target) / target) * 100
                                                     let gapColor = gap <= 0 ? Color.green : Color.red
                                                     let sign = gap > 0 ? "+" : ""
-                                                    Text("(\(sign)\(gap.formatted(.number.precision(.fractionLength(1))))%)")
-                                                        .foregroundColor(gapColor)
+                                                    Text(privacyMode ? "(***%)" : "(\(sign)\(gap.formatted(.number.precision(.fractionLength(1))))%)")
+                                                        .foregroundColor(privacyMode ? .secondary : gapColor)
                                                 }
                                             }
                                             .font(.caption2)
@@ -213,7 +262,7 @@ struct MenuBarDashboardView: View {
                         HStack {
                             Text("Dividends (\(currentMonthName))").font(.subheadline).fontWeight(.bold).foregroundColor(.secondary)
                             Spacer()
-                            Text(privacyMode ? "€ ****" : totalDividendsThisMonth.formatted(.currency(code: "EUR"))).font(.caption).fontWeight(.bold).foregroundColor(.green)
+                            Text(privacyMode ? "€ ****" : totalDividendsThisMonth.formatted(.currency(code: "EUR"))).font(.caption).fontWeight(.bold).foregroundColor(privacyMode ? .secondary : .green)
                         }
                         
                         if thisMonthDividends.isEmpty {
@@ -224,7 +273,7 @@ struct MenuBarDashboardView: View {
                                     HStack {
                                         Text(div.ticker).font(.caption).fontWeight(.semibold)
                                         Spacer()
-                                        Text(privacyMode ? "€ ****" : div.amountEUR.formatted(.currency(code: "EUR"))).font(.caption).foregroundColor(.green)
+                                        Text(privacyMode ? "€ ****" : div.amountEUR.formatted(.currency(code: "EUR"))).font(.caption).foregroundColor(privacyMode ? .secondary : .green)
                                     }
                                 }
                             }
@@ -268,7 +317,7 @@ struct MenuBarDashboardView: View {
             Divider()
             
             // =====================================================================
-            // MARK: - FOOTER : BOUTON SIMPLE & PROPRE
+            // MARK: - FOOTER PROPRE & CENTRÉ
             // =====================================================================
             Button(action: {
                 dismiss()
@@ -290,7 +339,11 @@ struct MenuBarDashboardView: View {
             .buttonStyle(.plain)
             .background(Color(NSColor.controlBackgroundColor).opacity(0.5))
             .onHover { hovering in
-                if hovering { NSCursor.pointingHand.push() } else { NSCursor.pop() }
+                if hovering {
+                    NSCursor.pointingHand.push()
+                } else {
+                    NSCursor.pop()
+                }
             }
         }
         .frame(width: 320, height: 480)
