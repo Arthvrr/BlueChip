@@ -233,10 +233,11 @@ struct CalendarView: View {
                     onDetail: { event in detailEvent = event },
                     onEdit: { event in editingEvent = event },
                     onDelete: { id in
-                        // MODIFIÉ pour SwiftData
                         if let evtToDelete = viewModel.calendarEvents.first(where: { $0.id == id }) {
                             context.delete(evtToDelete)
                             viewModel.calendarEvents.removeAll { $0.id == id }
+                            // Annulation si supprimé depuis l'accueil
+                            NotificationManager.shared.cancelScheduledNotification(identifier: id.uuidString)
                         }
                     }
                 )
@@ -1226,59 +1227,66 @@ struct AddEditEventSheet: View {
     
     func save() {
         let safeTicker = ticker.uppercased()
+        let targetEvent: CalendarEvent
         
         if isEditing, let evt = event {
-            evt.date = date
-            evt.type = type
-            evt.ticker = safeTicker
-            evt.note = note
-            evt.hasTime = hasTime
-            evt.urlLink = urlLink
-            evt.estRevenue = estRevenue
-            evt.estEPS = estEPS
-            
-            if isFutureEvent {
-                evt.actRevenue = nil
-                evt.actEPS = nil
-            } else {
-                evt.actRevenue = actRevenue
-                evt.actEPS = actEPS
-            }
+            evt.date = date; evt.type = type; evt.ticker = safeTicker; evt.note = note
+            evt.hasTime = hasTime; evt.urlLink = urlLink; evt.estRevenue = estRevenue; evt.estEPS = estEPS
+            if isFutureEvent { evt.actRevenue = nil; evt.actEPS = nil } else { evt.actRevenue = actRevenue; evt.actEPS = actEPS }
             
             if type.rawValue.lowercased().contains("earning") && !urlLink.isEmpty {
-                if let idx = viewModel.positions.firstIndex(where: { $0.ticker == safeTicker }) {
-                    viewModel.positions[idx].investorRelationsURL = urlLink
-                }
+                if let idx = viewModel.positions.firstIndex(where: { $0.ticker == safeTicker }) { viewModel.positions[idx].investorRelationsURL = urlLink }
             }
-            
+            targetEvent = evt
             viewModel.objectWillChange.send()
         } else {
-            let newEvent = CalendarEvent(
-                id: UUID(),
-                date: date,
-                type: type,
-                ticker: safeTicker,
-                note: note
-            )
-            newEvent.hasTime = hasTime
-            newEvent.urlLink = urlLink
-            newEvent.estRevenue = estRevenue
-            newEvent.estEPS = estEPS
-            
-            if !isFutureEvent {
-                newEvent.actRevenue = actRevenue
-                newEvent.actEPS = actEPS
-            }
+            let newEvent = CalendarEvent(id: UUID(), date: date, type: type, ticker: safeTicker, note: note)
+            newEvent.hasTime = hasTime; newEvent.urlLink = urlLink; newEvent.estRevenue = estRevenue; newEvent.estEPS = estEPS
+            if !isFutureEvent { newEvent.actRevenue = actRevenue; newEvent.actEPS = actEPS }
             
             if type.rawValue.lowercased().contains("earning") && !urlLink.isEmpty {
-                if let idx = viewModel.positions.firstIndex(where: { $0.ticker == safeTicker }) {
-                    viewModel.positions[idx].investorRelationsURL = urlLink
-                }
+                if let idx = viewModel.positions.firstIndex(where: { $0.ticker == safeTicker }) { viewModel.positions[idx].investorRelationsURL = urlLink }
             }
-            
             context.insert(newEvent)
             viewModel.calendarEvents.append(newEvent)
+            targetEvent = newEvent
         }
+        
+        // =======================================================
+        // PROGRAMMATION DE LA NOTIFICATION (LOGIQUE 9:00 AM)
+        // =======================================================
+        var notificationDate = targetEvent.date
+        
+        // Si l'événement n'a pas d'heure précise, on force l'heure à 09:00 AM
+        if !targetEvent.hasTime {
+            var comps = Calendar.current.dateComponents([.year, .month, .day], from: targetEvent.date)
+            comps.hour = 9
+            comps.minute = 0
+            if let nineAM = Calendar.current.date(from: comps) {
+                notificationDate = nineAM
+            }
+        }
+        
+        let now = Date()
+        
+        if notificationDate > now {
+            // Le moment est dans le futur : on programme la notification normalement
+            NotificationManager.shared.scheduleCalendarNotification(
+                for: notificationDate,
+                title: "📅 BlueChip Event: \(targetEvent.ticker)",
+                body: "\(targetEvent.type.rawValue) scheduled for \(targetEvent.ticker).",
+                identifier: targetEvent.id.uuidString
+            )
+        } else if Calendar.current.isDateInToday(targetEvent.date) {
+            // Le moment est passé (ex: il est 11h et la notif était pour 9h),
+            // MAIS on est toujours le bon jour. On l'affiche tout de suite !
+            NotificationManager.shared.sendImmediateNotification(
+                title: "📅 BlueChip Event: \(targetEvent.ticker)",
+                subtitle: "Today",
+                body: "\(targetEvent.type.rawValue) scheduled for \(targetEvent.ticker)."
+            )
+        }
+        
         dismiss()
     }
     
@@ -1286,6 +1294,9 @@ struct AddEditEventSheet: View {
         if let eventId = event?.id, let evtToDelete = viewModel.calendarEvents.first(where: { $0.id == eventId }) {
             context.delete(evtToDelete)
             viewModel.calendarEvents.removeAll { $0.id == eventId }
+            
+            // --- NOUVEAU : ANNULATION DE LA NOTIFICATION ---
+            NotificationManager.shared.cancelScheduledNotification(identifier: eventId.uuidString)
         }
         dismiss()
     }

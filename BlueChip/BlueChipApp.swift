@@ -35,6 +35,9 @@ struct BlueChipApp: App {
     var body: some Scene {
         WindowGroup {
             ContentView()
+            .onAppear {
+                NotificationManager.shared.requestAuthorization()
+            }
         }
         .windowStyle(.hiddenTitleBar) // Enlève la barre de titre moche de macOS
         // 3. ON ATTACHE LE CONTENEUR PARTAGÉ À L'APPLICATION

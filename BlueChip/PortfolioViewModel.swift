@@ -337,6 +337,8 @@ class PortfolioViewModel: ObservableObject {
         positions.sort(using: sortOrder)
         updateDividendsViewData()
         isLoading = false
+        
+        checkAlertsAndNotify()
     }
     
     func updateDividendsViewData() {
@@ -493,4 +495,59 @@ class PortfolioViewModel: ObservableObject {
         
         objectWillChange.send()
     }
+    
+    
+    // ==========================================
+    // MARK: - NOTIFICATIONS & ALERTES RÉACTIVES
+    // ==========================================
+    
+    // Garde en mémoire les alertes envoyées pour ne pas spammer à chaque refresh
+    private var notifiedAlerts: Set<String> = []
+    
+    func checkAlertsAndNotify() {
+        // 1. Target Price : Positions (Drop to or below target)
+        for pos in positions {
+            // CORRECTION : On vérifie que le prix est inférieur ou égal (<=) au target
+            if let target = pos.targetPrice, target > 0, pos.currentPrice <= target {
+                let alertId = "pos_target_\(pos.ticker)"
+                if !notifiedAlerts.contains(alertId) {
+                    NotificationManager.shared.sendImmediateNotification(
+                        title: "🎯 Target Reached: \(pos.ticker)",
+                        subtitle: "Portfolio Position",
+                        body: "The price of \(pos.ticker) (\(pos.currentPrice.formatted(.currency(code: pos.currency.isEmpty ? "USD" : pos.currency)))) has hit your target of \(target.formatted())."
+                    )
+                    notifiedAlerts.insert(alertId)
+                }
+            }
+        }
+        
+        // 2. Target Price : Watchlist (Buying Opportunity)
+        for item in watchlistItems {
+            if item.targetPrice > 0, item.currentPrice <= item.targetPrice {
+                let alertId = "watch_target_\(item.ticker)"
+                if !notifiedAlerts.contains(alertId) {
+                    NotificationManager.shared.sendImmediateNotification(
+                        title: "📉 Buying Opportunity: \(item.ticker)",
+                        subtitle: "Watchlist Alert",
+                        body: "\(item.ticker) dropped to \(item.currentPrice.formatted(.currency(code: item.currency.isEmpty ? "USD" : item.currency))), hitting your target of \(item.targetPrice.formatted())."
+                    )
+                    notifiedAlerts.insert(alertId)
+                }
+            }
+        }
+        
+        // 3. Objectif Principal (Goal)
+        if currentGoalTarget > 0, currentGoalValue >= currentGoalTarget {
+            let alertId = "goal_reached_\(currentGoalTarget)"
+            if !notifiedAlerts.contains(alertId) {
+                NotificationManager.shared.sendImmediateNotification(
+                    title: "🏆 Goal Reached!",
+                    subtitle: "Congratulations!",
+                    body: "Your portfolio has surpassed your goal of \(currentGoalTarget.formatted(.currency(code: "EUR")))."
+                )
+                notifiedAlerts.insert(alertId)
+            }
+        }
+    }
+    
 }
