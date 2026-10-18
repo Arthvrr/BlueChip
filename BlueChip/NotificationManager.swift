@@ -8,11 +8,9 @@ class NotificationManager: NSObject, ObservableObject, UNUserNotificationCenterD
     
     override private init() {
         super.init()
-        // Permet d'intercepter les notifications
         UNUserNotificationCenter.current().delegate = self
     }
     
-    // Demande la permission à l'utilisateur
     func requestAuthorization() {
         let options: UNAuthorizationOptions = [.alert, .sound, .badge]
         UNUserNotificationCenter.current().requestAuthorization(options: options) { success, error in
@@ -20,7 +18,7 @@ class NotificationManager: NSObject, ObservableObject, UNUserNotificationCenterD
         }
     }
     
-    // 1. Notification immédiate (Targets & Goals atteints)
+    // 1. Notification immédiate
     func sendImmediateNotification(title: String, subtitle: String, body: String, identifier: String = UUID().uuidString) {
         let content = UNMutableNotificationContent()
         content.title = title
@@ -32,7 +30,7 @@ class NotificationManager: NSObject, ObservableObject, UNUserNotificationCenterD
         UNUserNotificationCenter.current().add(request)
     }
     
-    // 2. Notification programmée à la seconde près (Calendrier)
+    // 2. Notification programmée pour le Calendrier des Événements
     func scheduleCalendarNotification(for date: Date, title: String, body: String, identifier: String) {
         let content = UNMutableNotificationContent()
         content.title = title
@@ -46,12 +44,44 @@ class NotificationManager: NSObject, ObservableObject, UNUserNotificationCenterD
         UNUserNotificationCenter.current().add(request)
     }
     
-    // 3. Annulation si on supprime l'événement
+    // NOUVEAU : 3. Notification Hebdomadaire (Pour le Bilan du Samedi)
+    func scheduleWeeklyNotification(weekday: Int, hour: Int, minute: Int, title: String, body: String, identifier: String) {
+        let content = UNMutableNotificationContent()
+        content.title = title
+        content.body = body
+        content.sound = .default
+        
+        var dateComponents = DateComponents()
+        dateComponents.weekday = weekday // 1 = Dimanche, 7 = Samedi
+        dateComponents.hour = hour
+        dateComponents.minute = minute
+        
+        let trigger = UNCalendarNotificationTrigger(dateMatching: dateComponents, repeats: true)
+        let request = UNNotificationRequest(identifier: identifier, content: content, trigger: trigger)
+        UNUserNotificationCenter.current().add(request) // Écrase l'ancienne si l'identifiant est le même
+    }
+    
+    // NOUVEAU : 4. Notification Mensuelle (Pour la Météo des Dividendes)
+    func scheduleMonthlyNotification(day: Int, hour: Int, minute: Int, title: String, body: String, identifier: String) {
+        let content = UNMutableNotificationContent()
+        content.title = title
+        content.body = body
+        content.sound = .default
+        
+        var dateComponents = DateComponents()
+        dateComponents.day = day // 1 = Le 1er du mois
+        dateComponents.hour = hour
+        dateComponents.minute = minute
+        
+        let trigger = UNCalendarNotificationTrigger(dateMatching: dateComponents, repeats: true)
+        let request = UNNotificationRequest(identifier: identifier, content: content, trigger: trigger)
+        UNUserNotificationCenter.current().add(request)
+    }
+    
     func cancelScheduledNotification(identifier: String) {
         UNUserNotificationCenter.current().removePendingNotificationRequests(withIdentifiers: [identifier])
     }
     
-    // CRUCIAL : Force l'affichage de la bannière même quand l'app est utilisée
     func userNotificationCenter(_ center: UNUserNotificationCenter, willPresent notification: UNNotification, withCompletionHandler completionHandler: @escaping (UNNotificationPresentationOptions) -> Void) {
         completionHandler([.banner, .sound])
     }

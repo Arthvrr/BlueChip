@@ -500,17 +500,14 @@ class PortfolioViewModel: ObservableObject {
     // ==========================================
     // MARK: - NOTIFICATIONS & ALERTES RÉACTIVES
     // ==========================================
-    
-    // Garde en mémoire les alertes envoyées pour ne pas spammer à chaque refresh
+
     private var notifiedAlerts: Set<String> = []
-    
+
     func checkAlertsAndNotify() {
         
         // -----------------------------------------------------
         // 1. Target Prices (Opportunités d'achat / Vente)
         // -----------------------------------------------------
-        
-        // Portfolio Positions (Drop to or below target)
         for pos in positions {
             if let target = pos.targetPrice, target > 0, pos.currentPrice <= target {
                 let alertId = "pos_target_\(pos.ticker)"
@@ -525,7 +522,6 @@ class PortfolioViewModel: ObservableObject {
             }
         }
         
-        // Watchlist (Buying Opportunity)
         for item in watchlistItems {
             if item.targetPrice > 0, item.currentPrice <= item.targetPrice {
                 let alertId = "watch_target_\(item.ticker)"
@@ -541,60 +537,65 @@ class PortfolioViewModel: ObservableObject {
         }
         
         // -----------------------------------------------------
-        // 2. Page Goals (Vérification de tous les objectifs)
+        // 2. Alerte de Volatilité Journalière (> 2% ou < -2%)
         // -----------------------------------------------------
+        let totalDailyROIValue = positions.reduce(0) { $0 + $1.dailyROIValue }
+        let previousTotalValue = currentTotalCapital - totalDailyROIValue
+        let dailyROIPercent = previousTotalValue > 0 ? (totalDailyROIValue / previousTotalValue) : 0
         
-        // A. GROWTH GOAL (Total Portfolio Value ou Invested)
+        if abs(dailyROIPercent) >= 0.02 {
+            let todayString = DateFormatter.localizedString(from: Date(), dateStyle: .short, timeStyle: .none)
+            let volAlertId = "volatility_\(todayString)"
+            
+            if !notifiedAlerts.contains(volAlertId) {
+                let isUp = dailyROIPercent > 0
+                let sign = isUp ? "+" : ""
+                let emoji = isUp ? "🚀" : "🎢"
+                
+                NotificationManager.shared.sendImmediateNotification(
+                    title: "\(emoji) High Volatility Detected",
+                    subtitle: "Daily Market Action",
+                    body: "Your portfolio moved by \(sign)\(dailyROIPercent.formatted(.percent.precision(.fractionLength(2)))) (\(sign)\(totalDailyROIValue.formatted(.currency(code: "EUR")))) today."
+                )
+                notifiedAlerts.insert(volAlertId)
+            }
+        }
+        
+        // -----------------------------------------------------
+        // 3. Goals (Vérification de tous les objectifs)
+        // -----------------------------------------------------
         if currentGoalTarget > 0, currentGoalValue >= currentGoalTarget {
             let alertId = "growth_goal_reached_\(currentGoalTarget)"
             if !notifiedAlerts.contains(alertId) {
-                NotificationManager.shared.sendImmediateNotification(
-                    title: "🚀 Growth Goal Reached!",
-                    subtitle: "Composition Dashboard",
-                    body: "Your portfolio has surpassed your growth goal of \(currentGoalTarget.formatted(.currency(code: "EUR")))."
-                )
+                NotificationManager.shared.sendImmediateNotification(title: "🚀 Growth Goal Reached!", subtitle: "Composition Dashboard", body: "Your portfolio has surpassed your growth goal of \(currentGoalTarget.formatted(.currency(code: "EUR"))).")
                 notifiedAlerts.insert(alertId)
             }
         }
         
-        // B. DIVIDEND GOAL (Annual Income ou Yield)
         if dividendGoalTarget > 0 {
             let isYield = dividendGoalType == .portfolioYield
-            let currentValue = isYield ? portfolioYield * 100 : totalDividends // On multiplie le yield par 100 pour le comparer au Target (ex: 4.5%)
-            
+            let currentValue = isYield ? portfolioYield * 100 : totalDividends
             if currentValue >= dividendGoalTarget {
                 let alertId = "dividend_goal_reached_\(dividendGoalTarget)_\(isYield)"
                 if !notifiedAlerts.contains(alertId) {
                     let formattedGoal = isYield ? "\(dividendGoalTarget.formatted(.number.precision(.fractionLength(2))))%" : dividendGoalTarget.formatted(.currency(code: "EUR"))
-                    NotificationManager.shared.sendImmediateNotification(
-                        title: "💸 Dividend Goal Reached!",
-                        subtitle: "Passive Income Tracker",
-                        body: "Congratulations! You have hit your dividend goal of \(formattedGoal)."
-                    )
+                    NotificationManager.shared.sendImmediateNotification(title: "💸 Dividend Goal Reached!", subtitle: "Passive Income Tracker", body: "Congratulations! You have hit your dividend goal of \(formattedGoal).")
                     notifiedAlerts.insert(alertId)
                 }
             }
         }
         
-        // C. TRANSACTION GOAL (Nombre de transactions)
         if transactionGoalTarget > 0, Double(transactions.count) >= transactionGoalTarget {
             let alertId = "transaction_goal_reached_\(transactionGoalTarget)"
             if !notifiedAlerts.contains(alertId) {
-                NotificationManager.shared.sendImmediateNotification(
-                    title: "🧾 Transaction Goal Reached!",
-                    subtitle: "Ledger History",
-                    body: "You have logged \(transactions.count) transactions, reaching your target of \(Int(transactionGoalTarget))."
-                )
+                NotificationManager.shared.sendImmediateNotification(title: "🧾 Transaction Goal Reached!", subtitle: "Ledger History", body: "You have logged \(transactions.count) transactions, reaching your target of \(Int(transactionGoalTarget)).")
                 notifiedAlerts.insert(alertId)
             }
         }
         
-        // D. BENCHMARK GOAL (Alpha / Outperformance)
         if benchmarkGoalTarget > 0 {
             let currentYear = Calendar.current.component(.year, from: Date())
             let activeYears = Array(dividendStartYear...currentYear)
-            
-            // On calcule le retour moyen du portfolio sur les années actives
             var vals: [Double] = []
             for year in activeYears {
                 guard let yearData = growthYears.first(where: { $0.year == year }) else { vals.append(0); continue }
@@ -603,37 +604,107 @@ class PortfolioViewModel: ObservableObject {
                 vals.append(base > 0 ? ((effectiveEnd - base) / base) * 100.0 : 0)
             }
             let portfolioAvgReturn = vals.isEmpty ? 0 : vals.reduce(0, +) / Double(vals.count)
-            
-            // On trouve le meilleur indice
             let bestIndexAvgReturn = benchmarkIndices.max { $0.averageReturn(years: activeYears) < $1.averageReturn(years: activeYears) }?.averageReturn(years: activeYears) ?? 0
-            
             let alpha = portfolioAvgReturn - bestIndexAvgReturn
             
             if alpha >= benchmarkGoalTarget {
                 let alertId = "benchmark_goal_reached_\(benchmarkGoalTarget)"
                 if !notifiedAlerts.contains(alertId) {
-                    NotificationManager.shared.sendImmediateNotification(
-                        title: "📈 Alpha Goal Reached!",
-                        subtitle: "Benchmark Analytics",
-                        body: "You are currently outperforming your best benchmark by \(alpha.formatted(.number.precision(.fractionLength(2))))%!"
-                    )
+                    NotificationManager.shared.sendImmediateNotification(title: "📈 Alpha Goal Reached!", subtitle: "Benchmark Analytics", body: "You are currently outperforming your best benchmark by \(alpha.formatted(.number.precision(.fractionLength(2))))%!")
                     notifiedAlerts.insert(alertId)
                 }
             }
         }
         
-        // E. WEALTH GOAL (True Net Worth)
         if wealthGoalTarget > 0, trueNetWorth >= wealthGoalTarget {
             let alertId = "wealth_goal_reached_\(wealthGoalTarget)"
             if !notifiedAlerts.contains(alertId) {
-                NotificationManager.shared.sendImmediateNotification(
-                    title: "🏛️ Net Worth Goal Reached!",
-                    subtitle: "Wealth & FIRE",
-                    body: "Incredible! Your True Net Worth has reached \(trueNetWorth.formatted(.currency(code: "EUR"))), surpassing your goal."
-                )
+                NotificationManager.shared.sendImmediateNotification(title: "🏛️ Net Worth Goal Reached!", subtitle: "Wealth & FIRE", body: "Incredible! Your True Net Worth has reached \(trueNetWorth.formatted(.currency(code: "EUR"))), surpassing your goal.")
                 notifiedAlerts.insert(alertId)
             }
         }
+        
+        // -----------------------------------------------------
+        // 4. Programmation des Notifications Périodiques
+        // -----------------------------------------------------
+        scheduleDividendOutlookNotification()
+        scheduleWeeklyRecapNotification()
+    }
+
+    // MARK: - MÉTÉO DES DIVIDENDES (1er du mois à 9h00)
+    private func scheduleDividendOutlookNotification() {
+        let cal = Calendar.current
+        let now = Date()
+        
+        // Cible le 1er du mois (si on est déjà le 1er mais après 9h, le système programmera automatiquement au 1er du mois SUIVANT)
+        let targetMonthIndex = cal.component(.month, from: now)
+        var nextMonthDate = cal.date(byAdding: .month, value: 1, to: now) ?? now
+        // On calcule pour le mois prochain par défaut (sauf si on est le 1er du mois avant 9h)
+        let isFirstBeforeNine = cal.component(.day, from: now) == 1 && cal.component(.hour, from: now) < 9
+        let workingMonthIndex = isFirstBeforeNine ? targetMonthIndex : cal.component(.month, from: nextMonthDate)
+        
+        let monthName = DateFormatter().monthSymbols[workingMonthIndex - 1]
+        
+        var grossTotal = 0.0
+        var netTotal = 0.0
+        var payingTickers: [String] = []
+        
+        for pos in positions where pos.dividendMonths.contains(workingMonthIndex) {
+            let payments = max(1.0, Double(pos.dividendMonths.count))
+            let taxMultiplier = 1.0 - (dividendTaxRate / 100.0)
+            
+            let netPayment = pos.totalDividendEUR / payments
+            let grossPayment = taxMultiplier > 0 ? (netPayment / taxMultiplier) : netPayment
+            
+            grossTotal += grossPayment
+            netTotal += netPayment
+            payingTickers.append(pos.ticker)
+        }
+        
+        guard !payingTickers.isEmpty else { return }
+        
+        // Formater proprement les tickers (limite à 5 pour que ça reste lisible dans une notif)
+        let displayTickers = payingTickers.prefix(5).joined(separator: ", ") + (payingTickers.count > 5 ? " and others" : "")
+        
+        let body = "Expected: \(grossTotal.formatted(.currency(code: "EUR"))) Gross (\(netTotal.formatted(.currency(code: "EUR"))) Net) from \(displayTickers)."
+        
+        NotificationManager.shared.scheduleMonthlyNotification(
+            day: 1, hour: 9, minute: 0,
+            title: "💸 \(monthName) Dividend Outlook",
+            body: body,
+            identifier: "monthly_dividend_outlook"
+        )
+    }
+
+    // MARK: - BILAN HEBDOMADAIRE (Samedi à 9h00)
+    private func scheduleWeeklyRecapNotification() {
+        let keyCapital = "start_of_week_capital"
+        let keyDate = "start_of_week_date"
+        
+        var startCapital = UserDefaults.standard.double(forKey: keyCapital)
+        let startDate = UserDefaults.standard.object(forKey: keyDate) as? Date ?? Date.distantPast
+        
+        // Si la date sauvegardée date d'une autre semaine (ou plus de 6 jours), on la met à jour
+        let cal = Calendar.current
+        if !cal.isDate(startDate, equalTo: Date(), toGranularity: .weekOfYear) {
+            startCapital = currentTotalCapital
+            UserDefaults.standard.set(startCapital, forKey: keyCapital)
+            UserDefaults.standard.set(Date(), forKey: keyDate)
+        }
+        
+        let diff = currentTotalCapital - startCapital
+        let pct = startCapital > 0 ? (diff / startCapital) : 0
+        let sign = diff >= 0 ? "+" : ""
+        
+        let body = "Your portfolio closed at \(currentTotalCapital.formatted(.currency(code: "EUR"))). A performance of \(sign)\(diff.formatted(.currency(code: "EUR"))) (\(sign)\(pct.formatted(.percent.precision(.fractionLength(1))))) this week."
+        
+        // weekday: 7 = Samedi en Swift
+        NotificationManager.shared.scheduleWeeklyNotification(
+            weekday: 7, hour: 9, minute: 0,
+            title: "📊 Weekly Recap",
+            body: body,
+            identifier: "weekly_recap"
+        )
     }
     
 }
