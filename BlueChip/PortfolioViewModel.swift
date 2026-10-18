@@ -375,6 +375,36 @@ class PortfolioViewModel: ObservableObject {
     
     // === PROPRIÉTÉS CALCULÉES ===
     
+    // === NOUVEAUX CALCULS GLOBAUX POUR LA PAGE GROWTH ===
+    var allTimeReturnEUR: Double {
+        currentTotalCapital - (manuallyInvested > 0 ? manuallyInvested : positionsInvestedSum)
+    }
+    
+    var averageReturnPercent: Double {
+        let currentYear = Calendar.current.component(.year, from: Date())
+        let activeYears = growthYears.filter { yearData in
+            let effectiveEnd = yearData.year == currentYear ? currentTotalCapital : yearData.endWallet
+            return yearData.year <= currentYear && (yearData.startWallet > 0 || yearData.invested > 0 || effectiveEnd > 0)
+        }
+        guard !activeYears.isEmpty else { return 0 }
+        
+        let totalPct = activeYears.reduce(0.0) { sum, yearData in
+            let effectiveEnd = (yearData.year == currentYear) ? currentTotalCapital : yearData.endWallet
+            let base = yearData.startWallet + yearData.invested
+            guard base > 0 else { return sum }
+            return sum + ((effectiveEnd - base) / base)
+        }
+        return totalPct / Double(activeYears.count)
+    }
+    
+    var cagr: Double {
+        let currentYear = Calendar.current.component(.year, from: Date())
+        let activeYearsCount = max(1, currentYear - dividendStartYear + 1)
+        let totalInvested = manuallyInvested > 0 ? manuallyInvested : positionsInvestedSum
+        let allTimeReturnPct = totalInvested > 0 ? (allTimeReturnEUR / totalInvested) : 0
+        return pow(1.0 + max(allTimeReturnPct, -0.999), 1.0 / Double(activeYearsCount)) - 1.0
+    }
+    
     var allWealthAssets: [WealthAsset] {
         let stocksAsset = WealthAsset(name: "Brokerage Account", invested: manuallyInvested, current: currentTotalCapital, isAutoFilled: true)
         return [stocksAsset] + manualWealthAssets
@@ -579,14 +609,36 @@ class PortfolioViewModel: ObservableObject {
             }
         }
         
+        // B. DIVIDEND GOAL (Annual Income, Yield, or Current Year Total)
         if dividendGoalTarget > 0 {
-            let isYield = dividendGoalType == .portfolioYield
-            let currentValue = isYield ? portfolioYield * 100 : totalDividends
+            let goalType = dividendGoalType ?? .dividendsAnnual
+            let currentValue: Double
+            let formattedGoal: String
+            
+            switch goalType {
+            case .dividendsAnnual:
+                currentValue = totalDividends
+                formattedGoal = dividendGoalTarget.formatted(.currency(code: "EUR"))
+            case .portfolioYield:
+                currentValue = portfolioYield * 100 // Scale for percentage comparison
+                formattedGoal = "\(dividendGoalTarget.formatted(.number.precision(.fractionLength(2))))%"
+            case .currentYearTotal:
+                let currentYear = Calendar.current.component(.year, from: Date())
+                currentValue = dividendYears.first(where: { $0.year == currentYear })?.total ?? 0.0
+                formattedGoal = dividendGoalTarget.formatted(.currency(code: "EUR"))
+            case .allTimeTotal:
+                currentValue = dividendYears.reduce(0) { $0 + $1.total }
+                formattedGoal = dividendGoalTarget.formatted(.currency(code: "EUR"))
+            }
+            
             if currentValue >= dividendGoalTarget {
-                let alertId = "dividend_goal_reached_\(dividendGoalTarget)_\(isYield)"
+                let alertId = "dividend_goal_reached_\(dividendGoalTarget)_\(goalType.rawValue)"
                 if !notifiedAlerts.contains(alertId) {
-                    let formattedGoal = isYield ? "\(dividendGoalTarget.formatted(.number.precision(.fractionLength(2))))%" : dividendGoalTarget.formatted(.currency(code: "EUR"))
-                    NotificationManager.shared.sendImmediateNotification(title: "💸 Dividend Goal Reached!", subtitle: "Passive Income Tracker", body: "Congratulations! You have hit your dividend goal of \(formattedGoal).")
+                    NotificationManager.shared.sendImmediateNotification(
+                        title: "💸 Dividend Goal Reached!",
+                        subtitle: "Passive Income Tracker",
+                        body: "Congratulations! You have hit your dividend goal of \(formattedGoal)."
+                    )
                     notifiedAlerts.insert(alertId)
                 }
             }

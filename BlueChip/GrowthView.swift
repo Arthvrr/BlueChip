@@ -1,5 +1,5 @@
 import SwiftUI
-import SwiftData // <-- NOUVEAU
+import SwiftData
 import Charts
 import Combine
 
@@ -8,7 +8,7 @@ enum GrowthChartZoomType: String, Identifiable {
     case cashVsStocks, capitalVsGains, gainsProvenance
     case annualReturnsCombo, investedVsValue
     case wealthWaterfall, momMultiple
-    case tippingPoint, compoundingPie // NOUVEAUX GRAPHES
+    case tippingPoint, compoundingPie
     var id: String { self.rawValue }
 }
 
@@ -19,6 +19,26 @@ struct GrowthView: View {
     @State private var showGoalSheet = false
     @State private var chartToZoom: GrowthChartZoomType? = nil
     
+    // On calcule la valeur cible dynamiquement selon le type choisi
+    var currentGoalValueForProgressBar: Double {
+        switch viewModel.growthGoalType {
+        case .targetReturnPercent:
+            return viewModel.averageReturnPercent * 100
+            
+        case .targetReturnCurrency:
+            // CORRECTION : Le retour de l'année en cours uniquement (Current Year Return in €)
+            let currentYear = Calendar.current.component(.year, from: Date())
+            if let yearData = viewModel.growthYears.first(where: { $0.year == currentYear }) {
+                let base = yearData.startWallet + yearData.invested
+                return viewModel.currentTotalCapital - base
+            }
+            return 0.0
+            
+        case .cagr:
+            return viewModel.cagr * 100
+        }
+    }
+    
     var body: some View {
         ScrollView(.vertical) {
             VStack(spacing: 24) {
@@ -27,11 +47,17 @@ struct GrowthView: View {
                 GrowthDashboardSection(viewModel: viewModel, privacyMode: $privacyMode)
                 
                 // 2. GOAL PROGRESS
-                GrowthGoalProgressBar(viewModel: viewModel, privacyMode: $privacyMode)
-                    .contentShape(Rectangle())
-                    .onTapGesture(count: 2) { showGoalSheet = true }
+                GoalProgressBar(
+                    title: viewModel.growthGoalType.rawValue,
+                    currentValue: currentGoalValueForProgressBar,
+                    targetValue: viewModel.growthGoalTarget,
+                    privacyMode: $privacyMode,
+                    isPercentage: viewModel.growthGoalType == .targetReturnPercent || viewModel.growthGoalType == .cagr
+                )
+                .contentShape(Rectangle())
+                .onTapGesture(count: 2) { showGoalSheet = true }
                 
-                // 3. CHARTS: COMPOSITION & GAINS (LES 3 DONUTS)
+                // 3. CHARTS: COMPOSITION & GAINS
                 GrowthCompositionChartsSection(viewModel: viewModel, privacyMode: $privacyMode, chartToZoom: $chartToZoom)
                 
                 // 4. TABLEAU DE SUIVI
@@ -43,7 +69,7 @@ struct GrowthView: View {
                 // 6. CHARTS: ADVANCED GROWTH METRICS
                 GrowthAdvancedMetricsSection(viewModel: viewModel, privacyMode: $privacyMode, chartToZoom: $chartToZoom)
                 
-                // 7. CHARTS: FIRE & COMPOUNDING METRICS (NOUVEAU)
+                // 7. CHARTS: FIRE & COMPOUNDING METRICS
                 GrowthFIREMetricsSection(viewModel: viewModel, privacyMode: $privacyMode, chartToZoom: $chartToZoom)
             }
             .padding()
@@ -55,7 +81,7 @@ struct GrowthView: View {
 }
 
 // =========================================================================
-// MARK: - FORMULAIRE GOAL (Dédié à la Croissance)
+// MARK: - FORMULAIRE GOAL (Dédié à la Croissance - Design Uniformisé)
 // =========================================================================
 struct EditGrowthGoalView: View {
     @Environment(\.dismiss) var dismiss
@@ -70,24 +96,67 @@ struct EditGrowthGoalView: View {
     }
     
     var body: some View {
-        Form {
-            Section(header: Text("Set Annual Growth Goal").font(.headline)) {
-                Picker("Goal Type", selection: $selectedGoal) {
-                    ForEach(GrowthGoalType.allCases, id: \.self) { type in Text(type.rawValue).tag(type) }
-                }
-                TextField("Target", value: $targetInput, format: .number)
-            }.padding()
+        VStack(spacing: 0) {
+            // Header
             HStack {
-                Button("Cancel") { dismiss() }.keyboardShortcut(.cancelAction)
+                Text("Set Annual Growth Goal").font(.title2).fontWeight(.bold)
                 Spacer()
-                Button("Save") {
+                Button(action: { dismiss() }) {
+                    Image(systemName: "xmark.circle.fill").font(.title2).foregroundColor(.secondary)
+                }.buttonStyle(.plain)
+            }
+            .padding()
+            
+            Divider()
+            
+            // Content
+            VStack(alignment: .leading, spacing: 16) {
+                GroupBox {
+                    VStack(spacing: 16) {
+                        HStack {
+                            Text("Goal Type:")
+                            Spacer()
+                            Picker("", selection: $selectedGoal) {
+                                ForEach(GrowthGoalType.allCases, id: \.self) { type in Text(type.rawValue).tag(type) }
+                            }
+                            .labelsHidden()
+                            .frame(width: 150)
+                        }
+                        
+                        Divider().opacity(0.5)
+                        
+                        HStack {
+                            Text("Target Amount:")
+                            Spacer()
+                            TextField("e.g. 5000", value: $targetInput, format: .number)
+                                .textFieldStyle(.roundedBorder)
+                                .multilineTextAlignment(.trailing)
+                                .frame(width: 150)
+                        }
+                    }
+                    .padding(.vertical, 4)
+                }
+            }
+            .padding()
+            
+            Spacer()
+            Divider()
+            
+            // Footer
+            HStack {
+                Button("Cancel") { dismiss() }
+                    .keyboardShortcut(.cancelAction)
+                Spacer()
+                Button("Save Goal") {
                     viewModel.growthGoalType = selectedGoal
                     viewModel.growthGoalTarget = targetInput
-                    // MODIFIÉ : Retrait de viewModel.saveData() (SwiftData gère automatiquement)
                     dismiss()
-                }.keyboardShortcut(.defaultAction).buttonStyle(.borderedProminent)
+                }
+                .keyboardShortcut(.defaultAction)
+                .buttonStyle(.borderedProminent)
             }.padding()
-        }.frame(width: 380).padding()
+        }
+        .frame(width: 400, height: 280) // Taille parfaite pour macOS
     }
 }
 
@@ -100,42 +169,11 @@ struct GrowthDashboardSection: View {
     @Binding var privacyMode: Bool
     
     var currentYear: Int { Calendar.current.component(.year, from: Date()) }
-    
-    var currentWallet: Double { viewModel.currentTotalCapital }
-    var totalInvested: Double { viewModel.manuallyInvested > 0 ? viewModel.manuallyInvested : viewModel.positionsInvestedSum }
-
-    // MODIFIÉ : Le calcul prend la valeur totale (Actions + Cash) moins le total investi
-    var allTimeReturnEUR: Double { currentWallet - totalInvested }
-    var allTimeReturnPercent: Double { totalInvested > 0 ? (allTimeReturnEUR / totalInvested) : 0 }
-    
-    var activeYears: [GrowthYear] {
-        viewModel.growthYears.filter { yearData in
-            let isCurrentYear = yearData.year == currentYear
-            let effectiveEnd = isCurrentYear ? currentWallet : yearData.endWallet
-            return yearData.year <= currentYear && (yearData.startWallet > 0 || yearData.invested > 0 || effectiveEnd > 0)
-        }
-    }
     var activeYearsCount: Int { currentYear - viewModel.dividendStartYear + 1 }
     
-    var averageReturnEUR: Double { allTimeReturnEUR / Double(max(1, activeYearsCount)) }
-    
-    var averageReturnPercent: Double {
-        guard !activeYears.isEmpty else { return 0 }
-        let totalPct = activeYears.reduce(0.0) { sum, yearData in
-            let effectiveEnd = (yearData.year == currentYear) ? currentWallet : yearData.endWallet
-            let base = yearData.startWallet + yearData.invested
-            guard base > 0 else { return sum }
-            let ret = effectiveEnd - base
-            return sum + (ret / base)
-        }
-        return totalPct / Double(activeYears.count)
-    }
-    
-    var cagr: Double { pow(1.0 + max(allTimeReturnPercent, -0.999), 1.0 / Double(max(1, activeYearsCount))) - 1.0 }
-    
     var bestYearReturn: Double {
-        let returns = activeYears.map { yearData -> Double in
-            let effectiveEnd = (yearData.year == currentYear) ? currentWallet : yearData.endWallet
+        let returns = viewModel.growthYears.filter { $0.year <= currentYear }.map { yearData -> Double in
+            let effectiveEnd = (yearData.year == currentYear) ? viewModel.currentTotalCapital : yearData.endWallet
             let base = yearData.startWallet + yearData.invested
             guard base > 0 else { return 0 }
             return (effectiveEnd - base) / base
@@ -146,19 +184,21 @@ struct GrowthDashboardSection: View {
     var body: some View {
         VStack(spacing: 16) {
             HStack(spacing: 16) {
-                DashboardCard(title: "Current Wallet Value", value: currentWallet.formatted(.currency(code: "EUR").precision(.fractionLength(2))), privacyMode: $privacyMode)
+                let totalInvested = viewModel.manuallyInvested > 0 ? viewModel.manuallyInvested : viewModel.positionsInvestedSum
+                DashboardCard(title: "Current Wallet Value", value: viewModel.currentTotalCapital.formatted(.currency(code: "EUR").precision(.fractionLength(2))), privacyMode: $privacyMode)
                 DashboardCard(title: "Total Invested", value: totalInvested.formatted(.currency(code: "EUR").precision(.fractionLength(2))), privacyMode: $privacyMode)
                 
                 VStack(alignment: .leading, spacing: 4) {
+                    let totalPct = totalInvested > 0 ? (viewModel.allTimeReturnEUR / totalInvested) : 0
                     Text("All-Time Return").font(.subheadline).foregroundColor(.secondary).lineLimit(1)
-                    Text(allTimeReturnEUR.formatted(.currency(code: "EUR").precision(.fractionLength(2)).sign(strategy: .always())))
+                    Text(viewModel.allTimeReturnEUR.formatted(.currency(code: "EUR").precision(.fractionLength(2)).sign(strategy: .always())))
                         .font(.title2).fontWeight(.bold)
-                        .foregroundColor(allTimeReturnEUR >= 0 ? .green : .red)
+                        .foregroundColor(viewModel.allTimeReturnEUR >= 0 ? .green : .red)
                         .blur(radius: privacyMode ? 8 : 0)
-                    Text(allTimeReturnPercent.formatted(.percent.precision(.fractionLength(2)).sign(strategy: .always())))
+                    Text(totalPct.formatted(.percent.precision(.fractionLength(2)).sign(strategy: .always())))
                         .font(.caption).padding(.horizontal, 6).padding(.vertical, 2)
-                        .background((allTimeReturnEUR >= 0 ? Color.green : Color.red).opacity(0.1))
-                        .foregroundColor(allTimeReturnEUR >= 0 ? .green : .red)
+                        .background((viewModel.allTimeReturnEUR >= 0 ? Color.green : Color.red).opacity(0.1))
+                        .foregroundColor(viewModel.allTimeReturnEUR >= 0 ? .green : .red)
                         .cornerRadius(4)
                         .blur(radius: privacyMode ? 8 : 0)
                 }
@@ -169,67 +209,16 @@ struct GrowthDashboardSection: View {
                 DashboardCard(title: "Best Year Return", value: bestYearReturn.formatted(.percent.precision(.fractionLength(2))), privacyMode: $privacyMode)
             }
             HStack(spacing: 16) {
+                let averageReturnEUR = viewModel.allTimeReturnEUR / Double(max(1, activeYearsCount))
                 DashboardCard(title: "Avg. Return / Year (€)", value: averageReturnEUR.formatted(.currency(code: "EUR").precision(.fractionLength(2)).sign(strategy: .always())), privacyMode: $privacyMode)
-                DashboardCard(title: "Avg. Return / Year (%)", value: averageReturnPercent.formatted(.percent.precision(.fractionLength(2)).sign(strategy: .always())), privacyMode: $privacyMode)
-                DashboardCard(title: "CAGR (Compound Growth)", value: cagr.formatted(.percent.precision(.fractionLength(2))), privacyMode: $privacyMode)
+                DashboardCard(title: "Avg. Return / Year (%)", value: viewModel.averageReturnPercent.formatted(.percent.precision(.fractionLength(2)).sign(strategy: .always())), privacyMode: $privacyMode)
+                DashboardCard(title: "CAGR (Compound Growth)", value: viewModel.cagr.formatted(.percent.precision(.fractionLength(2))), privacyMode: $privacyMode)
                 DashboardCard(title: "Active Years Tracked", value: "\(activeYearsCount)", privacyMode: $privacyMode)
             }
         }
     }
 }
 
-struct GrowthGoalProgressBar: View {
-    @ObservedObject var viewModel: PortfolioViewModel
-    @Binding var privacyMode: Bool
-    
-    var currentYear: Int { Calendar.current.component(.year, from: Date()) }
-    var currentYearData: GrowthYear? { viewModel.growthYears.first { $0.year == currentYear } }
-    
-    var isPercentGoal: Bool { viewModel.growthGoalType == .targetReturnPercent }
-    var targetTitle: String { isPercentGoal ? "Target Annual Return (%)" : "Target Annual Return (€)" }
-    
-    var currentValueString: String {
-        guard let data = currentYearData else { return "0" }
-        let base = data.startWallet + data.invested
-        let retAmount = viewModel.currentTotalCapital - base
-        let retPercent = base > 0 ? (retAmount / base) : 0
-        return isPercentGoal ? retPercent.formatted(.percent.precision(.fractionLength(2))) : retAmount.formatted(.currency(code: "EUR").precision(.fractionLength(2)))
-    }
-    
-    var targetValueString: String {
-        isPercentGoal ? (viewModel.growthGoalTarget / 100.0).formatted(.percent.precision(.fractionLength(2))) : viewModel.growthGoalTarget.formatted(.currency(code: "EUR").precision(.fractionLength(2)))
-    }
-    
-    var progress: Double {
-        guard viewModel.growthGoalTarget > 0, let data = currentYearData else { return 0 }
-        let base = data.startWallet + data.invested
-        let retAmount = viewModel.currentTotalCapital - base
-        let retPercent = base > 0 ? (retAmount / base) : 0
-        if isPercentGoal { return min(max(retPercent / (viewModel.growthGoalTarget / 100.0), 0), 1) }
-        else { return min(max(retAmount / viewModel.growthGoalTarget, 0), 1) }
-    }
-    
-    var body: some View {
-        VStack(alignment: .leading, spacing: 8) {
-            HStack {
-                Text("\(targetTitle) (\(String(currentYear))) Goal").font(.headline)
-                Spacer()
-                Text("\(currentValueString) / \(targetValueString)").font(.subheadline).fontWeight(.bold).foregroundColor(progress >= 1 ? .green : .primary).blur(radius: privacyMode ? 8 : 0)
-            }
-            GeometryReader { geometry in
-                ZStack(alignment: .leading) {
-                    RoundedRectangle(cornerRadius: 8).fill(Color(NSColor.windowBackgroundColor)).frame(height: 14)
-                    RoundedRectangle(cornerRadius: 8).fill(LinearGradient(gradient: Gradient(colors: [.blue, .purple]), startPoint: .leading, endPoint: .trailing)).frame(width: max(0, geometry.size.width * CGFloat(progress)), height: 14).animation(.spring(), value: progress)
-                }
-            }.frame(height: 14)
-        }
-        .padding().background(Color(NSColor.controlBackgroundColor)).cornerRadius(12).shadow(color: Color.black.opacity(0.05), radius: 2, x: 0, y: 1).help("Double-click to edit your Growth Goal")
-    }
-}
-
-// =========================================================================
-// MARK: - TABLEAU SPREADSHEET
-// =========================================================================
 
 // =========================================================================
 // MARK: - TABLEAU SPREADSHEET
@@ -274,7 +263,6 @@ struct GrowthTableSection: View {
                 VStack(spacing: 0) {
                     ForEach(displayedYears) { yearData in
                         let isCurrent = (yearData.year == currentYear)
-                        // NOUVEAU : On passe le viewModel
                         GrowthRowView(
                             yearData: yearData,
                             isCurrentYear: isCurrent,
@@ -300,7 +288,7 @@ struct GrowthRowView: View {
     let liveWalletValue: Double
     let cumulativeInvest: Double
     let privacyMode: Bool
-    @ObservedObject var viewModel: PortfolioViewModel // NOUVEAU
+    @ObservedObject var viewModel: PortfolioViewModel
     
     var effectiveEndWallet: Double { isCurrentYear ? liveWalletValue : yearData.endWallet }
     var displayReturnAmount: Double { effectiveEndWallet - yearData.startWallet - yearData.invested }
@@ -351,7 +339,6 @@ struct GrowthRowView: View {
     }
 }
 
-// NOUVEAU : Champ 100% fiable
 struct GrowthField: View {
     @Binding var value: Double
     var privacyMode: Bool
@@ -373,11 +360,10 @@ struct GrowthField: View {
                 } else if newValue.isEmpty {
                     value = 0
                 }
-                viewModel.objectWillChange.send() // Met à jour l'UI en temps réel !
+                viewModel.objectWillChange.send()
             }
     }
 }
-
 
 // =========================================================================
 // MARK: - SECTIONS DE GRAPHIQUES

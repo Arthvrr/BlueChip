@@ -20,6 +20,8 @@ enum GoalType: String, Codable, CaseIterable {
 enum DividendGoalType: String, Codable, CaseIterable {
     case dividendsAnnual = "Annual Expected Dividends (€)"
     case portfolioYield = "Portfolio Yield Goal (%)"
+    case allTimeTotal = "Total All-Time Received (€)"
+    case currentYearTotal = "Received This Year (€)"
 }
 
 enum CalendarEventType: String, Codable, CaseIterable {
@@ -84,6 +86,7 @@ enum TransactionType: String, Codable, CaseIterable {
 enum GrowthGoalType: String, Codable, CaseIterable {
     case targetReturnCurrency = "Target Return (€)"
     case targetReturnPercent = "Target Return (%)"
+    case cagr = "CAGR (%)"
 }
 
 enum CriterionType: String, Codable, CaseIterable {

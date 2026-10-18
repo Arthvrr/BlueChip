@@ -1,12 +1,12 @@
 import SwiftUI
 import Charts
-import SwiftData // <-- NOUVEAU
+import SwiftData
 import Combine
 
 // MARK: - SPECIFIC ZOOM ENUM FOR DIVIDENDS
 enum DividendChartZoomType: String, Identifiable {
     case monthly, yearly, expectedMonthly, stockYield, totalDividends, yoc, allTimeHistory, heatmap
-    case seasonality, dgr // NOUVEAUX GRAPHES
+    case seasonality, dgr
     var id: String { self.rawValue }
 }
 
@@ -17,15 +17,41 @@ struct DividendsView: View {
     
     @State private var showGoalSheet = false
     @State private var chartToZoom: DividendChartZoomType? = nil
+            
+    var currentGoalValueForProgressBar: Double {
+        let goalType = viewModel.dividendGoalType ?? .dividendsAnnual
+        
+        switch goalType {
+        case .dividendsAnnual:
+            return viewModel.totalDividends
+        case .portfolioYield:
+            return viewModel.portfolioYield * 100
+        case .currentYearTotal: // <-- NOUVEAU
+            let currentYear = Calendar.current.component(.year, from: Date())
+            let thisYearData = viewModel.dividendYears.first { $0.year == currentYear }
+            return thisYearData?.total ?? 0.0
+        case .allTimeTotal:
+            return viewModel.dividendYears.reduce(0) { $0 + $1.total }
+        }
+    }
     
     var body: some View {
         ScrollView(.vertical) {
             VStack(spacing: 24) {
                 DividendsDashboardSection(viewModel: viewModel, privacyMode: $privacyMode)
                 
-                DividendGoalProgressBar(viewModel: viewModel, privacyMode: $privacyMode)
-                    .contentShape(Rectangle())
-                    .onTapGesture(count: 2) { showGoalSheet = true }
+                // -----------------------------------------------------------
+                // Utilisation du composant universel GoalProgressBar
+                // -----------------------------------------------------------
+                GoalProgressBar(
+                    title: viewModel.dividendGoalType.rawValue ?? DividendGoalType.dividendsAnnual.rawValue,
+                    currentValue: currentGoalValueForProgressBar,
+                    targetValue: viewModel.dividendGoalTarget ?? 0.0,
+                    privacyMode: $privacyMode,
+                    isPercentage: viewModel.dividendGoalType == .portfolioYield
+                )
+                .contentShape(Rectangle())
+                .onTapGesture(count: 2) { showGoalSheet = true }
                 
                 DividendsProjectedChartsSection(viewModel: viewModel, privacyMode: $privacyMode, chartToZoom: $chartToZoom)
                 
@@ -39,7 +65,6 @@ struct DividendsView: View {
                 
                 DividendsAdvancedAnalyticsSection(viewModel: viewModel, privacyMode: $privacyMode, chartToZoom: $chartToZoom)
                 
-                // 8. NOUVELLE SECTION : SAISONNALITÉ ET CROISSANCE (DGR)
                 DividendsGrowthAndSeasonalitySection(viewModel: viewModel, privacyMode: $privacyMode, chartToZoom: $chartToZoom)
             }
             .padding()
@@ -50,26 +75,82 @@ struct DividendsView: View {
 }
 
 // =========================================================================
-// MARK: - FORMULAIRE GOAL (Dédié aux Dividendes)
+// MARK: - FORMULAIRE GOAL (Dédié aux Dividendes - Design Uniformisé)
 // =========================================================================
 struct EditDividendGoalView: View {
-    @Environment(\.dismiss) var dismiss; @ObservedObject var viewModel: PortfolioViewModel
-    @State private var selectedGoal: DividendGoalType; @State private var targetInput: Double
-    init(viewModel: PortfolioViewModel) { self.viewModel = viewModel; _selectedGoal = State(initialValue: viewModel.dividendGoalType); _targetInput = State(initialValue: viewModel.dividendGoalTarget) }
+    @Environment(\.dismiss) var dismiss
+    @ObservedObject var viewModel: PortfolioViewModel
+    @State private var selectedGoal: DividendGoalType
+    @State private var targetInput: Double
+    
+    init(viewModel: PortfolioViewModel) {
+        self.viewModel = viewModel
+        _selectedGoal = State(initialValue: viewModel.dividendGoalType ?? .dividendsAnnual)
+        _targetInput = State(initialValue: viewModel.dividendGoalTarget ?? 1000.0)
+    }
+    
     var body: some View {
-        Form {
-            Section(header: Text("Set Dividend Goal").font(.headline)) { Picker("Goal Type", selection: $selectedGoal) { ForEach(DividendGoalType.allCases, id: \.self) { type in Text(type.rawValue).tag(type) } }; TextField("Target Amount", value: $targetInput, format: .number) }.padding()
+        VStack(spacing: 0) {
+            // Header
             HStack {
-                Button("Cancel") { dismiss() }.keyboardShortcut(.cancelAction)
+                Text("Set Dividend Goal").font(.title2).fontWeight(.bold)
                 Spacer()
-                Button("Save") {
+                Button(action: { dismiss() }) {
+                    Image(systemName: "xmark.circle.fill").font(.title2).foregroundColor(.secondary)
+                }.buttonStyle(.plain)
+            }
+            .padding()
+            
+            Divider()
+            
+            // Content
+            VStack(alignment: .leading, spacing: 16) {
+                GroupBox {
+                    VStack(spacing: 16) {
+                        HStack {
+                            Text("Goal Type:")
+                            Spacer()
+                            Picker("", selection: $selectedGoal) {
+                                ForEach(DividendGoalType.allCases, id: \.self) { type in Text(type.rawValue).tag(type) }
+                            }
+                            .labelsHidden()
+                            .frame(width: 250) // Plus large pour accommoder "Total All-Time Received (€)"
+                        }
+                        
+                        Divider().opacity(0.5)
+                        
+                        HStack {
+                            Text("Target Amount:")
+                            Spacer()
+                            TextField("e.g. 500", value: $targetInput, format: .number)
+                                .textFieldStyle(.roundedBorder)
+                                .multilineTextAlignment(.trailing)
+                                .frame(width: 150)
+                        }
+                    }
+                    .padding(.vertical, 4)
+                }
+            }
+            .padding()
+            
+            Spacer()
+            Divider()
+            
+            // Footer
+            HStack {
+                Button("Cancel") { dismiss() }
+                    .keyboardShortcut(.cancelAction)
+                Spacer()
+                Button("Save Goal") {
                     viewModel.dividendGoalType = selectedGoal
                     viewModel.dividendGoalTarget = targetInput
-                    // MODIFIÉ : Retrait de viewModel.saveData()
                     dismiss()
-                }.keyboardShortcut(.defaultAction).buttonStyle(.borderedProminent)
+                }
+                .keyboardShortcut(.defaultAction)
+                .buttonStyle(.borderedProminent)
             }.padding()
-        }.frame(width: 380).padding()
+        }
+        .frame(width: 440, height: 280) // Un peu plus large pour que le picker ne coupe pas le texte
     }
 }
 
@@ -171,7 +252,6 @@ struct DividendsTableSection: View {
                 
                 VStack(spacing: 0) {
                     ForEach(displayedYears) { yearData in
-                        // NOUVEAU : On passe le viewModel pour forcer la mise à jour des graphiques
                         SpreadsheetRowView(yearData: yearData, privacyMode: privacyMode, viewModel: viewModel)
                             .padding(.horizontal, 16).padding(.vertical, 8)
                         Divider()
@@ -186,7 +266,7 @@ struct DividendsTableSection: View {
 struct SpreadsheetRowView: View {
     @Bindable var yearData: DividendYear
     var privacyMode: Bool
-    @ObservedObject var viewModel: PortfolioViewModel // NOUVEAU
+    @ObservedObject var viewModel: PortfolioViewModel
     
     var body: some View {
         HStack(spacing: 8) {
@@ -206,7 +286,6 @@ struct SpreadsheetRowView: View {
     }
 }
 
-// NOUVEAU : Champ 100% fiable qui sauvegarde à chaque frappe
 struct MonthField: View {
     @Binding var value: Double
     var privacyMode: Bool
@@ -222,13 +301,13 @@ struct MonthField: View {
                 if value != 0 { textValue = value.formatted(.number.grouping(.never)) }
             }
             .onChange(of: textValue) { _, newValue in
-                let cleanString = newValue.replacingOccurrences(of: ",", with: ".") // Gère la virgule européenne
+                let cleanString = newValue.replacingOccurrences(of: ",", with: ".")
                 if let doubleVal = Double(cleanString) {
                     value = doubleVal
                 } else if newValue.isEmpty {
                     value = 0
                 }
-                viewModel.objectWillChange.send() // Met à jour les graphiques en temps réel !
+                viewModel.objectWillChange.send()
             }
     }
 }
@@ -298,26 +377,7 @@ struct DividendsGrowthAndSeasonalitySection: View {
 // MARK: - DIVIDEND CUSTOM UI COMPONENTS & CHARTS
 // =========================================================================
 
-struct DividendGoalProgressBar: View {
-    @ObservedObject var viewModel: PortfolioViewModel; @Binding var privacyMode: Bool
-    var isYieldGoal: Bool { viewModel.dividendGoalType == .portfolioYield }
-    var targetTitle: String { isYieldGoal ? "Portfolio Yield" : "Annual Expected Dividends" }
-    var currentValueString: String { isYieldGoal ? viewModel.portfolioYield.formatted(.percent.precision(.fractionLength(2))) : viewModel.totalDividends.formatted(.currency(code: "EUR").precision(.fractionLength(2))) }
-    var targetValueString: String { isYieldGoal ? (viewModel.dividendGoalTarget / 100.0).formatted(.percent.precision(.fractionLength(2))) : viewModel.dividendGoalTarget.formatted(.currency(code: "EUR").precision(.fractionLength(2))) }
-    var progress: Double {
-        guard viewModel.dividendGoalTarget > 0 else { return 0 }
-        if isYieldGoal { return min(max(viewModel.portfolioYield / (viewModel.dividendGoalTarget / 100.0), 0), 1) }
-        else { return min(max(viewModel.totalDividends / viewModel.dividendGoalTarget, 0), 1) }
-    }
-    var body: some View {
-        VStack(alignment: .leading, spacing: 8) {
-            HStack { Text("\(targetTitle) Goal").font(.headline); Spacer(); Text("\(currentValueString) / \(targetValueString)").font(.subheadline).fontWeight(.bold).foregroundColor(progress >= 1 ? .green : .primary).blur(radius: privacyMode ? 8 : 0) }
-            GeometryReader { geometry in ZStack(alignment: .leading) { RoundedRectangle(cornerRadius: 8).fill(Color(NSColor.windowBackgroundColor)).frame(height: 14); RoundedRectangle(cornerRadius: 8).fill(LinearGradient(gradient: Gradient(colors: [.orange, .purple]), startPoint: .leading, endPoint: .trailing)).frame(width: max(0, geometry.size.width * CGFloat(progress)), height: 14).animation(.spring(), value: progress) } }.frame(height: 14)
-        }.padding().background(Color(NSColor.controlBackgroundColor)).cornerRadius(12).shadow(color: Color.black.opacity(0.05), radius: 2, x: 0, y: 1).help("Double-click to edit your goal")
-    }
-}
-
-// MARK: - CHART 1: EXPECTED MONTHLY (Simplifié : Gross vs Net groupés & Légende Interactive)
+// MARK: - CHART 1: EXPECTED MONTHLY
 struct ExpectedMonthlyDividendChart: View {
     @ObservedObject var viewModel: PortfolioViewModel
     @Binding var privacyMode: Bool
@@ -334,7 +394,6 @@ struct ExpectedMonthlyDividendChart: View {
         var amount: Double
     }
     
-    // FIX : On impose les 12 mois pour le cadenas chronologique
     let allMonths = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"]
     
     var aggregatedData: [MonthlyAggregated] {
@@ -343,7 +402,6 @@ struct ExpectedMonthlyDividendChart: View {
             let net = viewModel.expectedMonthlyDividendSeries.filter { $0.monthName == month && $0.type == "Net" }.reduce(0) { $0 + $1.amount }
             let gross = viewModel.expectedMonthlyDividendSeries.filter { $0.monthName == month && $0.type == "Gross" }.reduce(0) { $0 + $1.amount }
             
-            // FIX : On ajoute toujours les mois, même s'ils valent 0, pour avoir le graphique complet
             result.append(MonthlyAggregated(month: month, type: "Gross", amount: gross))
             result.append(MonthlyAggregated(month: month, type: "Net", amount: net))
         }
@@ -393,7 +451,7 @@ struct ExpectedMonthlyDividendChart: View {
                         }
                 }
                 .chartLegend(.hidden)
-                .chartXScale(domain: allMonths) // FIX : Cadenas pour forcer les 12 mois dans l'ordre !
+                .chartXScale(domain: allMonths)
                 .chartYScale(domain: 0...yMaxStatic)
                 .chartYAxis { AxisMarks(position: .leading) { value in AxisGridLine(); AxisTick(); if let v = value.as(Double.self) { AxisValueLabel(v.formatted(.currency(code: "EUR").precision(.fractionLength(0)))) } } }
                 .chartXSelection(value: $hoveredMonth)
@@ -454,7 +512,7 @@ struct MonthlyDividendChart: View {
                     BarMark(x: .value("Month", item.0), y: .value("Amount", item.1)).foregroundStyle(Color.orange.opacity(0.8)).cornerRadius(4)
                         .annotation(position: .top) { if hoveredMonth == item.0 && item.1 > 0 { Text(item.1.formatted(.currency(code: "EUR").precision(.fractionLength(2)))).font(.system(size: 9, weight: .bold)).foregroundColor(.secondary).blur(radius: privacyMode ? 6 : 0) } }
                 }
-                .chartXScale(domain: allMonths) // Cadenas pour l'ordre des mois
+                .chartXScale(domain: allMonths)
                 .chartYScale(domain: 0...yMaxStatic)
                 .chartYAxis { AxisMarks { value in if let v = value.as(Double.self) { AxisValueLabel(v.formatted(.currency(code: "EUR").precision(.fractionLength(0)))) } } }
                 .chartXSelection(value: $hoveredMonth)
@@ -794,7 +852,6 @@ struct TotalMonthlySeasonalityChart: View {
                     .cornerRadius(4)
                     .annotation(position: .top) {
                         if hoveredMonth == item.month && item.total > 0 {
-                            // FIX 1 : Passage à 2 décimales au lieu de 0
                             Text(item.total.formatted(.currency(code: "EUR").precision(.fractionLength(2))))
                                 .font(.system(size: 9, weight: .bold))
                                 .foregroundColor(.secondary)
@@ -825,7 +882,6 @@ struct DividendGrowthRateChart: View {
     var isExpanded: Bool = false
     @Binding var expandedChart: DividendChartZoomType?
     
-    // FIX 2 : Le survol utilise maintenant un String pour correspondre à l'axe X catégorique
     @State private var hoveredYear: String? = nil
     
     var currentYear: Int { Calendar.current.component(.year, from: Date()) }
@@ -836,7 +892,6 @@ struct DividendGrowthRateChart: View {
         
         if currentYear <= startYear { return items }
         
-        // On calcule la croissance année par année de manière stricte
         for year in (startYear + 1)...currentYear {
             let prevYearTotal = viewModel.dividendYears.first(where: { $0.year == year - 1 })?.total ?? 0.0
             let currYearTotal = viewModel.dividendYears.first(where: { $0.year == year })?.total ?? 0.0
@@ -849,7 +904,6 @@ struct DividendGrowthRateChart: View {
         return items
     }
     
-    // FIX 3 : Le Cadenas Chronologique
     var yearsDomain: [String] {
         data.map { String($0.year) }
     }
@@ -884,14 +938,14 @@ struct DividendGrowthRateChart: View {
                         .foregroundStyle(Color.gray.opacity(0.3))
                     
                     AreaMark(
-                        x: .value("Year", String(item.year)), // FIX 4 : On caste l'année en String
+                        x: .value("Year", String(item.year)),
                         y: .value("DGR", item.dgr)
                     )
                     .foregroundStyle(LinearGradient(colors: [Color.green.opacity(0.4), Color.green.opacity(0.0)], startPoint: .top, endPoint: .bottom))
                     .interpolationMethod(.monotone)
                     
                     LineMark(
-                        x: .value("Year", String(item.year)), // FIX 4 : On caste l'année en String
+                        x: .value("Year", String(item.year)),
                         y: .value("DGR", item.dgr)
                     )
                     .foregroundStyle(Color.green)
@@ -906,7 +960,7 @@ struct DividendGrowthRateChart: View {
                     }
                 }
                 .chartXSelection(value: $hoveredYear)
-                .chartXScale(domain: yearsDomain) // FIX 5 : Application du Cadenas
+                .chartXScale(domain: yearsDomain)
                 .chartYAxis { AxisMarks(position: .leading) { value in AxisGridLine(); AxisTick(); if let v = value.as(Double.self) { AxisValueLabel("\(v.formatted(.number.precision(.fractionLength(0))))%") } } }
                 .chartXAxis {
                     AxisMarks(values: .automatic) { value in
@@ -1058,7 +1112,7 @@ struct DividendsThisMonthSection: View {
                             }
                         }
                     }
-                    .frame(maxWidth: .infinity) // CORRECTION 1 : 50% de la largeur
+                    .frame(maxWidth: .infinity)
                     .frame(height: 250) // Hauteur fixe pour le donut pour qu'il reste esthétique
                     
                     // --- DROITE : STATS & TABLEAU ---
@@ -1121,7 +1175,7 @@ struct DividendsThisMonthSection: View {
                         .cornerRadius(8)
                         .overlay(RoundedRectangle(cornerRadius: 8).stroke(Color.gray.opacity(0.2), lineWidth: 1))
                     }
-                    .frame(maxWidth: .infinity) // CORRECTION 1 : L'autre 50% de la largeur
+                    .frame(maxWidth: .infinity)
                 }
             }
         }

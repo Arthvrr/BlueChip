@@ -128,32 +128,55 @@ struct DashboardCard: View {
 }
 
 struct GoalProgressBar: View {
-    let title: String; let currentValue: Double; let targetValue: Double
+    let title: String
+    let currentValue: Double
+    let targetValue: Double
     @Binding var privacyMode: Bool
     
-    var progress: Double { guard targetValue > 0 else { return 0 }; return min(max(currentValue / targetValue, 0), 1) }
+    // NOUVEAU : Option pour définir le type de formatage (Devise ou Pourcentage)
+    var isPercentage: Bool = false
+
+    var progress: Double {
+        guard targetValue > 0 else { return 0 }
+        return min(max(currentValue / targetValue, 0), 1)
+    }
     
+    var currentValueString: String {
+        isPercentage ? (currentValue / 100).formatted(.percent.precision(.fractionLength(2))) : currentValue.formatted(.currency(code: "EUR").precision(.fractionLength(2))) // <-- Modification ici : on force 2 décimales
+    }
+    
+    var targetValueString: String {
+        isPercentage ? (targetValue / 100).formatted(.percent.precision(.fractionLength(2))) : targetValue.formatted(.currency(code: "EUR").precision(.fractionLength(2))) // <-- Modification ici : on force 2 décimales
+    }
+
     var body: some View {
         VStack(alignment: .leading, spacing: 8) {
             HStack {
-                Text("Goal : \(title)").font(.headline)
+                Text("\(title) Goal").font(.headline)
                 Spacer()
-                Text("\(currentValue.formatted(.currency(code: "EUR"))) / \(targetValue.formatted(.currency(code: "EUR")))")
+                Text("\(currentValueString) / \(targetValueString)")
                     .font(.subheadline).fontWeight(.bold)
                     .foregroundColor(progress >= 1 ? .green : .primary)
                     .blur(radius: privacyMode ? 8 : 0)
             }
+            
             GeometryReader { geometry in
                 ZStack(alignment: .leading) {
-                    RoundedRectangle(cornerRadius: 8).fill(Color(NSColor.windowBackgroundColor)).frame(height: 14)
+                    RoundedRectangle(cornerRadius: 8)
+                        .fill(Color(NSColor.windowBackgroundColor))
+                        .frame(height: 14)
+                    
                     RoundedRectangle(cornerRadius: 8)
                         .fill(LinearGradient(gradient: Gradient(colors: [.blue, .purple]), startPoint: .leading, endPoint: .trailing))
                         .frame(width: max(0, geometry.size.width * CGFloat(progress)), height: 14)
                         .animation(.spring(), value: progress)
                 }
-            }.frame(height: 14)
+            }
+            .frame(height: 14)
         }
-        .padding().background(Color(NSColor.controlBackgroundColor)).cornerRadius(12)
+        .padding()
+        .background(Color(NSColor.controlBackgroundColor))
+        .cornerRadius(12)
         .shadow(color: Color.black.opacity(0.05), radius: 2, x: 0, y: 1)
         .help("Double-click to edit your goal")
     }
