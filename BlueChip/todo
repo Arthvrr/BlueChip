@@ -4,7 +4,7 @@ FINISH V1.0 BlueChip :
 - cagr portefeuille goal
 - debt to assets ratio goal et FIRE montant goal
 
-2. notifs apple : ce qu'il se passe demain et aujourd'hui calendar, price target se rapproche du prix actuel, goal dépassé, dividende reçu
+sauvegarder historique conversations IA
 
 3. demander à l'IA des idées d'ajouts !! que ce soit Pages ou features
 
@@ -21,3 +21,5 @@ si recherche de graphe ouvre graphe en mode zoom, si recherche event ouvre event
 ajouter icône à chaque case d'header et ajouter mini description à chaque graphe de l'appli
 
 export en csv pour pouvoir après redéposer dessus
+
+widgets (calendrier, montant total, dividendes par mois)

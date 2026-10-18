@@ -165,6 +165,8 @@ class PortfolioViewModel: ObservableObject {
         setupGrowthYears()
         updateDividendsViewData()
         Task { await refreshPrices() }
+        
+        refreshSpotlightIndex()
     }
     
     // ==========================================
@@ -178,6 +180,7 @@ class PortfolioViewModel: ObservableObject {
         positions.append(newPos)
         positions.sort(using: sortOrder)
         Task { await refreshPrices() }
+        refreshSpotlightIndex()
     }
     func updatePosition(id: UUID, quantity: Double, pru: Double, dividend: Double, dividendGrowth5Y: Double, country: String, sector: String, marketCap: String, dividendMonths: Set<Int>, purchaseDate: Date) {
         if let idx = positions.firstIndex(where: { $0.id == id }) {
@@ -185,12 +188,14 @@ class PortfolioViewModel: ObservableObject {
             positions.sort(using: sortOrder)
             objectWillChange.send() // Force UI Update
         }
+        refreshSpotlightIndex()
     }
     func deletePosition(id: UUID) {
         if let pos = positions.first(where: { $0.id == id }) {
             modelContext?.delete(pos)
             positions.removeAll { $0.id == id }
         }
+        refreshSpotlightIndex()
     }
     
     func updateRevenueExposures(for positionId: UUID, exposures: [RevenueSegment]) {
@@ -212,12 +217,14 @@ class PortfolioViewModel: ObservableObject {
     func addTransaction(_ transaction: Transaction) {
         modelContext?.insert(transaction)
         transactions.append(transaction)
+        refreshSpotlightIndex()
     }
     func deleteTransaction(id: UUID) {
         if let tx = transactions.first(where: { $0.id == id }) {
             modelContext?.delete(tx)
             transactions.removeAll { $0.id == id }
         }
+        refreshSpotlightIndex()
     }
     
     // --- WEALTH & LIABILITIES ---
@@ -704,6 +711,15 @@ class PortfolioViewModel: ObservableObject {
             title: "📊 Weekly Recap",
             body: body,
             identifier: "weekly_recap"
+        )
+    }
+    
+    func refreshSpotlightIndex() {
+        SpotlightManager.shared.indexPortfolio(
+            positions: self.positions,
+            transactions: self.transactions,
+            watchlistItems: self.watchlistItems,
+            calendarEvents: self.calendarEvents
         )
     }
     
