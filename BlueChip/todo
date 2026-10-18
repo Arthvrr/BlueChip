@@ -1,13 +1,7 @@
 FINISH V1.0 BlueChip :
 
-- afficher en grand au début si évent prévu aujourd'hui (dividende, earnings,...)
-- faire fonctionner bouton open bluechip full app
-- faire vraiment fonctionner markets open
-- faire vraiment fonctionner bouton refresh
 - demander des idées d'ajouts à l'IA sans en faire trop !!
-- bouton hide montant chiffrés
-- corriger montant dividende affiché ce mois-ci
-- ajouter boutons droits (réglages,quitt bluechip)
+- bouton AI donner avis sur marchés aujourd'hui ?
 
 2. notifs apple : ce qu'il se passe demain et aujourd'hui calendar, price target se rapproche du prix actuel, goal dépassé, dividende reçu
 

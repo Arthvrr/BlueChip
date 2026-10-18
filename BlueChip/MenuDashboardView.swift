@@ -3,6 +3,9 @@ import SwiftUI
 struct MenuBarDashboardView: View {
     @ObservedObject var viewModel: PortfolioViewModel
     
+    // Pour fermer le Popover si besoin (bien que ce soit géré par le système en général)
+    @Environment(\.dismiss) var dismiss
+    
     // Variables calculées pour le mois en cours
     let currentMonthName: String = {
         let f = DateFormatter()
@@ -10,37 +13,41 @@ struct MenuBarDashboardView: View {
         return f.string(from: Date()).capitalized
     }()
     
+    // 5) Triage et identification des événements (dont ceux d'aujourd'hui)
     var thisMonthEvents: [CalendarEvent] {
         viewModel.calendarEvents.filter {
             Calendar.current.isDate($0.date, equalTo: Date(), toGranularity: .month)
         }.sorted { $0.date < $1.date }
     }
     
-    // Logique simplifiée pour estimer les dividendes du mois en cours
+    // 1) Calcul des dividendes corrigé
     var thisMonthDividends: [(ticker: String, amountEUR: Double)] {
         let currentMonthIndex = Calendar.current.component(.month, from: Date())
-        
-        // CORRECTION : On ajoute explicitement les étiquettes (ticker et amountEUR) au tableau
         var payouts: [(ticker: String, amountEUR: Double)] = []
         
         for pos in viewModel.positions {
             if pos.dividendMonths.contains(currentMonthIndex) {
-                let paymentsPerYear = max(1.0, Double(pos.dividendMonths.count))
-                let singlePaymentUSD = (pos.annualDividendNet / paymentsPerYear) * pos.quantity
-                let singlePaymentEUR = singlePaymentUSD * pos.usdToEurRate
-                let netEUR = singlePaymentEUR * (1.0 - (viewModel.dividendTaxRate / 100.0))
+                // Utilisation du dividende total annuel (déjà multiplié par la quantité en USD converti en EUR)
+                let netTotalEUR = pos.totalDividendEUR
                 
-                // Swift reconnaîtra automatiquement que la String est le ticker et le Double est amountEUR
-                payouts.append((pos.ticker, netEUR))
+                // On divise par le nombre de mois où il y a un versement pour obtenir la valeur de ce versement
+                let paymentsPerYear = max(1.0, Double(pos.dividendMonths.count))
+                let singlePaymentEUR = netTotalEUR / paymentsPerYear
+                
+                payouts.append((pos.ticker, singlePaymentEUR))
             }
         }
         
-        // Le tri fonctionnera maintenant parfaitement
         return payouts.sorted { $0.amountEUR > $1.amountEUR }
     }
     
     var totalDividendsThisMonth: Double {
         thisMonthDividends.reduce(0) { $0 + $1.amountEUR }
+    }
+    
+    // 4) Positions triées par Ticker (Ordre alphabétique)
+    var sortedPositions: [Position] {
+        viewModel.positions.sorted { $0.ticker < $1.ticker }
     }
 
     var body: some View {
@@ -49,7 +56,6 @@ struct MenuBarDashboardView: View {
             HStack(alignment: .center) {
                 VStack(alignment: .leading, spacing: 2) {
                     Text("Total Portfolio").font(.caption).foregroundColor(.secondary)
-                    // TODO: Remplacer par la vraie variable de valeur totale de ton viewModel
                     Text(viewModel.currentTotalCapital.formatted(.currency(code: "EUR")))
                         .font(.headline)
                         .fontWeight(.bold)
@@ -57,19 +63,25 @@ struct MenuBarDashboardView: View {
                 
                 Spacer()
                 
-                // Idée d'ajout : Indicateur de marché
                 HStack(spacing: 4) {
-                    Circle().fill(Color.green).frame(width: 6, height: 6)
-                    Text("Market Open").font(.caption2).foregroundColor(.secondary)
+                    Circle()
+                        .fill(viewModel.isLoading ? Color.orange : Color.green)
+                        .frame(width: 6, height: 6)
+                    Text(viewModel.isLoading ? "Refreshing..." : "Market Open").font(.caption2).foregroundColor(.secondary)
                 }.padding(.trailing, 8)
                 
+                // 6) Bouton Refresh Actif
                 Button(action: {
-                    // TODO: Lancer la fonction de rafraîchissement de Yahoo Finance
-                    print("Refreshing Yahoo Finance API...")
+                    Task {
+                        await viewModel.refreshPrices()
+                    }
                 }) {
                     Image(systemName: "arrow.clockwise")
+                        .rotationEffect(Angle(degrees: viewModel.isLoading ? 360 : 0))
+                        .animation(viewModel.isLoading ? Animation.linear(duration: 1).repeatForever(autoreverses: false) : .default, value: viewModel.isLoading)
                 }
                 .buttonStyle(.plain)
+                .disabled(viewModel.isLoading)
                 .help("Refresh Market Data")
             }
             .padding(12)
@@ -81,21 +93,56 @@ struct MenuBarDashboardView: View {
             ScrollView(.vertical, showsIndicators: false) {
                 VStack(spacing: 16) {
                     
+                    // --- 2) ALERTE ÉVÉNEMENT DU JOUR ---
+                    let todayEvents = thisMonthEvents.filter { Calendar.current.isDateInToday($0.date) }
+                    if !todayEvents.isEmpty {
+                        VStack(spacing: 6) {
+                            ForEach(todayEvents) { event in
+                                HStack {
+                                    Image(systemName: "exclamationmark.triangle.fill")
+                                        .foregroundColor(.red)
+                                    VStack(alignment: .leading, spacing: 2) {
+                                        Text("TODAY: \(event.ticker)").font(.caption).fontWeight(.bold)
+                                        Text(event.type.rawValue).font(.caption2).opacity(0.8)
+                                    }
+                                    Spacer()
+                                }
+                                .padding(8)
+                                .background(Color.red.opacity(0.15))
+                                .cornerRadius(6)
+                                .overlay(RoundedRectangle(cornerRadius: 6).stroke(Color.red.opacity(0.4), lineWidth: 1))
+                            }
+                        }
+                    }
+                    
                     // SECTION 1 : POSITIONS & TARGETS
                     VStack(alignment: .leading, spacing: 8) {
                         Text("Holdings & Targets").font(.subheadline).fontWeight(.bold).foregroundColor(.secondary)
                         
                         VStack(spacing: 6) {
-                            ForEach(viewModel.positions) { pos in
+                            ForEach(sortedPositions) { pos in
                                 HStack {
                                     Text(pos.ticker).font(.system(.body, design: .monospaced)).fontWeight(.bold)
                                     Spacer()
                                     VStack(alignment: .trailing) {
                                         Text(pos.currentPrice.formatted(.currency(code: pos.currency.isEmpty ? "USD" : pos.currency)))
                                             .font(.subheadline)
-                                        // TODO: Assure-toi d'avoir une propriété `targetPrice` dans ton modèle Position
-                                        Text("Target: \(pos.targetPrice?.formatted() ?? "-")")
-                                            .font(.caption2).foregroundColor(.secondary)
+                                        
+                                        // 3) Ajout du % Gap à côté du Target
+                                        HStack(spacing: 4) {
+                                            Text("Target: \(pos.targetPrice?.formatted() ?? "-")")
+                                            
+                                            if let target = pos.targetPrice, target > 0 {
+                                                let gap = ((pos.currentPrice - target) / target) * 100
+                                                // Si le prix est < target (donc négatif), on est en dessous (vert/bien si on veut acheter), sinon rouge
+                                                let gapColor = gap <= 0 ? Color.green : Color.red
+                                                let sign = gap > 0 ? "+" : ""
+                                                Text("(\(sign)\(gap.formatted(.number.precision(.fractionLength(1))))%)")
+                                                    .foregroundColor(gapColor)
+                                            }
+                                        }
+                                        .font(.caption2)
+                                        .foregroundColor(.secondary)
                                     }
                                 }
                                 Divider().opacity(0.5)
@@ -135,12 +182,30 @@ struct MenuBarDashboardView: View {
                         } else {
                             VStack(spacing: 6) {
                                 ForEach(thisMonthEvents) { event in
+                                    // Vérifier si la date est passée
+                                    let isPast = event.date < Calendar.current.startOfDay(for: Date())
+                                    
                                     HStack {
-                                        Circle().fill(event.type.color).frame(width: 6, height: 6)
-                                        Text(event.ticker).font(.caption).fontWeight(.bold)
-                                        Text(event.type.rawValue).font(.caption2).foregroundColor(.secondary).lineLimit(1)
+                                        Circle()
+                                            .fill(isPast ? Color.gray : event.type.color)
+                                            .frame(width: 6, height: 6)
+                                        
+                                        // 5) Biffer les événements passés
+                                        if isPast {
+                                            Text(event.ticker).font(.caption).fontWeight(.bold)
+                                                .strikethrough()
+                                                .foregroundColor(.secondary)
+                                        } else {
+                                            Text(event.ticker).font(.caption).fontWeight(.bold)
+                                        }
+                                        
+                                        Text(event.type.rawValue).font(.caption2).foregroundColor(isPast ? .secondary.opacity(0.5) : .secondary).lineLimit(1)
+                                        
                                         Spacer()
-                                        Text(event.date, format: .dateTime.day().month()).font(.caption2).foregroundColor(.secondary)
+                                        
+                                        Text(event.date, format: .dateTime.day().month())
+                                            .font(.caption2)
+                                            .foregroundColor(isPast ? .secondary.opacity(0.5) : .secondary)
                                     }
                                 }
                             }
@@ -154,8 +219,15 @@ struct MenuBarDashboardView: View {
             Divider()
             
             // --- FOOTER : OUVRIR L'APP ---
+            // 6) Bouton d'ouverture actif
             Button(action: {
+                // Ferme le popover de la barre de menu
+                dismiss()
+                
+                // Amène l'application (le Dock) au premier plan
                 NSApp.activate(ignoringOtherApps: true)
+                
+                // Si la fenêtre a été fermée (Croix rouge), la relance
                 if NSApp.windows.isEmpty {
                     NSApp.sendAction(Selector(("showWindow:")), to: nil, from: nil)
                 }
@@ -180,6 +252,6 @@ struct MenuBarDashboardView: View {
                 }
             }
         }
-        .frame(width: 300, height: 450) // Fixe la taille du popover
+        .frame(width: 320, height: 480) // Fixe la taille du popover
     }
 }
