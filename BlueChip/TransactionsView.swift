@@ -89,14 +89,38 @@ struct TransactionsView: View {
         }
     }
 
+    // NOUVEAU : Calcul dynamique de la valeur courante pour le Goal
+    var currentGoalValueForProgressBar: Double {
+        switch viewModel.transactionGoalType {
+        case .count:
+            return Double(viewModel.transactions.count)
+        case .totalInvested:
+            return viewModel.transactions.filter { $0.type == .buy }.reduce(0) { $0 + $1.amountEUR }
+        case .totalSold:
+            return viewModel.transactions.filter { $0.type == .sell }.reduce(0) { $0 + $1.amountEUR }
+        case .totalFees:
+            return viewModel.transactions.reduce(0) { $0 + $1.customFields.values.reduce(0, +) }
+        }
+    }
+
     var body: some View {
         ScrollView(.vertical) {
             VStack(spacing: 24) {
                 TransactionsDashboardSection(tx: filteredGlobalTransactions, privacyMode: $privacyMode)
 
-                TransactionsGoalBar(viewModel: viewModel, privacyMode: $privacyMode)
-                    .contentShape(Rectangle())
-                    .onTapGesture(count: 2) { showGoalSheet = true }
+                // -----------------------------------------------------------
+                // NOUVEAU : Utilisation du composant universel GoalProgressBar
+                // -----------------------------------------------------------
+                GoalProgressBar(
+                    title: viewModel.transactionGoalType.rawValue,
+                    currentValue: currentGoalValueForProgressBar,
+                    targetValue: viewModel.transactionGoalTarget,
+                    privacyMode: $privacyMode,
+                    isPercentage: false,
+                    isCount: viewModel.transactionGoalType == .count
+                )
+                .contentShape(Rectangle())
+                .onTapGesture(count: 2) { showGoalSheet = true }
 
                 TransactionsTableSection(
                     viewModel: viewModel,
@@ -184,43 +208,7 @@ struct TransactionsDashboardSection: View {
     }
 }
 
-// =========================================================================
-// MARK: - GOAL BAR
-// =========================================================================
 
-struct TransactionsGoalBar: View {
-    @ObservedObject var viewModel: PortfolioViewModel
-    @Binding var privacyMode: Bool
-
-    var txCount: Int   { viewModel.transactions.count }
-    var target: Double { viewModel.transactionGoalTarget }
-    var progress: Double { target > 0 ? min(Double(txCount) / target, 1) : 0 }
-
-    var body: some View {
-        VStack(alignment: .leading, spacing: 8) {
-            HStack {
-                Text("Goal : \(Int(target)) Transactions Logged").font(.headline)
-                Spacer()
-                Text("\(txCount) / \(Int(target))")
-                    .font(.subheadline).fontWeight(.bold)
-                    .foregroundColor(progress >= 1 ? .green : .primary)
-                    .blur(radius: privacyMode ? 6 : 0)
-            }
-            GeometryReader { geo in
-                ZStack(alignment: .leading) {
-                    RoundedRectangle(cornerRadius: 8).fill(Color(NSColor.windowBackgroundColor)).frame(height: 14)
-                    RoundedRectangle(cornerRadius: 8)
-                        .fill(LinearGradient(colors: [.blue, .purple], startPoint: .leading, endPoint: .trailing))
-                        .frame(width: max(0, geo.size.width * CGFloat(progress)), height: 14)
-                        .animation(.spring(), value: progress)
-                }
-            }.frame(height: 14)
-        }
-        .padding().background(Color(NSColor.controlBackgroundColor)).cornerRadius(12)
-        .shadow(color: Color.black.opacity(0.05), radius: 2, x: 0, y: 1)
-        .help("Double-click to edit your goal")
-    }
-}
 
 // =========================================================================
 // MARK: - TABLE SECTION
@@ -2027,22 +2015,77 @@ struct AddEditTransactionView: View {
 struct EditTransactionGoalView: View {
     @Environment(\.dismiss) var dismiss
     @ObservedObject var viewModel: PortfolioViewModel
-    @State private var input: Double
+    @State private var selectedGoal: TransactionGoalType
+    @State private var targetInput: Double
 
-    init(viewModel: PortfolioViewModel) { self.viewModel = viewModel; _input = State(initialValue: viewModel.transactionGoalTarget) }
+    init(viewModel: PortfolioViewModel) {
+        self.viewModel = viewModel
+        _selectedGoal = State(initialValue: viewModel.transactionGoalType)
+        _targetInput = State(initialValue: viewModel.transactionGoalTarget)
+    }
 
     var body: some View {
-        Form {
-            Section(header: Text("Transaction Goal").font(.headline)) {
-                TextField("Target number of transactions", value: $input, format: .number)
-            }.padding()
+        VStack(spacing: 0) {
+            // Header
             HStack {
-                Button("Cancel") { dismiss() }.keyboardShortcut(.cancelAction)
+                Text("Set Transaction Goal").font(.title2).fontWeight(.bold)
                 Spacer()
-                Button("Save") { viewModel.transactionGoalTarget = input; dismiss() }
-                    .keyboardShortcut(.defaultAction).buttonStyle(.borderedProminent)
+                Button(action: { dismiss() }) {
+                    Image(systemName: "xmark.circle.fill").font(.title2).foregroundColor(.secondary)
+                }.buttonStyle(.plain)
+            }
+            .padding()
+            
+            Divider()
+            
+            // Content
+            VStack(alignment: .leading, spacing: 16) {
+                GroupBox {
+                    VStack(spacing: 16) {
+                        HStack {
+                            Text("Goal Type:")
+                            Spacer()
+                            Picker("", selection: $selectedGoal) {
+                                ForEach(TransactionGoalType.allCases, id: \.self) { type in Text(type.rawValue).tag(type) }
+                            }
+                            .labelsHidden()
+                            .frame(width: 250)
+                        }
+                        
+                        Divider().opacity(0.5)
+                        
+                        HStack {
+                            Text("Target Amount:")
+                            Spacer()
+                            TextField("e.g. 50", value: $targetInput, format: .number)
+                                .textFieldStyle(.roundedBorder)
+                                .multilineTextAlignment(.trailing)
+                                .frame(width: 150)
+                        }
+                    }
+                    .padding(.vertical, 4)
+                }
+            }
+            .padding()
+            
+            Spacer()
+            Divider()
+            
+            // Footer
+            HStack {
+                Button("Cancel") { dismiss() }
+                    .keyboardShortcut(.cancelAction)
+                Spacer()
+                Button("Save Goal") {
+                    viewModel.transactionGoalType = selectedGoal
+                    viewModel.transactionGoalTarget = targetInput
+                    dismiss()
+                }
+                .keyboardShortcut(.defaultAction)
+                .buttonStyle(.borderedProminent)
             }.padding()
-        }.frame(width: 380).padding()
+        }
+        .frame(width: 440, height: 280) // Taille unifiée
     }
 }
 

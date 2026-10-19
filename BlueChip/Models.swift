@@ -83,6 +83,26 @@ enum TransactionType: String, Codable, CaseIterable {
     }
 }
 
+enum WealthGoalType: String, Codable, CaseIterable {
+    case netWorth = "True Net Worth (€)"
+    case totalAssets = "Total Assets (€)"
+    case passiveIncome = "Monthly FIRE Income (€)"
+    case debtAssetsRatio = "Debt to Assets Ratio (%)"
+}
+
+enum BenchmarkGoalType: String, Codable, CaseIterable {
+    case averageAlpha = "Target Average Alpha (%)"
+    case currentYearAlpha = "Current Year Alpha (%)"
+    case positiveAlphaYears = "Years with Positive Alpha"
+}
+
+enum TransactionGoalType: String, Codable, CaseIterable {
+    case count = "Number of Transactions Logged"
+    case totalInvested = "Total Invested (€)"
+    case totalSold = "Total Sold (€)"
+    case totalFees = "Maximum Fees & Taxes Allowed (€)"
+}
+
 enum GrowthGoalType: String, Codable, CaseIterable {
     case targetReturnCurrency = "Target Return (€)"
     case targetReturnPercent = "Target Return (%)"
@@ -131,11 +151,15 @@ struct RevenueSegment: Identifiable, Codable {
     var growthGoalType: GrowthGoalType?
     var growthGoalTarget: Double?
     
+    var benchmarkGoalType: BenchmarkGoalType?
     var benchmarkGoalTarget: Double?
+    
+    var transactionGoalType: TransactionGoalType?
     var transactionGoalTarget: Double?
     
     var transactionCustomColumns: [String]?
     
+    var wealthGoalType: WealthGoalType?
     var wealthGoalTarget: Double?
     var safeWithdrawalRate: Double?
     

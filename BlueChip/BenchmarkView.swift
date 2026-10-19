@@ -23,15 +23,76 @@ struct BenchmarkView: View {
     @State private var chartToZoom: BenchmarkChartZoomType? = nil
     
     @State private var editingIndex: BenchmarkIndex? = nil
+    
+    var currentYear: Int { Calendar.current.component(.year, from: Date()) }
+    var startYear: Int { viewModel.dividendStartYear }
+    var activeYears: [Int] { Array(startYear...currentYear) }
+    
+    // NOUVEAU : Calcul dynamique de la valeur courante pour le Goal
+    var currentGoalValueForProgressBar: Double {
+        let bestIndex = viewModel.benchmarkIndices.max { $0.averageReturn(years: activeYears) < $1.averageReturn(years: activeYears) }
+        
+        switch viewModel.benchmarkGoalType {
+        case .averageAlpha:
+            let portfolioAvgReturn: Double = {
+                var vals: [Double] = []
+                for year in activeYears {
+                    guard let yearData = viewModel.growthYears.first(where: { $0.year == year }) else { vals.append(0); continue }
+                    let isCurrentYear = year == currentYear
+                    let effectiveEnd = isCurrentYear ? viewModel.currentTotalCapital : yearData.endWallet
+                    let base = yearData.startWallet + yearData.invested
+                    vals.append(base > 0 ? ((effectiveEnd - base) / base) * 100.0 : 0)
+                }
+                guard !vals.isEmpty else { return 0 }
+                return vals.reduce(0, +) / Double(vals.count)
+            }()
+            let bestAvg = bestIndex?.averageReturn(years: activeYears) ?? 0
+            return portfolioAvgReturn - bestAvg
+            
+        case .currentYearAlpha:
+            let portfolioCurrentYear: Double = {
+                guard let yearData = viewModel.growthYears.first(where: { $0.year == currentYear }) else { return 0 }
+                let base = yearData.startWallet + yearData.invested
+                return base > 0 ? ((viewModel.currentTotalCapital - base) / base) * 100.0 : 0
+            }()
+            let bestCurrentYear = bestIndex?.returns[currentYear] ?? 0
+            return portfolioCurrentYear - bestCurrentYear
+            
+        case .positiveAlphaYears:
+            var positiveYearsCount = 0
+            for year in activeYears {
+                let pReturn: Double = {
+                    guard let yearData = viewModel.growthYears.first(where: { $0.year == year }) else { return 0 }
+                    let isCurrentYear = year == currentYear
+                    let effectiveEnd = isCurrentYear ? viewModel.currentTotalCapital : yearData.endWallet
+                    let base = yearData.startWallet + yearData.invested
+                    return base > 0 ? ((effectiveEnd - base) / base) * 100.0 : 0
+                }()
+                let iReturn = bestIndex?.returns[year] ?? 0
+                if (pReturn - iReturn) > 0 { positiveYearsCount += 1 }
+            }
+            return Double(positiveYearsCount)
+        }
+    }
 
     var body: some View {
         ScrollView(.vertical) {
             VStack(spacing: 24) {
                 BenchmarkDashboardSection(viewModel: viewModel, privacyMode: $privacyMode)
 
-                BenchmarkGoalProgressBar(viewModel: viewModel, privacyMode: $privacyMode)
-                    .contentShape(Rectangle())
-                    .onTapGesture(count: 2) { showGoalSheet = true }
+                // -----------------------------------------------------------
+                // NOUVEAU : Utilisation du composant universel GoalProgressBar
+                // -----------------------------------------------------------
+                GoalProgressBar(
+                    title: viewModel.benchmarkGoalType.rawValue,
+                    currentValue: currentGoalValueForProgressBar,
+                    targetValue: viewModel.benchmarkGoalTarget,
+                    privacyMode: $privacyMode,
+                    isPercentage: viewModel.benchmarkGoalType != .positiveAlphaYears,
+                    isCount: viewModel.benchmarkGoalType == .positiveAlphaYears // <-- NOUVEAU
+                )
+                .contentShape(Rectangle())
+                .onTapGesture(count: 2) { showGoalSheet = true }
 
                 BenchmarkTableSection(viewModel: viewModel, privacyMode: $privacyMode, showAddIndexSheet: $showAddIndexSheet, onEditIndex: { editingIndex = $0 })
 
@@ -47,16 +108,18 @@ struct BenchmarkView: View {
 }
 
 // =========================================================================
-// MARK: - GOAL FORM
+// MARK: - GOAL FORM (Dédié au Benchmark - Design Uniformisé)
 // =========================================================================
 
 struct EditBenchmarkGoalView: View {
     @Environment(\.dismiss) var dismiss
     @ObservedObject var viewModel: PortfolioViewModel
+    @State private var selectedGoal: BenchmarkGoalType
     @State private var targetInput: Double
 
     init(viewModel: PortfolioViewModel) {
         self.viewModel = viewModel
+        _selectedGoal = State(initialValue: viewModel.benchmarkGoalType)
         _targetInput = State(initialValue: viewModel.benchmarkGoalTarget)
     }
 
@@ -74,20 +137,30 @@ struct EditBenchmarkGoalView: View {
             Divider()
             
             VStack(alignment: .leading, spacing: 16) {
-                Text("Define your outperformance target (Alpha). This is the percentage by which you aim to beat your best performing benchmark index.")
-                    .font(.subheadline)
-                    .foregroundColor(.secondary)
-                
                 GroupBox {
-                    HStack {
-                        Text("Target Alpha:")
-                        Spacer()
-                        TextField("e.g. 2.5", value: $targetInput, format: .number)
-                            .textFieldStyle(.roundedBorder)
-                            .frame(width: 80)
-                            .multilineTextAlignment(.trailing)
-                        Text("%").foregroundColor(.secondary)
+                    VStack(spacing: 16) {
+                        HStack {
+                            Text("Goal Type:")
+                            Spacer()
+                            Picker("", selection: $selectedGoal) {
+                                ForEach(BenchmarkGoalType.allCases, id: \.self) { type in Text(type.rawValue).tag(type) }
+                            }
+                            .labelsHidden()
+                            .frame(width: 250)
+                        }
+                        
+                        Divider().opacity(0.5)
+                        
+                        HStack {
+                            Text("Target Amount:")
+                            Spacer()
+                            TextField("e.g. 2.5", value: $targetInput, format: .number)
+                                .textFieldStyle(.roundedBorder)
+                                .multilineTextAlignment(.trailing)
+                                .frame(width: 150)
+                        }
                     }
+                    .padding(.vertical, 4)
                 }
             }
             .padding()
@@ -99,19 +172,16 @@ struct EditBenchmarkGoalView: View {
                 Button("Cancel") { dismiss() }.keyboardShortcut(.cancelAction)
                 Spacer()
                 Button("Save Goal") {
+                    viewModel.benchmarkGoalType = selectedGoal
                     viewModel.benchmarkGoalTarget = targetInput
                     dismiss()
                 }
                 .keyboardShortcut(.defaultAction).buttonStyle(.borderedProminent)
             }.padding()
         }
-        .frame(width: 400, height: 280)
+        .frame(width: 440, height: 280) // Taille unifiée
     }
 }
-
-// =========================================================================
-// MARK: - ADD INDEX FORM
-// =========================================================================
 
 // =========================================================================
 // MARK: - ADD INDEX FORM
@@ -395,85 +465,6 @@ struct BenchmarkDashboardSection: View {
                 .shadow(color: Color.black.opacity(0.05), radius: 2, x: 0, y: 1)
             }
         }
-    }
-}
-
-// =========================================================================
-// MARK: - GOAL PROGRESS BAR
-// =========================================================================
-
-struct BenchmarkGoalProgressBar: View {
-    @ObservedObject var viewModel: PortfolioViewModel
-    @Binding var privacyMode: Bool
-
-    var currentYear: Int { Calendar.current.component(.year, from: Date()) }
-    var startYear: Int { viewModel.dividendStartYear }
-    var activeYears: [Int] { Array(startYear...currentYear) }
-
-    var portfolioAvgReturn: Double {
-        var vals: [Double] = []
-        for year in activeYears {
-            guard let yearData = viewModel.growthYears.first(where: { $0.year == year }) else {
-                vals.append(0); continue
-            }
-            let isCurrentYear = year == currentYear
-            let effectiveEnd = isCurrentYear ? viewModel.currentTotalCapital : yearData.endWallet
-            let base = yearData.startWallet + yearData.invested
-            vals.append(base > 0 ? ((effectiveEnd - base) / base) * 100.0 : 0)
-        }
-        guard !vals.isEmpty else { return 0 }
-        return vals.reduce(0, +) / Double(vals.count)
-    }
-    
-    var bestIndexAvgReturn: Double {
-        let best = viewModel.benchmarkIndices.max { a, b in
-            a.averageReturn(years: activeYears) < b.averageReturn(years: activeYears)
-        }
-        return best?.averageReturn(years: activeYears) ?? 0
-    }
-    
-    var alpha: Double {
-        portfolioAvgReturn - bestIndexAvgReturn
-    }
-
-    var target: Double { viewModel.benchmarkGoalTarget }
-    
-    var progress: Double {
-        guard target > 0 else { return alpha > 0 ? 1 : 0 }
-        return min(max(alpha / target, 0), 1)
-    }
-
-    var body: some View {
-        VStack(alignment: .leading, spacing: 8) {
-            HStack {
-                if viewModel.benchmarkIndices.isEmpty {
-                    Text("Goal : Add an index below to track your Outperformance (Alpha)").font(.headline)
-                } else {
-                    Text("Goal : Outperform Best Index by ≥ \(target.formatted(.number.precision(.fractionLength(1))))% (Alpha)")
-                        .font(.headline)
-                }
-                Spacer()
-                
-                if !viewModel.benchmarkIndices.isEmpty {
-                    Text("Alpha: \(alpha.formatted(.number.precision(.fractionLength(2)).sign(strategy: .always())))% / \(target.formatted(.number.precision(.fractionLength(1))))%")
-                        .font(.subheadline).fontWeight(.bold)
-                        .foregroundColor(progress >= 1 ? .green : .primary)
-                        .blur(radius: privacyMode ? 6 : 0)
-                }
-            }
-            GeometryReader { geometry in
-                ZStack(alignment: .leading) {
-                    RoundedRectangle(cornerRadius: 8).fill(Color(NSColor.windowBackgroundColor)).frame(height: 14)
-                    RoundedRectangle(cornerRadius: 8)
-                        .fill(LinearGradient(gradient: Gradient(colors: [.blue, .purple]), startPoint: .leading, endPoint: .trailing))
-                        .frame(width: max(0, geometry.size.width * CGFloat(progress)), height: 14)
-                        .animation(.spring(), value: progress)
-                }
-            }.frame(height: 14)
-        }
-        .padding().background(Color(NSColor.controlBackgroundColor)).cornerRadius(12)
-        .shadow(color: Color.black.opacity(0.05), radius: 2, x: 0, y: 1)
-        .help("Double-click to edit your Outperformance Goal")
     }
 }
 

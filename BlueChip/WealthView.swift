@@ -29,6 +29,16 @@ struct WealthView: View {
     @State private var showGoalSheet: Bool = false
     @State private var chartToZoom: WealthChartZoomType? = nil
     
+    // NOUVEAU : Calcul dynamique de la valeur courante pour le Goal
+    var currentGoalValueForProgressBar: Double {
+        switch viewModel.wealthGoalType {
+        case .netWorth: return viewModel.trueNetWorth
+        case .totalAssets: return viewModel.totalAssets
+        case .passiveIncome: return viewModel.fireMonthlyIncome
+        case .debtAssetsRatio: return viewModel.debtToAssetRatio * 100 // <-- CORRECTION ICI
+        }
+    }
+    
     var body: some View {
         let isPrivate = privacyMode
         
@@ -69,13 +79,18 @@ struct WealthView: View {
                     }
                 }
                 
-                // 2. GOAL PROGRESS BAR
-                WealthGoalProgressBar(
-                    currentValue: viewModel.trueNetWorth,
+                // -----------------------------------------------------------
+                // 2. NOUVEAU : Utilisation du composant universel GoalProgressBar
+                // -----------------------------------------------------------
+                GoalProgressBar(
+                    title: viewModel.wealthGoalType.rawValue,
+                    currentValue: currentGoalValueForProgressBar,
                     targetValue: viewModel.wealthGoalTarget,
-                    progress: viewModel.wealthGoalProgress,
-                    privacyMode: $privacyMode
+                    privacyMode: $privacyMode,
+                    isPercentage: viewModel.wealthGoalType == .debtAssetsRatio // <-- MODIFICATION ICI
                 )
+                .contentShape(Rectangle())
+                .onTapGesture(count: 2) { showGoalSheet = true }
                 .contentShape(Rectangle())
                 .onTapGesture(count: 2) { showGoalSheet = true }
                 
@@ -125,8 +140,9 @@ struct WealthView: View {
             .padding()
         }
         .background(Color(NSColor.windowBackgroundColor))
+        // MODIFIÉ : On appelle notre nouveau formulaire complet
         .sheet(isPresented: $showGoalSheet) {
-            SimpleNumberEditView(title: "Edit Net Worth Goal", value: $viewModel.wealthGoalTarget)
+            EditWealthGoalView(viewModel: viewModel)
         }
         .sheet(item: $editingAsset) { asset in
             EditWealthAssetSheet(viewModel: viewModel, assetToEdit: asset)
@@ -137,6 +153,82 @@ struct WealthView: View {
         .sheet(item: $chartToZoom) { type in
             WealthFullScreenChartView(zoomType: type, viewModel: viewModel, privacyMode: $privacyMode)
         }
+    }
+}
+
+// =========================================================================
+// MARK: - GOAL FORM (Dédié au Wealth - Design Uniformisé)
+// =========================================================================
+
+struct EditWealthGoalView: View {
+    @Environment(\.dismiss) var dismiss
+    @ObservedObject var viewModel: PortfolioViewModel
+    @State private var selectedGoal: WealthGoalType
+    @State private var targetInput: Double
+
+    init(viewModel: PortfolioViewModel) {
+        self.viewModel = viewModel
+        _selectedGoal = State(initialValue: viewModel.wealthGoalType)
+        _targetInput = State(initialValue: viewModel.wealthGoalTarget)
+    }
+
+    var body: some View {
+        VStack(spacing: 0) {
+            HStack {
+                Text("Set Wealth Goal").font(.title2).fontWeight(.bold)
+                Spacer()
+                Button(action: { dismiss() }) {
+                    Image(systemName: "xmark.circle.fill").font(.title2).foregroundColor(.secondary)
+                }.buttonStyle(.plain)
+            }
+            .padding()
+            
+            Divider()
+            
+            VStack(alignment: .leading, spacing: 16) {
+                GroupBox {
+                    VStack(spacing: 16) {
+                        HStack {
+                            Text("Goal Type:")
+                            Spacer()
+                            Picker("", selection: $selectedGoal) {
+                                ForEach(WealthGoalType.allCases, id: \.self) { type in Text(type.rawValue).tag(type) }
+                            }
+                            .labelsHidden()
+                            .frame(width: 200)
+                        }
+                        
+                        Divider().opacity(0.5)
+                        
+                        HStack {
+                            Text("Target Amount:")
+                            Spacer()
+                            TextField("e.g. 500000", value: $targetInput, format: .number)
+                                .textFieldStyle(.roundedBorder)
+                                .multilineTextAlignment(.trailing)
+                                .frame(width: 150)
+                        }
+                    }
+                    .padding(.vertical, 4)
+                }
+            }
+            .padding()
+            
+            Spacer()
+            Divider()
+            
+            HStack {
+                Button("Cancel") { dismiss() }.keyboardShortcut(.cancelAction)
+                Spacer()
+                Button("Save Goal") {
+                    viewModel.wealthGoalType = selectedGoal
+                    viewModel.wealthGoalTarget = targetInput
+                    dismiss()
+                }
+                .keyboardShortcut(.defaultAction).buttonStyle(.borderedProminent)
+            }.padding()
+        }
+        .frame(width: 440, height: 280) // Taille unifiée
     }
 }
 
@@ -317,48 +409,6 @@ struct WealthAddLiabilitySection: View {
     }
 }
 
-// =========================================================================
-// MARK: - GOAL PROGRESS BAR
-// =========================================================================
-
-struct WealthGoalProgressBar: View {
-    let currentValue: Double
-    let targetValue: Double
-    let progress: Double
-    @Binding var privacyMode: Bool
-    
-    var body: some View {
-        VStack(alignment: .leading, spacing: 8) {
-            HStack {
-                Text("Progress towards Net Worth Goal").font(.headline)
-                Spacer()
-                Text("\(currentValue.formatted(.currency(code: "EUR").precision(.fractionLength(0)))) / \(targetValue.formatted(.currency(code: "EUR").precision(.fractionLength(0))))")
-                    .font(.subheadline).fontWeight(.bold)
-                    .foregroundColor(progress >= 1 ? .green : .primary)
-                    .blur(radius: privacyMode ? 8 : 0)
-            }
-            
-            GeometryReader { geometry in
-                ZStack(alignment: .leading) {
-                    RoundedRectangle(cornerRadius: 8)
-                        .fill(Color(NSColor.windowBackgroundColor))
-                        .frame(height: 14)
-                    
-                    RoundedRectangle(cornerRadius: 8)
-                        .fill(LinearGradient(gradient: Gradient(colors: [.blue, .purple]), startPoint: .leading, endPoint: .trailing))
-                        .frame(width: max(0, min(geometry.size.width * CGFloat(progress), geometry.size.width)), height: 14)
-                        .animation(.spring(), value: progress)
-                }
-            }
-            .frame(height: 14)
-        }
-        .padding()
-        .background(Color(NSColor.controlBackgroundColor))
-        .cornerRadius(12)
-        .shadow(color: Color.black.opacity(0.05), radius: 2, x: 0, y: 1)
-        .help("Double-click to edit your goal")
-    }
-}
 
 // =========================================================================
 // MARK: - FIRE SIMULATOR SECTION

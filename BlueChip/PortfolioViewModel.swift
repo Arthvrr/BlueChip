@@ -49,17 +49,21 @@ class PortfolioViewModel: ObservableObject {
     @Published var growthYears: [GrowthYear] = []
     
     @Published var benchmarkIndices: [BenchmarkIndex] = []
-    @Published var benchmarkGoalTarget: Double = 10.0 { didSet { settings?.benchmarkGoalTarget = benchmarkGoalTarget } }
+    @Published var benchmarkGoalType: BenchmarkGoalType = .averageAlpha { didSet { settings?.benchmarkGoalType = benchmarkGoalType } }
+    @Published var benchmarkGoalTarget: Double = 2.5 { didSet { settings?.benchmarkGoalTarget = benchmarkGoalTarget } }
     
     @Published var transactions: [Transaction] = []
     @Published var transactionCustomColumns: [String] = ["State Tax", "Broker Tax", "Other Taxes"] { didSet { settings?.transactionCustomColumns = transactionCustomColumns } }
+
+    @Published var transactionGoalType: TransactionGoalType = .count { didSet { settings?.transactionGoalType = transactionGoalType } }
     @Published var transactionGoalTarget: Double = 50 { didSet { settings?.transactionGoalTarget = transactionGoalTarget } }
     
     @Published var watchlistItems: [WatchlistItem] = []
     @Published var calendarEvents: [CalendarEvent] = []
     @Published var fundamentalCriteria: [FundamentalCriterion] = []
     
-    @Published var wealthGoalTarget: Double = 50000.0 { didSet { settings?.wealthGoalTarget = wealthGoalTarget } }
+    @Published var wealthGoalType: WealthGoalType = .netWorth { didSet { settings?.wealthGoalType = wealthGoalType } } // <-- NOUVEAU
+    @Published var wealthGoalTarget: Double = 100000 { didSet { settings?.wealthGoalTarget = wealthGoalTarget } }
     @Published var manualWealthAssets: [WealthAsset] = []
     @Published var manualWealthLiabilities: [WealthLiability] = []
     @Published var safeWithdrawalRate: Double = 4.0 { didSet { settings?.safeWithdrawalRate = safeWithdrawalRate } }
@@ -153,12 +157,17 @@ class PortfolioViewModel: ObservableObject {
         if let grTarget = settings!.growthGoalTarget { self.growthGoalTarget = grTarget }
         if let bTarget = settings!.benchmarkGoalTarget { self.benchmarkGoalTarget = bTarget }
         if let txCols = settings!.transactionCustomColumns { self.transactionCustomColumns = txCols }
+        if let txType = settings!.transactionGoalType { self.transactionGoalType = txType }
         if let txTarget = settings!.transactionGoalTarget { self.transactionGoalTarget = txTarget }
+        if let wType = settings!.wealthGoalType { self.wealthGoalType = wType }
         if let wTarget = settings!.wealthGoalTarget { self.wealthGoalTarget = wTarget }
         if let swr = settings!.safeWithdrawalRate { self.safeWithdrawalRate = swr }
         
         if let tax = settings!.dividendTaxRate { self.dividendTaxRate = tax }
         if let tz = settings!.userTimeZoneIdentifier { self.userTimeZoneIdentifier = tz }
+        
+        if let bmkType = settings!.benchmarkGoalType { self.benchmarkGoalType = bmkType }
+        if let bmkTarget = settings!.benchmarkGoalTarget { self.benchmarkGoalTarget = bmkTarget }
         
         // 4. SETUP FINAL
         setupDividendYears()
@@ -601,34 +610,81 @@ class PortfolioViewModel: ObservableObject {
         // -----------------------------------------------------
         // 3. Goals (Vérification de tous les objectifs)
         // -----------------------------------------------------
+        
+        // 3. Objectif Principal (Goal)
         if currentGoalTarget > 0, currentGoalValue >= currentGoalTarget {
-            let alertId = "growth_goal_reached_\(currentGoalTarget)"
+            let alertId = "goal_reached_\(currentGoalTarget)"
             if !notifiedAlerts.contains(alertId) {
-                NotificationManager.shared.sendImmediateNotification(title: "🚀 Growth Goal Reached!", subtitle: "Composition Dashboard", body: "Your portfolio has surpassed your growth goal of \(currentGoalTarget.formatted(.currency(code: "EUR"))).")
+                NotificationManager.shared.sendImmediateNotification(
+                    title: "🏆 Goal Reached!",
+                    subtitle: "Congratulations!",
+                    body: "Your portfolio has surpassed your goal of \(currentGoalTarget.formatted(.currency(code: "EUR")))."
+                )
                 notifiedAlerts.insert(alertId)
             }
         }
         
-        // B. DIVIDEND GOAL (Annual Income, Yield, or Current Year Total)
+        // A. GROWTH GOAL (Percent, Currency, or CAGR)
+        if growthGoalTarget > 0 {
+            let currentValue: Double
+            let formattedGoal: String
+            
+            switch growthGoalType {
+            case .targetReturnPercent:
+                currentValue = averageReturnPercent * 100
+                formattedGoal = "\(growthGoalTarget.formatted(.number.precision(.fractionLength(2))))%"
+            case .targetReturnCurrency:
+                let currentYear = Calendar.current.component(.year, from: Date())
+                if let yearData = growthYears.first(where: { $0.year == currentYear }) {
+                    let base = yearData.startWallet + yearData.invested
+                    currentValue = currentTotalCapital - base
+                } else {
+                    currentValue = 0.0
+                }
+                formattedGoal = growthGoalTarget.formatted(.currency(code: "EUR"))
+            case .cagr:
+                currentValue = cagr * 100
+                formattedGoal = "\(growthGoalTarget.formatted(.number.precision(.fractionLength(2))))%"
+            }
+            
+            if currentValue >= growthGoalTarget {
+                let alertId = "growth_goal_reached_\(growthGoalTarget)_\(growthGoalType.rawValue)"
+                if !notifiedAlerts.contains(alertId) {
+                    NotificationManager.shared.sendImmediateNotification(
+                        title: "🚀 Growth Goal Reached!",
+                        subtitle: "Composition Dashboard",
+                        body: "Your portfolio has surpassed your growth goal of \(formattedGoal)."
+                    )
+                    notifiedAlerts.insert(alertId)
+                }
+            }
+        }
+        
+        // B. DIVIDEND GOAL (Annual Income, Yield, Current Year or All-Time)
         if dividendGoalTarget > 0 {
             let goalType = dividendGoalType ?? .dividendsAnnual
             let currentValue: Double
             let formattedGoal: String
+            let goalDescription: String // <-- NOUVEAU : Un texte sur mesure !
             
             switch goalType {
             case .dividendsAnnual:
                 currentValue = totalDividends
                 formattedGoal = dividendGoalTarget.formatted(.currency(code: "EUR"))
+                goalDescription = "expected annual dividend"
             case .portfolioYield:
-                currentValue = portfolioYield * 100 // Scale for percentage comparison
+                currentValue = portfolioYield * 100
                 formattedGoal = "\(dividendGoalTarget.formatted(.number.precision(.fractionLength(2))))%"
+                goalDescription = "portfolio yield"
             case .currentYearTotal:
                 let currentYear = Calendar.current.component(.year, from: Date())
                 currentValue = dividendYears.first(where: { $0.year == currentYear })?.total ?? 0.0
                 formattedGoal = dividendGoalTarget.formatted(.currency(code: "EUR"))
+                goalDescription = "dividends received this year"
             case .allTimeTotal:
                 currentValue = dividendYears.reduce(0) { $0 + $1.total }
                 formattedGoal = dividendGoalTarget.formatted(.currency(code: "EUR"))
+                goalDescription = "total all-time received dividends"
             }
             
             if currentValue >= dividendGoalTarget {
@@ -637,49 +693,159 @@ class PortfolioViewModel: ObservableObject {
                     NotificationManager.shared.sendImmediateNotification(
                         title: "💸 Dividend Goal Reached!",
                         subtitle: "Passive Income Tracker",
-                        body: "Congratulations! You have hit your dividend goal of \(formattedGoal)."
+                        // Le texte va maintenant dire : "Congratulations! You have hit your [dividends received this year] goal of [€100.00]."
+                        body: "Congratulations! You have hit your \(goalDescription) goal of \(formattedGoal)."
                     )
                     notifiedAlerts.insert(alertId)
                 }
             }
         }
         
-        if transactionGoalTarget > 0, Double(transactions.count) >= transactionGoalTarget {
-            let alertId = "transaction_goal_reached_\(transactionGoalTarget)"
-            if !notifiedAlerts.contains(alertId) {
-                NotificationManager.shared.sendImmediateNotification(title: "🧾 Transaction Goal Reached!", subtitle: "Ledger History", body: "You have logged \(transactions.count) transactions, reaching your target of \(Int(transactionGoalTarget)).")
-                notifiedAlerts.insert(alertId)
-            }
-        }
-        
-        if benchmarkGoalTarget > 0 {
-            let currentYear = Calendar.current.component(.year, from: Date())
-            let activeYears = Array(dividendStartYear...currentYear)
-            var vals: [Double] = []
-            for year in activeYears {
-                guard let yearData = growthYears.first(where: { $0.year == year }) else { vals.append(0); continue }
-                let effectiveEnd = (year == currentYear) ? currentTotalCapital : yearData.endWallet
-                let base = yearData.startWallet + yearData.invested
-                vals.append(base > 0 ? ((effectiveEnd - base) / base) * 100.0 : 0)
-            }
-            let portfolioAvgReturn = vals.isEmpty ? 0 : vals.reduce(0, +) / Double(vals.count)
-            let bestIndexAvgReturn = benchmarkIndices.max { $0.averageReturn(years: activeYears) < $1.averageReturn(years: activeYears) }?.averageReturn(years: activeYears) ?? 0
-            let alpha = portfolioAvgReturn - bestIndexAvgReturn
+        // C. TRANSACTION GOAL (Count, Invested, Sold ou Fees)
+        if transactionGoalTarget > 0 {
+            let currentValue: Double
+            let formattedGoal: String
+            let formattedCurrent: String
             
-            if alpha >= benchmarkGoalTarget {
-                let alertId = "benchmark_goal_reached_\(benchmarkGoalTarget)"
+            switch transactionGoalType {
+            case .count:
+                currentValue = Double(transactions.count)
+                formattedGoal = "\(Int(transactionGoalTarget))"
+                formattedCurrent = "\(Int(currentValue)) transactions"
+            case .totalInvested:
+                currentValue = transactions.filter { $0.type == .buy }.reduce(0) { $0 + $1.amountEUR }
+                formattedGoal = transactionGoalTarget.formatted(.currency(code: "EUR"))
+                formattedCurrent = "\(currentValue.formatted(.currency(code: "EUR"))) invested"
+            case .totalSold:
+                currentValue = transactions.filter { $0.type == .sell }.reduce(0) { $0 + $1.amountEUR }
+                formattedGoal = transactionGoalTarget.formatted(.currency(code: "EUR"))
+                formattedCurrent = "\(currentValue.formatted(.currency(code: "EUR"))) sold"
+            case .totalFees:
+                currentValue = transactions.reduce(0) { $0 + $1.customFields.values.reduce(0, +) }
+                formattedGoal = transactionGoalTarget.formatted(.currency(code: "EUR"))
+                formattedCurrent = "\(currentValue.formatted(.currency(code: "EUR"))) in fees"
+            }
+            
+            if currentValue >= transactionGoalTarget {
+                let alertId = "transaction_goal_reached_\(transactionGoalTarget)_\(transactionGoalType.rawValue)"
                 if !notifiedAlerts.contains(alertId) {
-                    NotificationManager.shared.sendImmediateNotification(title: "📈 Alpha Goal Reached!", subtitle: "Benchmark Analytics", body: "You are currently outperforming your best benchmark by \(alpha.formatted(.number.precision(.fractionLength(2))))%!")
+                    NotificationManager.shared.sendImmediateNotification(
+                        title: "🧾 Transaction Goal Reached!",
+                        subtitle: "Ledger History",
+                        body: "You have reached \(formattedCurrent), hitting your target of \(formattedGoal)."
+                    )
                     notifiedAlerts.insert(alertId)
                 }
             }
         }
         
-        if wealthGoalTarget > 0, trueNetWorth >= wealthGoalTarget {
-            let alertId = "wealth_goal_reached_\(wealthGoalTarget)"
-            if !notifiedAlerts.contains(alertId) {
-                NotificationManager.shared.sendImmediateNotification(title: "🏛️ Net Worth Goal Reached!", subtitle: "Wealth & FIRE", body: "Incredible! Your True Net Worth has reached \(trueNetWorth.formatted(.currency(code: "EUR"))), surpassing your goal.")
-                notifiedAlerts.insert(alertId)
+        // D. BENCHMARK GOAL (Average Alpha, Current Year Alpha, or Positive Alpha Years)
+        if benchmarkGoalTarget > 0 {
+            let currentYear = Calendar.current.component(.year, from: Date())
+            let startYear = dividendStartYear
+            let activeYears = Array(startYear...currentYear)
+            
+            let portfolioAvgReturn: Double = {
+                var vals: [Double] = []
+                for year in activeYears {
+                    guard let yearData = growthYears.first(where: { $0.year == year }) else { vals.append(0); continue }
+                    let isCurrentYear = year == currentYear
+                    let effectiveEnd = isCurrentYear ? currentTotalCapital : yearData.endWallet
+                    let base = yearData.startWallet + yearData.invested
+                    vals.append(base > 0 ? ((effectiveEnd - base) / base) * 100.0 : 0)
+                }
+                guard !vals.isEmpty else { return 0 }
+                return vals.reduce(0, +) / Double(vals.count)
+            }()
+            
+            let bestIndex = benchmarkIndices.max { $0.averageReturn(years: activeYears) < $1.averageReturn(years: activeYears) }
+            
+            let currentValue: Double
+            let formattedGoal: String
+            let goalDescription: String
+            
+            switch benchmarkGoalType {
+            case .averageAlpha:
+                let bestAvg = bestIndex?.averageReturn(years: activeYears) ?? 0
+                currentValue = portfolioAvgReturn - bestAvg
+                formattedGoal = "\(benchmarkGoalTarget.formatted(.number.precision(.fractionLength(2))))%"
+                goalDescription = "average alpha"
+            case .currentYearAlpha:
+                let portfolioCurrentYear: Double = {
+                    guard let yearData = growthYears.first(where: { $0.year == currentYear }) else { return 0 }
+                    let base = yearData.startWallet + yearData.invested
+                    return base > 0 ? ((currentTotalCapital - base) / base) * 100.0 : 0
+                }()
+                let bestCurrentYear = bestIndex?.returns[currentYear] ?? 0
+                currentValue = portfolioCurrentYear - bestCurrentYear
+                formattedGoal = "\(benchmarkGoalTarget.formatted(.number.precision(.fractionLength(2))))%"
+                goalDescription = "current year alpha"
+            case .positiveAlphaYears:
+                var positiveYearsCount = 0
+                for year in activeYears {
+                    let pReturn: Double = {
+                        guard let yearData = growthYears.first(where: { $0.year == year }) else { return 0 }
+                        let isCurrentYear = year == currentYear
+                        let effectiveEnd = isCurrentYear ? currentTotalCapital : yearData.endWallet
+                        let base = yearData.startWallet + yearData.invested
+                        return base > 0 ? ((effectiveEnd - base) / base) * 100.0 : 0
+                    }()
+                    let iReturn = bestIndex?.returns[year] ?? 0
+                    if (pReturn - iReturn) > 0 { positiveYearsCount += 1 }
+                }
+                currentValue = Double(positiveYearsCount)
+                formattedGoal = "\(Int(benchmarkGoalTarget)) years"
+                goalDescription = "positive alpha years"
+            }
+            
+            if currentValue >= benchmarkGoalTarget {
+                let alertId = "benchmark_goal_reached_\(benchmarkGoalTarget)_\(benchmarkGoalType.rawValue)"
+                if !notifiedAlerts.contains(alertId) {
+                    NotificationManager.shared.sendImmediateNotification(
+                        title: "📈 Benchmark Goal Reached!",
+                        subtitle: "Outperformance Tracker",
+                        body: "Congratulations! You have hit your \(goalDescription) goal of \(formattedGoal)."
+                    )
+                    notifiedAlerts.insert(alertId)
+                }
+            }
+        }
+        
+        // E. WEALTH GOAL (Net Worth, Total Assets, or Passive Income)
+        if wealthGoalTarget > 0 {
+            let currentValue: Double
+            let formattedGoal: String
+            let goalDescription: String
+            
+            switch wealthGoalType {
+            case .netWorth:
+                currentValue = trueNetWorth
+                formattedGoal = wealthGoalTarget.formatted(.currency(code: "EUR"))
+                goalDescription = "true net worth"
+            case .totalAssets:
+                currentValue = totalAssets
+                formattedGoal = wealthGoalTarget.formatted(.currency(code: "EUR"))
+                goalDescription = "total assets"
+            case .passiveIncome:
+                currentValue = fireMonthlyIncome
+                formattedGoal = wealthGoalTarget.formatted(.currency(code: "EUR"))
+                goalDescription = "monthly passive income"
+            case .debtAssetsRatio:
+                currentValue = debtToAssetRatio * 100 // <-- CORRECTION ICI : debtToAssetRatio
+                formattedGoal = "\(wealthGoalTarget.formatted(.number.precision(.fractionLength(2))))%"
+                goalDescription = "debt-to-assets ratio"
+            }
+            
+            if currentValue >= wealthGoalTarget {
+                let alertId = "wealth_goal_reached_\(wealthGoalTarget)_\(wealthGoalType.rawValue)"
+                if !notifiedAlerts.contains(alertId) {
+                    NotificationManager.shared.sendImmediateNotification(
+                        title: "🏰 Wealth Goal Reached!",
+                        subtitle: "Financial Independence",
+                        body: "Congratulations! You have hit your \(goalDescription) goal of \(formattedGoal)."
+                    )
+                    notifiedAlerts.insert(alertId)
+                }
             }
         }
         

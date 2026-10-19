@@ -133,23 +133,30 @@ struct GoalProgressBar: View {
     let targetValue: Double
     @Binding var privacyMode: Bool
     
-    // NOUVEAU : Option pour définir le type de formatage (Devise ou Pourcentage)
     var isPercentage: Bool = false
+    var isCount: Bool = false // <-- NOUVEAU : Option pour les nombres entiers (années, nombre de transactions)
 
     var progress: Double {
         guard targetValue > 0 else { return 0 }
         return min(max(currentValue / targetValue, 0), 1)
     }
     
+    // MODIFIÉ : On gère les 3 cas (Pourcentage, Compteur, Euro)
     var currentValueString: String {
-        isPercentage ? (currentValue / 100).formatted(.percent.precision(.fractionLength(2))) : currentValue.formatted(.currency(code: "EUR").precision(.fractionLength(2))) // <-- Modification ici : on force 2 décimales
+        if isPercentage { return (currentValue / 100).formatted(.percent.precision(.fractionLength(2))) }
+        if isCount { return Int(currentValue).formatted() } // Affiche simplement "3"
+        return currentValue.formatted(.currency(code: "EUR").precision(.fractionLength(2)))
     }
     
+    // MODIFIÉ : On gère les 3 cas (Pourcentage, Compteur, Euro)
     var targetValueString: String {
-        isPercentage ? (targetValue / 100).formatted(.percent.precision(.fractionLength(2))) : targetValue.formatted(.currency(code: "EUR").precision(.fractionLength(2))) // <-- Modification ici : on force 2 décimales
+        if isPercentage { return (targetValue / 100).formatted(.percent.precision(.fractionLength(2))) }
+        if isCount { return Int(targetValue).formatted() } // Affiche simplement "3"
+        return targetValue.formatted(.currency(code: "EUR").precision(.fractionLength(2)))
     }
 
     var body: some View {
+        // ... (Le reste du `body` ne change pas du tout)
         VStack(alignment: .leading, spacing: 8) {
             HStack {
                 Text("\(title) Goal").font(.headline)
