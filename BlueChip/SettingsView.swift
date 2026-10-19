@@ -1,4 +1,5 @@
 import SwiftUI
+import UniformTypeIdentifiers
 
 enum AppTheme: String, CaseIterable, Identifiable {
     case system = "Automatic"
@@ -16,6 +17,22 @@ enum AppTheme: String, CaseIterable, Identifiable {
     }
 }
 
+struct BackupDocument: FileDocument {
+    static var readableContentTypes: [UTType] { [.json] }
+    var data: Data
+
+    init(data: Data) { self.data = data }
+
+    init(configuration: ReadConfiguration) throws {
+        if let fileData = configuration.file.regularFileContents { self.data = fileData }
+        else { throw CocoaError(.fileReadCorruptFile) }
+    }
+
+    func fileWrapper(configuration: WriteConfiguration) throws -> FileWrapper {
+        return .init(regularFileWithContents: data)
+    }
+}
+
 struct SettingsView: View {
     @Environment(\.dismiss) var dismiss
     @ObservedObject var viewModel: PortfolioViewModel
@@ -30,6 +47,12 @@ struct SettingsView: View {
     
     // État pour afficher l'alerte de confirmation
     @State private var showResetAlert = false
+    
+    @State private var showExporter = false
+    @State private var showImporter = false
+    @State private var backupDocument: BackupDocument?
+    @State private var alertMessage = ""
+    @State private var showAlert = false
     
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
@@ -193,6 +216,49 @@ struct SettingsView: View {
                     }
                     .padding(.vertical, 8)
                 }
+                
+                // NOUVELLE SECTION : DATA MANAGEMENT
+                Section {
+                    VStack(alignment: .leading, spacing: 8) {
+                        Text("Data Management (Backup)")
+                            .font(.headline)
+                        
+                        HStack(spacing: 16) {
+                            Button(action: {
+                                if let data = viewModel.generateFullBackup() {
+                                    backupDocument = BackupDocument(data: data)
+                                    showExporter = true
+                                } else {
+                                    alertMessage = "Failed to generate backup data."
+                                    showAlert = true
+                                }
+                            }) {
+                                HStack {
+                                    Image(systemName: "square.and.arrow.up")
+                                    Text("Export Full Backup")
+                                }
+                            }
+                            .buttonStyle(.bordered)
+                            
+                            Button(action: {
+                                showImporter = true
+                            }) {
+                                HStack {
+                                    Image(systemName: "square.and.arrow.down")
+                                    Text("Import Backup")
+                                }
+                            }
+                            .buttonStyle(.bordered)
+                        }
+                        
+                        Text("Exporting creates a comprehensive JSON file containing your entire portfolio, settings, history, and goals. Importing a backup will overwrite your current data.")
+                            .font(.caption)
+                            .foregroundColor(.secondary)
+                            .padding(.top, 4)
+                    }
+                    .padding(.vertical, 8)
+                }
+                
 
                 // NOUVELLE SECTION : DANGER ZONE
                 Section {
@@ -232,6 +298,58 @@ struct SettingsView: View {
             .padding(16)
         }
         .frame(width: 550, height: 600)
+        
+        // --- MODIFICATEURS EXPORT / IMPORT ---
+        .fileExporter(
+            isPresented: $showExporter,
+            document: backupDocument,
+            contentType: .json,
+            defaultFilename: "BlueChip_FullBackup.json"
+        ) { result in
+            switch result {
+            case .success(let url):
+                alertMessage = "Backup successfully saved to \(url.lastPathComponent)"
+                showAlert = true
+            case .failure(let error):
+                alertMessage = "Failed to export backup: \(error.localizedDescription)"
+                showAlert = true
+            }
+        }
+        .fileImporter(
+            isPresented: $showImporter,
+            allowedContentTypes: [.json],
+            allowsMultipleSelection: false
+        ) { result in
+            switch result {
+            case .success(let urls):
+                guard let url = urls.first else { return }
+                // Demande la permission à macOS de lire le fichier
+                guard url.startAccessingSecurityScopedResource() else {
+                    alertMessage = "Permission denied to read the file."
+                    showAlert = true
+                    return
+                }
+                defer { url.stopAccessingSecurityScopedResource() }
+                
+                do {
+                    let fileData = try Data(contentsOf: url)
+                    try viewModel.restoreFullBackup(from: fileData)
+                    alertMessage = "Welcome back! Your portfolio has been completely restored."
+                    showAlert = true
+                } catch {
+                    alertMessage = "Failed to restore backup. The file might be corrupted. (\(error.localizedDescription))"
+                    showAlert = true
+                }
+            case .failure(let error):
+                alertMessage = "Failed to select file: \(error.localizedDescription)"
+                showAlert = true
+            }
+        }
+        .alert("Data Management", isPresented: $showAlert) {
+            Button("OK", role: .cancel) { }
+        } message: {
+            Text(alertMessage)
+        }
         // L'alerte de confirmation
         .alert("Erase all data?", isPresented: $showResetAlert) {
             Button("Cancel", role: .cancel) { }

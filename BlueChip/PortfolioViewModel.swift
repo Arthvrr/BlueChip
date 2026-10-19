@@ -942,3 +942,159 @@ class PortfolioViewModel: ObservableObject {
     }
     
 }
+
+
+extension PortfolioViewModel {
+    // MARK: - FULL APP BACKUP (EXPORT)
+    func generateFullBackup() -> Data? {
+        var backup = LegacyPortfolioSaveData()
+        
+        // 1. App Settings & Goals
+        backup.availableCash = availableCash
+        backup.manuallyInvested = manuallyInvested
+        backup.goalType = currentGoalType
+        backup.goalTarget = currentGoalTarget
+        backup.dividendGoalType = dividendGoalType
+        backup.dividendGoalTarget = dividendGoalTarget
+        backup.dividendStartYear = dividendStartYear
+        backup.growthGoalType = growthGoalType
+        backup.growthGoalTarget = growthGoalTarget
+        backup.benchmarkGoalType = benchmarkGoalType
+        backup.benchmarkGoalTarget = benchmarkGoalTarget
+        backup.transactionGoalType = transactionGoalType
+        backup.transactionGoalTarget = transactionGoalTarget
+        backup.transactionCustomColumns = transactionCustomColumns
+        backup.wealthGoalType = wealthGoalType
+        backup.wealthGoalTarget = wealthGoalTarget
+        backup.safeWithdrawalRate = safeWithdrawalRate
+        
+        // 2. Arrays & Data
+        backup.positions = positions.map { pos in
+            LegacyPosition(id: pos.id, ticker: pos.ticker, quantity: pos.quantity, averageCost: pos.averageCost, currentPrice: pos.currentPrice, currency: pos.currency, usdToEurRate: pos.usdToEurRate, annualDividendNet: pos.annualDividendNet, country: pos.country, sector: pos.sector, marketCap: pos.marketCap, dividendMonths: pos.dividendMonths, purchaseDate: pos.purchaseDate, dividendGrowth5Y: pos.dividendGrowth5Y, revenueExposures: pos.revenueExposures, fundamentalValues: pos.fundamentalValues, targetPrice: pos.targetPrice, guruFocusPrice: pos.guruFocusPrice, tipRanksPrice: pos.tipRanksPrice, currentPE: pos.currentPE, forwardPE: pos.forwardPE, historicalPE10Y: pos.historicalPE10Y, peg: pos.peg, pFcf: pos.pFcf)
+        }
+        backup.transactions = transactions.map { LegacyTransaction(id: $0.id, date: $0.date, type: $0.type, ticker: $0.ticker, quantity: $0.quantity, amountEUR: $0.amountEUR, note: $0.note, customFields: $0.customFields) }
+        backup.dividendYears = dividendYears.map { LegacyDividendYear(id: $0.id, year: $0.year, jan: $0.jan, feb: $0.feb, mar: $0.mar, apr: $0.apr, may: $0.may, jun: $0.jun, jul: $0.jul, aug: $0.aug, sep: $0.sep, oct: $0.oct, nov: $0.nov, dec: $0.dec) }
+        backup.growthYears = growthYears.map { LegacyGrowthYear(id: $0.id, year: $0.year, startWallet: $0.startWallet, invested: $0.invested, endWallet: $0.endWallet, totalInvest: $0.totalInvest) }
+        backup.benchmarkIndices = benchmarkIndices.map { LegacyBenchmarkIndex(id: $0.id, name: $0.name, returns: $0.returns, referenceLink: $0.referenceLink) }
+        backup.watchlistItems = watchlistItems.map {
+                    LegacyWatchlistItem(id: $0.id, ticker: $0.ticker, currentPrice: $0.currentPrice, targetPrice: $0.targetPrice, currentPE: $0.currentPE, forwardPE: $0.forwardPE, historicalPE10Y: $0.historicalPE10Y, guruFocusPrice: $0.guruFocusPrice, tipRanksPrice: $0.tipRanksPrice, peg: $0.peg, currency: $0.currency, note: $0.note, fundamentalValues: $0.fundamentalValues)
+                }
+        backup.calendarEvents = calendarEvents.map { LegacyCalendarEvent(id: $0.id, date: $0.date, type: $0.type, ticker: $0.ticker, note: $0.note) }
+        backup.fundamentalCriteria = fundamentalCriteria.map { LegacyFundamentalCriterion(id: $0.id, name: $0.name, section: $0.section, weight: $0.weight, type: $0.type, isHigherBetter: $0.isHigherBetter, premiumThreshold: $0.premiumThreshold, standardThreshold: $0.standardThreshold) }
+        backup.manualWealthAssets = manualWealthAssets.map { LegacyWealthAsset(id: $0.id, name: $0.name, invested: $0.invested, current: $0.current, isAutoFilled: $0.isAutoFilled) }
+        backup.manualWealthLiabilities = manualWealthLiabilities.map { LegacyWealthLiability(id: $0.id, name: $0.name, amount: $0.amount, initialAmount: $0.initialAmount) }
+        
+        let encoder = JSONEncoder()
+        encoder.outputFormatting = .prettyPrinted // Rend le fichier lisible par un humain
+        return try? encoder.encode(backup)
+    }
+
+    // MARK: - FULL APP RESTORE (IMPORT)
+    func restoreFullBackup(from data: Data) throws {
+        // 1. Tente de décoder le fichier (si c'est corrompu, ça s'arrête ici sans rien effacer)
+        let backup = try JSONDecoder().decode(LegacyPortfolioSaveData.self, from: data)
+        guard let context = modelContext else { throw CocoaError(.coreDataError) }
+        
+        // 2. Efface les données actuelles SEULEMENT si le décodage a réussi
+        wipeAllData()
+        
+        // 3. Restaurer les réglages
+        if let v = backup.availableCash { self.availableCash = v }
+        if let v = backup.manuallyInvested { self.manuallyInvested = v }
+        if let v = backup.goalType { self.currentGoalType = v }
+        if let v = backup.goalTarget { self.currentGoalTarget = v }
+        if let v = backup.dividendGoalType { self.dividendGoalType = v }
+        if let v = backup.dividendGoalTarget { self.dividendGoalTarget = v }
+        if let v = backup.dividendStartYear { self.dividendStartYear = v }
+        if let v = backup.growthGoalType { self.growthGoalType = v }
+        if let v = backup.growthGoalTarget { self.growthGoalTarget = v }
+        if let v = backup.benchmarkGoalType { self.benchmarkGoalType = v }
+        if let v = backup.benchmarkGoalTarget { self.benchmarkGoalTarget = v }
+        if let v = backup.transactionGoalType { self.transactionGoalType = v }
+        if let v = backup.transactionGoalTarget { self.transactionGoalTarget = v }
+        if let v = backup.transactionCustomColumns { self.transactionCustomColumns = v }
+        if let v = backup.wealthGoalType { self.wealthGoalType = v }
+        if let v = backup.wealthGoalTarget { self.wealthGoalTarget = v }
+        if let v = backup.safeWithdrawalRate { self.safeWithdrawalRate = v }
+        
+        // 4. Restaurer les entités complexes
+        if let legPos = backup.positions {
+            for lp in legPos {
+                let pos = Position(id: lp.id, ticker: lp.ticker, quantity: lp.quantity, averageCost: lp.averageCost, currentPrice: lp.currentPrice, currency: lp.currency, usdToEurRate: lp.usdToEurRate, annualDividendNet: lp.annualDividendNet, country: lp.country, sector: lp.sector, marketCap: lp.marketCap, dividendMonths: lp.dividendMonths, purchaseDate: lp.purchaseDate, dividendGrowth5Y: lp.dividendGrowth5Y, revenueExposures: lp.revenueExposures, fundamentalValues: lp.fundamentalValues)
+                pos.targetPrice = lp.targetPrice; pos.guruFocusPrice = lp.guruFocusPrice; pos.tipRanksPrice = lp.tipRanksPrice; pos.currentPE = lp.currentPE; pos.forwardPE = lp.forwardPE; pos.historicalPE10Y = lp.historicalPE10Y; pos.peg = lp.peg; pos.pFcf = lp.pFcf
+                context.insert(pos); self.positions.append(pos)
+            }
+        }
+        
+        if let legTx = backup.transactions {
+            for ltx in legTx {
+                let tx = Transaction(id: ltx.id, date: ltx.date, type: ltx.type, ticker: ltx.ticker, quantity: ltx.quantity, amountEUR: ltx.amountEUR, note: ltx.note, customFields: ltx.customFields)
+                context.insert(tx); self.transactions.append(tx)
+            }
+        }
+        
+        // Supprime les années par défaut créées par wipeAllData()
+        self.dividendYears.forEach { context.delete($0) }; self.dividendYears.removeAll()
+        self.growthYears.forEach { context.delete($0) }; self.growthYears.removeAll()
+        
+        if let legDy = backup.dividendYears, !legDy.isEmpty {
+            for ldy in legDy {
+                let dy = DividendYear(id: ldy.id, year: ldy.year, jan: ldy.jan, feb: ldy.feb, mar: ldy.mar, apr: ldy.apr, may: ldy.may, jun: ldy.jun, jul: ldy.jul, aug: ldy.aug, sep: ldy.sep, oct: ldy.oct, nov: ldy.nov, dec: ldy.dec)
+                context.insert(dy); self.dividendYears.append(dy)
+            }
+        } else { setupDividendYears() }
+        
+        if let legGy = backup.growthYears, !legGy.isEmpty {
+            for lgy in legGy {
+                let gy = GrowthYear(id: lgy.id, year: lgy.year, startWallet: lgy.startWallet, invested: lgy.invested, endWallet: lgy.endWallet, totalInvest: lgy.totalInvest)
+                context.insert(gy); self.growthYears.append(gy)
+            }
+        } else { setupGrowthYears() }
+        
+        if let legBmk = backup.benchmarkIndices {
+            for lb in legBmk {
+                let bmk = BenchmarkIndex(id: lb.id, name: lb.name, returns: lb.returns, referenceLink: lb.referenceLink ?? "")
+                context.insert(bmk); self.benchmarkIndices.append(bmk)
+            }
+        }
+        if let legWl = backup.watchlistItems {
+            for lw in legWl {
+                let wl = WatchlistItem(id: lw.id, ticker: lw.ticker, currentPrice: lw.currentPrice, targetPrice: lw.targetPrice, currentPE: lw.currentPE, forwardPE: lw.forwardPE, historicalPE10Y: lw.historicalPE10Y, guruFocusPrice: lw.guruFocusPrice, tipRanksPrice: lw.tipRanksPrice, peg: lw.peg, currency: lw.currency, note: lw.note, fundamentalValues: lw.fundamentalValues)
+                context.insert(wl)
+                self.watchlistItems.append(wl)
+            }
+        }
+        if let legCal = backup.calendarEvents {
+            for lc in legCal {
+                let cal = CalendarEvent(id: lc.id, date: lc.date, type: lc.type, ticker: lc.ticker, note: lc.note)
+                context.insert(cal); self.calendarEvents.append(cal)
+            }
+        }
+        if let legFund = backup.fundamentalCriteria {
+            for lf in legFund {
+                let crit = FundamentalCriterion(id: lf.id, name: lf.name, section: lf.section, weight: lf.weight, type: lf.type, isHigherBetter: lf.isHigherBetter, premiumThreshold: lf.premiumThreshold, standardThreshold: lf.standardThreshold)
+                context.insert(crit); self.fundamentalCriteria.append(crit)
+            }
+        }
+        if let legWA = backup.manualWealthAssets {
+            for lwa in legWA {
+                let wa = WealthAsset(id: lwa.id, name: lwa.name, invested: lwa.invested, current: lwa.current, isAutoFilled: lwa.isAutoFilled)
+                context.insert(wa); self.manualWealthAssets.append(wa)
+            }
+        }
+        if let legWL = backup.manualWealthLiabilities {
+            for lwl in legWL {
+                let wl = WealthLiability(id: lwl.id, name: lwl.name, amount: lwl.amount, initialAmount: lwl.initialAmount)
+                context.insert(wl); self.manualWealthLiabilities.append(wl)
+            }
+        }
+        
+        // 5. Rafraîchissement final de l'interface
+        self.positions.sort(using: self.sortOrder)
+        self.dividendYears.sort { $0.year < $1.year }
+        self.growthYears.sort { $0.year < $1.year }
+        self.updateDividendsViewData()
+        Task { await self.refreshPrices() }
+        self.refreshSpotlightIndex()
+    }
+}

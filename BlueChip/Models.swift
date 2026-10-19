@@ -386,44 +386,68 @@ struct ValueSourceItem: Identifiable { let id = UUID(); let category: String; le
 struct TreemapNode: Identifiable { let id = UUID(); let position: Position; let rect: CGRect } // Ne sera pas persisté
 
 // =========================================================================
-// MARK: - LEGACY JSON MIGRATION MODELS
-// (Ne sert QUE pour aspirer ton vieux fichier JSON à l'étape 5)
+// MARK: - FULL APP BACKUP MODELS (JSON)
 // =========================================================================
 
 struct LegacyPortfolioSaveData: Codable {
     var positions: [LegacyPosition]?
     var availableCash: Double?
     var manuallyInvested: Double?
+    
     var goalType: GoalType?
     var goalTarget: Double?
+    
     var dividendGoalType: DividendGoalType?
     var dividendGoalTarget: Double?
     var dividendYears: [LegacyDividendYear]?
     var dividendStartYear: Int?
+    
     var growthGoalType: GrowthGoalType?
     var growthGoalTarget: Double?
     var growthYears: [LegacyGrowthYear]?
+    
     var benchmarkIndices: [LegacyBenchmarkIndex]?
+    var benchmarkGoalType: BenchmarkGoalType?
     var benchmarkGoalTarget: Double?
+    
     var transactions: [LegacyTransaction]?
     var transactionCustomColumns: [String]?
+    var transactionGoalType: TransactionGoalType?
     var transactionGoalTarget: Double?
+    
     var calendarEvents: [LegacyCalendarEvent]?
     var fundamentalCriteria: [LegacyFundamentalCriterion]?
+    
+    var wealthGoalType: WealthGoalType?
     var wealthGoalTarget: Double?
     var manualWealthAssets: [LegacyWealthAsset]?
     var manualWealthLiabilities: [LegacyWealthLiability]?
     var safeWithdrawalRate: Double?
+    
     var watchlistItems: [LegacyWatchlistItem]?
 }
 
 struct LegacyPosition: Codable { var id: UUID; let ticker: String; var quantity: Double; var averageCost: Double; var currentPrice: Double; var currency: String; var usdToEurRate: Double; var annualDividendNet: Double; var country: String; var sector: String; var marketCap: String; var dividendMonths: Set<Int>; var purchaseDate: Date; var dividendGrowth5Y: Double; var revenueExposures: [RevenueSegment]?; var fundamentalValues: [String: Double]?; var targetPrice: Double?; var guruFocusPrice: Double?; var tipRanksPrice: Double?; var currentPE: Double?; var forwardPE: Double?; var historicalPE10Y: Double?; var peg: Double?; var pFcf: Double? }
 struct LegacyDividendYear: Codable { var id: UUID; var year: Int; var jan: Double; var feb: Double; var mar: Double; var apr: Double; var may: Double; var jun: Double; var jul: Double; var aug: Double; var sep: Double; var oct: Double; var nov: Double; var dec: Double }
 struct LegacyCalendarEvent: Codable { var id: UUID; var date: Date; var type: CalendarEventType; var ticker: String; var note: String }
-struct LegacyBenchmarkIndex: Codable { var id: UUID; var name: String; var returns: [Int: Double] }
+struct LegacyBenchmarkIndex: Codable { var id: UUID; var name: String; var returns: [Int: Double]; var referenceLink: String? }
 struct LegacyTransaction: Codable { var id: UUID; var date: Date; var type: TransactionType; var ticker: String; var quantity: Double; var amountEUR: Double; var note: String; var customFields: [String: Double] }
 struct LegacyGrowthYear: Codable { var id: UUID; var year: Int; var startWallet: Double; var invested: Double; var endWallet: Double; var totalInvest: Double }
 struct LegacyFundamentalCriterion: Codable { var id: UUID; var name: String; var section: String; var weight: Double; var type: CriterionType; var isHigherBetter: Bool; var premiumThreshold: Double; var standardThreshold: Double }
 struct LegacyWealthAsset: Codable { var id: UUID; var name: String; var invested: Double; var current: Double; var isAutoFilled: Bool }
-struct LegacyWealthLiability: Codable { var id: UUID; var name: String; var amount: Double }
-struct LegacyWatchlistItem: Codable { var id: UUID; var ticker: String; var orderIndex: Int }
+struct LegacyWealthLiability: Codable { var id: UUID; var name: String; var amount: Double; var initialAmount: Double? }
+struct LegacyWatchlistItem: Codable {
+    var id: UUID
+    var ticker: String
+    var currentPrice: Double
+    var targetPrice: Double
+    var currentPE: Double
+    var forwardPE: Double
+    var historicalPE10Y: Double
+    var guruFocusPrice: Double
+    var tipRanksPrice: Double
+    var peg: Double
+    var currency: String
+    var note: String
+    var fundamentalValues: [String: Double]?
+}
