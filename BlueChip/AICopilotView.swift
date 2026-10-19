@@ -1,48 +1,85 @@
 import SwiftUI
 
 // =========================================================================
-// MARK: - CHAT HISTORY MANAGER (SAUVEGARDE LOCALE)
+// MARK: - CHAT HISTORY MANAGER (SAUVEGARDE LOCALE ROBUSTE VIA FILEMANAGER)
 // =========================================================================
 class ChatHistoryManager {
     static let shared = ChatHistoryManager()
     private let keyPrefix = "ai_chat_"
+    
+    // Récupère l'URL du dossier Documents de l'application
+    private func getDocumentDirectory() -> URL {
+        let paths = FileManager.default.urls(for: .documentDirectory, in: .userDomainMask)
+        return paths[0]
+    }
+    
+    // Construit le chemin complet du fichier pour un onglet donné
+    private func getFileURL(for tab: String) -> URL {
+        return getDocumentDirectory().appendingPathComponent("\(keyPrefix)\(tab).json")
+    }
 
     func save(_ messages: [ChatMessage], for tab: String) {
-        if let data = try? JSONEncoder().encode(messages) {
-            UserDefaults.standard.set(data, forKey: keyPrefix + tab)
-            // Notifie l'interface pour afficher/cacher le bouton de reprise
+        let fileURL = getFileURL(for: tab)
+        
+        do {
+            let encoder = JSONEncoder()
+            // Ajoute de l'indentation pour que le fichier soit lisible si tu veux le vérifier
+            encoder.outputFormatting = .prettyPrinted
+            let data = try encoder.encode(messages)
+            
+            // L'option .atomic force l'écriture d'un fichier temporaire avant de remplacer l'ancien
+            try data.write(to: fileURL, options: .atomic)
+            
+            // Notifie l'interface
             DispatchQueue.main.async {
                 NotificationCenter.default.post(name: NSNotification.Name("ChatHistoryUpdated"), object: nil)
             }
+        } catch {
+            print("Erreur critique lors de la sauvegarde de l'historique pour \(tab): \(error)")
         }
     }
 
     func load(for tab: String) -> [ChatMessage]? {
-        guard let data = UserDefaults.standard.data(forKey: keyPrefix + tab) else {
+        let fileURL = getFileURL(for: tab)
+        
+        // Vérifie si le fichier existe
+        guard FileManager.default.fileExists(atPath: fileURL.path) else {
             return nil
         }
         
         do {
-            let decodedMessages = try JSONDecoder().decode([ChatMessage].self, from: data)
+            let data = try Data(contentsOf: fileURL)
+            let decoder = JSONDecoder()
+            let decodedMessages = try decoder.decode([ChatMessage].self, from: data)
             return decodedMessages
         } catch {
-            print("Erreur de décodage de l'historique pour \(tab): \(error)")
-            // Si le fichier est corrompu ou illisible, on le supprime
-            clear(for: tab)
+            print("⚠️ Erreur de décodage JSON pour \(tab): \(error)")
+            // On ne supprime plus le fichier ici brutalement !
+            // Peut-être que la structure de ChatMessage a changé. On retourne simplement nil pour forcer un nouveau chat.
             return nil
         }
     }
 
-
     func clear(for tab: String) {
-        UserDefaults.standard.removeObject(forKey: keyPrefix + tab)
+        let fileURL = getFileURL(for: tab)
+        
+        do {
+            if FileManager.default.fileExists(atPath: fileURL.path) {
+                try FileManager.default.removeItem(at: fileURL)
+                print("🗑 Historique effacé pour \(tab)")
+            }
+        } catch {
+            print("Erreur lors de la suppression de l'historique pour \(tab): \(error)")
+        }
+        
         DispatchQueue.main.async {
             NotificationCenter.default.post(name: NSNotification.Name("ChatHistoryUpdated"), object: nil)
         }
     }
     
     func hasHistory(for tab: String) -> Bool {
-        return UserDefaults.standard.data(forKey: keyPrefix + tab) != nil
+        let fileURL = getFileURL(for: tab)
+        return FileManager.default.fileExists(atPath: fileURL.path)
     }
 }
 
@@ -129,8 +166,11 @@ struct AICopilotView: View {
                     ScrollView {
                         VStack(spacing: 16) {
                             ForEach(messages) { message in
-                                ChatBubble(message: message)
-                                    .id(message.id)
+                                // NOUVEAU : On cache le tout premier prompt de lancement
+                                if message.text != "Analyze the current page data." {
+                                    ChatBubble(message: message)
+                                        .id(message.id)
+                                }
                             }
                             if isThinking {
                                 HStack {
@@ -192,14 +232,12 @@ struct AICopilotView: View {
         .frame(width: 700, height: 600)
         .onAppear {
             if !geminiApiKey.isEmpty && messages.isEmpty {
-                if resumeChat {
-                    if let savedMessages = ChatHistoryManager.shared.load(for: currentTab.rawValue) {
-                        self.messages = savedMessages
-                    } else {
-                        startInitialAnalysis()
-                    }
+                // 1. On ignore totalement la variable "resumeChat" du bouton parent.
+                // 2. On vérifie directement sur le disque dur de ton Mac si un fichier existe.
+                if let savedMessages = ChatHistoryManager.shared.load(for: currentTab.rawValue), !savedMessages.isEmpty {
+                    self.messages = savedMessages
                 } else {
-                    ChatHistoryManager.shared.clear(for: currentTab.rawValue)
+                    // 3. S'il n'y a vraiment aucun fichier, alors on lance une nouvelle analyse.
                     startInitialAnalysis()
                 }
             }
@@ -216,21 +254,24 @@ struct AICopilotView: View {
         
         Task {
             do {
-                // On crée un message utilisateur "caché" pour lancer l'analyse sans l'afficher dans l'UI
+                // Le message caché qui lance l'analyse
                 let hiddenInitialMessage = ChatMessage(role: "user", text: "Analyze the current page data.")
                 
                 let response = try await GeminiService.shared.generateChatResponse(systemPrompt: systemPrompt, messages: [hiddenInitialMessage], apiKey: geminiApiKey)
                 
                 await MainActor.run {
-                    // On n'affiche QUE la réponse du modèle !
+                    // MODIFIÉ : On ajoute le message caché à la vraie liste locale (pour la sauvegarde API)
+                    messages.append(hiddenInitialMessage)
+                    // Puis on ajoute la réponse de l'IA
                     messages.append(ChatMessage(role: "model", text: response))
-                    ChatHistoryManager.shared.save(messages, for: currentTab.rawValue) // <-- NOUVEAU : SAUVEGARDE
+                    
+                    ChatHistoryManager.shared.save(messages, for: currentTab.rawValue)
                     isThinking = false
                 }
             } catch {
                 await MainActor.run {
                     messages.append(ChatMessage(role: "model", text: "⚠️ Error: \(error.localizedDescription)"))
-                    ChatHistoryManager.shared.save(messages, for: currentTab.rawValue) // <-- NOUVEAU : SAUVEGARDE
+                    ChatHistoryManager.shared.save(messages, for: currentTab.rawValue)
                     isThinking = false
                 }
             }

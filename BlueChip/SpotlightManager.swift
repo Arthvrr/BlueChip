@@ -102,10 +102,7 @@ class SpotlightManager {
                 searchableItems.append(item)
             }
             
-            CSSearchableIndex.default().indexSearchableItems(searchableItems) { error in
-                if let error = error { print("Erreur d'indexation Spotlight : \(error.localizedDescription)") }
-                else { print("✅ Spotlight a bien indexé \(searchableItems.count) éléments BlueChip.") }
-            }
+            
         }
     }
 }
