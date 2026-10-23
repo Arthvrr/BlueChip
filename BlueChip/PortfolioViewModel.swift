@@ -361,11 +361,24 @@ class PortfolioViewModel: ObservableObject {
         let monthsShort = Calendar.current.shortMonthSymbols
         var newExpectedSeries: [ExpectedMonthlyDividendSeries] = []
         
+        // Calcul du multiplicateur de taxe (ex: 15% de taxe -> on garde 85% soit 0.85)
+        let taxMultiplier = max(0.0, 1.0 - (dividendTaxRate / 100.0))
+        
         for pos in positions {
-            guard pos.totalDividendEUR > 0, !pos.dividendMonths.isEmpty else { continue }
-            let netPerMonthEUR = pos.totalDividendEUR / Double(pos.dividendMonths.count)
-            let taxMultiplier = 1.0 - (dividendTaxRate / 100.0)
-            let brutPerMonthEUR = taxMultiplier > 0 ? (netPerMonthEUR / taxMultiplier) : netPerMonthEUR
+            guard pos.annualDividendNet > 0, !pos.dividendMonths.isEmpty else { continue }
+            
+            // 1. Calcul du dividende annuel total BRUT en Euros
+            // annualDividendNet stocke le brut local par action, on le convertit en brut total €
+            let rate = pos.currency == "USD" ? pos.usdToEurRate : 1.0
+            let brutPerYearEUR = pos.quantity * pos.annualDividendNet * rate
+            
+            // 2. Calcul du dividende annuel total NET en Euros
+            let netPerYearEUR = brutPerYearEUR * taxMultiplier
+            
+            // 3. Division par le nombre de mois de versements pour avoir le montant par mois
+            let monthsCount = Double(pos.dividendMonths.count)
+            let brutPerMonthEUR = brutPerYearEUR / monthsCount
+            let netPerMonthEUR = netPerYearEUR / monthsCount
             
             for m in pos.dividendMonths {
                 guard m >= 1 && m <= 12 else { continue }
@@ -376,10 +389,10 @@ class PortfolioViewModel: ObservableObject {
         }
         self.expectedMonthlyDividendSeries = newExpectedSeries.sorted { $0.month < $1.month }
         
+        // On s'assure de multiplier par 100 pour obtenir un pourcentage
         self.stockYieldsData = positions.filter { $0.currentValueEUR > 0 }
             .map { StockYieldDataItem(ticker: $0.ticker, yield: $0.stockYieldEUR * 100.0) }
             .sorted { $0.ticker < $1.ticker }
-        
     }
     
     // === PROPRIÉTÉS CALCULÉES ===

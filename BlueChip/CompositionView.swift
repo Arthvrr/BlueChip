@@ -1145,6 +1145,9 @@ struct EditPositionView: View {
             pos.annualDividendNet = safeDiv
             pos.dividendGrowth5Y = safeGrow
             pos.dividendMonths = selectedMonths
+            
+            // NOUVEAU : Force le recalcul immédiat des graphes
+            viewModel.updateDividendsViewData()
             viewModel.objectWillChange.send()
         } else {
             if let existingPos = viewModel.positions.first(where: { $0.ticker == cleanTicker }) {
@@ -1164,6 +1167,8 @@ struct EditPositionView: View {
                 }
                 if safeDiv > 0 { existingPos.annualDividendNet = safeDiv }
                 
+                // NOUVEAU : Force le recalcul immédiat des graphes
+                viewModel.updateDividendsViewData()
                 viewModel.objectWillChange.send()
                 
             } else {
@@ -1190,6 +1195,9 @@ struct EditPositionView: View {
                 context.insert(newPos)
                 viewModel.positions.append(newPos)
                 
+                // NOUVEAU : Force le recalcul immédiat des graphes
+                viewModel.updateDividendsViewData()
+                
                 Task {
                     let service = YahooFinanceService()
                     if let data = await service.fetchStockData(for: cleanTicker) {
@@ -1202,6 +1210,7 @@ struct EditPositionView: View {
                             if let fxData = await service.fetchStockData(for: "EUR=X") {
                                 await MainActor.run {
                                     newPos.usdToEurRate = fxData.price
+                                    viewModel.updateDividendsViewData() // <-- NOUVEAU
                                     viewModel.objectWillChange.send()
                                 }
                             } else {
@@ -1210,6 +1219,7 @@ struct EditPositionView: View {
                         } else if data.currency.uppercased() == "EUR" {
                             await MainActor.run {
                                 newPos.usdToEurRate = 1.0
+                                viewModel.updateDividendsViewData() // <-- NOUVEAU
                                 viewModel.objectWillChange.send()
                             }
                         } else {

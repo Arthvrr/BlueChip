@@ -26,7 +26,7 @@ struct DividendsView: View {
             return viewModel.totalDividends
         case .portfolioYield:
             return viewModel.portfolioYield * 100
-        case .currentYearTotal: // <-- NOUVEAU
+        case .currentYearTotal:
             let currentYear = Calendar.current.component(.year, from: Date())
             let thisYearData = viewModel.dividendYears.first { $0.year == currentYear }
             return thisYearData?.total ?? 0.0
@@ -40,9 +40,6 @@ struct DividendsView: View {
             VStack(spacing: 24) {
                 DividendsDashboardSection(viewModel: viewModel, privacyMode: $privacyMode)
                 
-                // -----------------------------------------------------------
-                // Utilisation du composant universel GoalProgressBar
-                // -----------------------------------------------------------
                 GoalProgressBar(
                     title: viewModel.dividendGoalType.rawValue ?? DividendGoalType.dividendsAnnual.rawValue,
                     currentValue: currentGoalValueForProgressBar,
@@ -91,7 +88,6 @@ struct EditDividendGoalView: View {
     
     var body: some View {
         VStack(spacing: 0) {
-            // Header
             HStack {
                 Text("Set Dividend Goal").font(.title2).fontWeight(.bold)
                 Spacer()
@@ -103,7 +99,6 @@ struct EditDividendGoalView: View {
             
             Divider()
             
-            // Content
             VStack(alignment: .leading, spacing: 16) {
                 GroupBox {
                     VStack(spacing: 16) {
@@ -114,7 +109,7 @@ struct EditDividendGoalView: View {
                                 ForEach(DividendGoalType.allCases, id: \.self) { type in Text(type.rawValue).tag(type) }
                             }
                             .labelsHidden()
-                            .frame(width: 250) // Plus large pour accommoder "Total All-Time Received (€)"
+                            .frame(width: 250)
                         }
                         
                         Divider().opacity(0.5)
@@ -136,7 +131,6 @@ struct EditDividendGoalView: View {
             Spacer()
             Divider()
             
-            // Footer
             HStack {
                 Button("Cancel") { dismiss() }
                     .keyboardShortcut(.cancelAction)
@@ -150,7 +144,7 @@ struct EditDividendGoalView: View {
                 .buttonStyle(.borderedProminent)
             }.padding()
         }
-        .frame(width: 440, height: 280) // Un peu plus large pour que le picker ne coupe pas le texte
+        .frame(width: 440, height: 280)
     }
 }
 
@@ -456,7 +450,7 @@ struct ExpectedMonthlyDividendChart: View {
                 .chartYAxis { AxisMarks(position: .leading) { value in AxisGridLine(); AxisTick(); if let v = value.as(Double.self) { AxisValueLabel(v.formatted(.currency(code: "EUR").precision(.fractionLength(0)))) } } }
                 .chartXSelection(value: $hoveredMonth)
             }
-            BlueChipWatermark()
+            HStack { Text("Compares expected gross and net dividend income by month").font(.caption2).foregroundColor(.secondary); Spacer(); BlueChipWatermark() }
         }.padding().frame(minHeight: 360, maxHeight: isExpanded ? .infinity : 360).background(Color(NSColor.controlBackgroundColor)).cornerRadius(12).shadow(color: Color.black.opacity(0.05), radius: 2, x: 0, y: 1)
     }
     
@@ -486,7 +480,7 @@ struct StockYieldChart: View {
                 .chartYAxis { AxisMarks(position: .leading) { value in AxisGridLine(); AxisTick(); if let v = value.as(Double.self) { AxisValueLabel("\(v.formatted(.number.precision(.fractionLength(0))))%") } } }
                 .chartXSelection(value: $hoveredTicker)
             }
-            BlueChipWatermark()
+            HStack { Text("Current dividend yield percentage for each portfolio holding").font(.caption2).foregroundColor(.secondary); Spacer(); BlueChipWatermark() }
         }.padding().frame(minHeight: 360, maxHeight: isExpanded ? .infinity : 360).background(Color(NSColor.controlBackgroundColor)).cornerRadius(12).shadow(color: Color.black.opacity(0.05), radius: 2, x: 0, y: 1)
     }
 }
@@ -517,38 +511,126 @@ struct MonthlyDividendChart: View {
                 .chartYAxis { AxisMarks { value in if let v = value.as(Double.self) { AxisValueLabel(v.formatted(.currency(code: "EUR").precision(.fractionLength(0)))) } } }
                 .chartXSelection(value: $hoveredMonth)
             }
-            BlueChipWatermark()
+            HStack { Text("Actual dividend income received per month in the current year").font(.caption2).foregroundColor(.secondary); Spacer(); BlueChipWatermark() }
         }.padding().frame(minHeight: 360, maxHeight: isExpanded ? .infinity : 360).background(Color(NSColor.controlBackgroundColor)).cornerRadius(12).shadow(color: Color.black.opacity(0.05), radius: 2, x: 0, y: 1)
     }
 }
 
 // MARK: - CHART 4: MANUAL YEARLY
 struct YearlyDividendChart: View {
-    @ObservedObject var viewModel: PortfolioViewModel; var currentYear: Int
+    @ObservedObject var viewModel: PortfolioViewModel
+    var currentYear: Int
     @Binding var privacyMode: Bool
-    var isExpanded: Bool = false; @Binding var expandedChart: DividendChartZoomType?
+    var isExpanded: Bool = false
+    @Binding var expandedChart: DividendChartZoomType?
+    
     @State private var hoveredYear: String? = nil
-    var activeYears: [DividendYear] { viewModel.dividendYears.filter { $0.total > 0 || $0.year == currentYear } }
-    var yMaxStatic: Double { return (activeYears.map { $0.total }.max() ?? 10) * 1.2 }
+    @State private var hiddenSeries: Set<String> = [] // NOUVEAU : Gère la légende interactive
+    
+    var activeYears: [DividendYear] {
+        viewModel.dividendYears.filter { $0.total > 0 || $0.year == currentYear }
+    }
+    
+    // NOUVEAU : Calcul de la ligne de tendance (Moindres carrés)
+    var trendPoints: [(year: String, value: Double)] {
+        guard activeYears.count >= 2 else { return [] }
+        let xs = activeYears.map { Double($0.year) }
+        let ys = activeYears.map { $0.total }
+        let n = Double(xs.count)
+        let sumX = xs.reduce(0, +)
+        let sumY = ys.reduce(0, +)
+        let sumXY = zip(xs, ys).reduce(0) { $0 + $1.0 * $1.1 }
+        let sumX2 = xs.reduce(0) { $0 + $1 * $1 }
+        let denom = n * sumX2 - sumX * sumX
+        guard denom != 0 else { return [] }
+        
+        let slope = (n * sumXY - sumX * sumY) / denom
+        let intercept = (sumY - slope * sumX) / n
+        
+        // On ne génère que 2 points (le premier et le dernier) pour tracer une ligne droite parfaite
+        return [activeYears.first!, activeYears.last!].map { pt in
+            let y = slope * Double(pt.year) + intercept
+            return (year: String(pt.year), value: max(0, y))
+        }
+    }
+    
+    // NOUVEAU : L'échelle s'adapte si la tendance dépasse la plus grande barre
+    var yMaxStatic: Double {
+        let maxTotal = activeYears.map { $0.total }.max() ?? 10
+        let maxTrend = trendPoints.map { $0.value }.max() ?? 10
+        return max(maxTotal, maxTrend) * 1.2
+    }
+    
     var body: some View {
         VStack {
             HStack {
                 if !isExpanded { Text("Spreadsheet: Annual Received History").font(.headline).foregroundColor(.secondary) }
                 Spacer()
-                if !isExpanded { Button(action: { expandedChart = .yearly }) { Image(systemName: "plus.magnifyingglass").foregroundColor(.secondary) }.buttonStyle(.plain) }
+                
+                // NOUVEAU : Légende interactive avec boutons Toggle
+                HStack(spacing: 12) {
+                    Button(action: { toggle("Total €") }) {
+                        HStack(spacing: 4) {
+                            RoundedRectangle(cornerRadius: 2).fill(Color.green.opacity(0.8)).frame(width: 12, height: 12)
+                            Text("Total €").font(.caption).foregroundColor(hiddenSeries.contains("Total €") ? .secondary : .primary)
+                        }
+                    }.buttonStyle(.plain).opacity(hiddenSeries.contains("Total €") ? 0.4 : 1.0)
+
+                    Button(action: { toggle("Trend") }) {
+                        HStack(spacing: 4) {
+                            Rectangle().fill(Color.orange.opacity(0.8)).frame(width: 12, height: 2)
+                            Text("Trend").font(.caption).foregroundColor(hiddenSeries.contains("Trend") ? .secondary : .primary)
+                        }
+                    }.buttonStyle(.plain).opacity(hiddenSeries.contains("Trend") ? 0.4 : 1.0)
+                }
+                
+                if !isExpanded { Button(action: { expandedChart = .yearly }) { Image(systemName: "plus.magnifyingglass").foregroundColor(.secondary) }.buttonStyle(.plain).padding(.leading, 8) }
             }.padding(.bottom, 8)
+            
             if activeYears.isEmpty { Spacer(); Text("No data").foregroundColor(.secondary); Spacer() } else {
-                Chart(activeYears) { yearData in
-                    let yearStr = String(yearData.year)
-                    BarMark(x: .value("Year", yearStr), y: .value("Total", yearData.total)).foregroundStyle(Color.green.opacity(0.8)).cornerRadius(4)
-                        .annotation(position: .top) { if hoveredYear == yearStr { Text(yearData.total.formatted(.currency(code: "EUR").precision(.fractionLength(2)))).font(.system(size: 9, weight: .bold)).foregroundColor(.secondary).blur(radius: privacyMode ? 6 : 0) } }
+                Chart {
+                    if !hiddenSeries.contains("Total €") {
+                        ForEach(activeYears) { yearData in
+                            let yearStr = String(yearData.year)
+                            BarMark(x: .value("Year", yearStr), y: .value("Total", yearData.total))
+                                .foregroundStyle(Color.green.opacity(0.8))
+                                .cornerRadius(4)
+                                .annotation(position: .top) {
+                                    if hoveredYear == yearStr {
+                                        Text(yearData.total.formatted(.currency(code: "EUR").precision(.fractionLength(2))))
+                                            .font(.system(size: 9, weight: .bold))
+                                            .foregroundColor(.secondary)
+                                            .blur(radius: privacyMode ? 6 : 0)
+                                    }
+                                }
+                        }
+                    }
+                    
+                    // NOUVEAU : Dessin de la ligne de tendance
+                    if !hiddenSeries.contains("Trend") {
+                        ForEach(trendPoints, id: \.year) { pt in
+                            LineMark(
+                                x: .value("Year", pt.year),
+                                y: .value("Trend", pt.value)
+                            )
+                            .foregroundStyle(Color.orange.opacity(0.8))
+                            .lineStyle(StrokeStyle(lineWidth: 2.5, dash: [5, 4]))
+                        }
+                    }
                 }
                 .chartYScale(domain: 0...yMaxStatic)
                 .chartYAxis { AxisMarks { value in if let v = value.as(Double.self) { AxisValueLabel(v.formatted(.currency(code: "EUR").precision(.fractionLength(0)))) } } }
                 .chartXSelection(value: $hoveredYear)
             }
-            BlueChipWatermark()
+            HStack { Text("Historical total annual dividend income received").font(.caption2).foregroundColor(.secondary); Spacer(); BlueChipWatermark() }
         }.padding().frame(minHeight: 360, maxHeight: isExpanded ? .infinity : 360).background(Color(NSColor.controlBackgroundColor)).cornerRadius(12).shadow(color: Color.black.opacity(0.05), radius: 2, x: 0, y: 1)
+    }
+    
+    // NOUVEAU : Fonction de gestion de la légende
+    func toggle(_ key: String) {
+        withAnimation {
+            if hiddenSeries.contains(key) { hiddenSeries.remove(key) } else { hiddenSeries.insert(key) }
+        }
     }
 }
 
@@ -580,7 +662,7 @@ struct TotalDividendsDonutChart: View {
                     }
                 }.animation(.easeInOut(duration: 0.2), value: selectedAngleValue)
             }
-            BlueChipWatermark()
+            HStack { Text("Proportion of total dividends generated by each position").font(.caption2).foregroundColor(.secondary); Spacer(); BlueChipWatermark() }
         }.padding().frame(minHeight: 360, maxHeight: isExpanded ? .infinity : 360).background(Color(NSColor.controlBackgroundColor)).cornerRadius(12).shadow(color: Color.black.opacity(0.05), radius: 2, x: 0, y: 1)
     }
     func findItem(for value: Double) -> ChartDataItem { var cum = 0.0; for item in filteredData { cum += item.value; if value <= cum { return item } }; return filteredData.last! }
@@ -609,7 +691,7 @@ struct YieldOnCostChart: View {
                 .chartYAxis { AxisMarks(position: .leading) { value in AxisGridLine(); AxisTick(); if let v = value.as(Double.self) { AxisValueLabel("\(v.formatted(.number.precision(.fractionLength(0))))%") } } }
                 .chartXSelection(value: $hoveredTicker)
             }
-            BlueChipWatermark()
+            HStack { Text("Return on initial investment based on current dividend payouts").font(.caption2).foregroundColor(.secondary); Spacer(); BlueChipWatermark() }
         }.padding().frame(minHeight: 360, maxHeight: isExpanded ? .infinity : 360).background(Color(NSColor.controlBackgroundColor)).cornerRadius(12).shadow(color: Color.black.opacity(0.05), radius: 2, x: 0, y: 1)
     }
 }
@@ -715,7 +797,7 @@ struct AllTimeHistoryChart: View {
                 .chartXAxis { AxisMarks(preset: .aligned, values: .stride(by: .month, count: 6)) { value in AxisGridLine(); AxisTick(); AxisValueLabel(format: .dateTime.month().year()) } }
                 .chartXSelection(value: $hoveredDate)
             }
-            BlueChipWatermark()
+            HStack { Text("Historical dividend income evolution with calculated trend line").font(.caption2).foregroundColor(.secondary); Spacer(); BlueChipWatermark() }
         }.padding().frame(minHeight: 360, maxHeight: isExpanded ? .infinity : 360).background(Color(NSColor.controlBackgroundColor)).cornerRadius(12).shadow(color: Color.black.opacity(0.05), radius: 2, x: 0, y: 1)
     }
 }
@@ -783,7 +865,7 @@ struct ExpectedDividendHeatmapChart: View {
                     }
                 }
             }
-            BlueChipWatermark()
+            HStack { Text("Visualizes dividend distribution intensity across months and holdings").font(.caption2).foregroundColor(.secondary); Spacer(); BlueChipWatermark() }
         }.padding().frame(minHeight: 360, maxHeight: isExpanded ? .infinity : 360).background(Color(NSColor.controlBackgroundColor)).cornerRadius(12).shadow(color: Color.black.opacity(0.05), radius: 2, x: 0, y: 1)
     }
 }
@@ -869,6 +951,28 @@ struct TotalMonthlySeasonalityChart: View {
     }
 }
 
+// --- SOUS-VUE POUR L'INFOBULLE DU DGR CHART ---
+struct DGRTooltip: View {
+    let year: Int
+    let dgr: Double
+    let privacyMode: Bool
+    
+    var body: some View {
+        VStack(alignment: .center, spacing: 4) {
+            Text(String(year)).font(.caption.bold())
+            Text("\(dgr > 0 ? "+" : "")\(dgr.formatted(.number.precision(.fractionLength(1))))%")
+                .font(.caption2.bold())
+                .foregroundColor(dgr >= 0 ? .green : .red)
+                .blur(radius: privacyMode ? 6 : 0)
+        }
+        .padding(6)
+        .background(Color(NSColor.windowBackgroundColor).opacity(0.95))
+        .cornerRadius(6)
+        .shadow(radius: 4)
+        .fixedSize()
+    }
+}
+
 // --- NOUVEAU GRAPHIQUE 10 : DIVIDEND GROWTH RATE (YoY) ---
 struct DGRItem: Identifiable {
     let id = UUID()
@@ -908,6 +1012,15 @@ struct DividendGrowthRateChart: View {
         data.map { String($0.year) }
     }
     
+    var yMax: Double {
+        let maxVal = data.map { $0.dgr }.max() ?? 10.0
+        return maxVal > 0 ? maxVal * 1.25 : 10.0
+    }
+    var yMin: Double {
+        let minVal = data.map { $0.dgr }.min() ?? 0.0
+        return minVal < 0 ? minVal * 1.25 : 0.0
+    }
+    
     var body: some View {
         VStack(alignment: .leading, spacing: 8) {
             HStack {
@@ -915,19 +1028,6 @@ struct DividendGrowthRateChart: View {
                 Spacer()
                 if !isExpanded { Button(action: { expandedChart = .dgr }) { Image(systemName: "plus.magnifyingglass").foregroundColor(.secondary) }.buttonStyle(.plain) }
             }.padding(.bottom, 8)
-            
-            if let hYearStr = hoveredYear, let hYearInt = Int(hYearStr), let item = data.first(where: { $0.year == hYearInt }) {
-                HStack(spacing: 8) {
-                    Text(String(item.year)).fontWeight(.bold)
-                    Text("\(item.dgr > 0 ? "+" : "")\(item.dgr.formatted(.number.precision(.fractionLength(1))))%")
-                        .foregroundColor(item.dgr >= 0 ? .green : .red)
-                        .fontWeight(.bold)
-                        .blur(radius: privacyMode ? 6 : 0)
-                }
-                .font(.caption).padding(.horizontal, 8).padding(.vertical, 4).background(Color(NSColor.windowBackgroundColor)).cornerRadius(6).transition(.opacity)
-            } else {
-                Text("Hover to view").font(.caption).foregroundColor(.clear)
-            }
             
             if data.isEmpty {
                 Spacer(); Text("Need at least two consecutive years with dividends to calculate YoY growth.").foregroundColor(.secondary).frame(maxWidth: .infinity, alignment: .center); Spacer()
@@ -957,10 +1057,32 @@ struct DividendGrowthRateChart: View {
                         RuleMark(x: .value("Year", y))
                             .foregroundStyle(Color.secondary.opacity(0.4))
                             .lineStyle(StrokeStyle(lineWidth: 1, dash: [4, 3]))
+                            .zIndex(-1)
+                    }
+                }
+                .chartOverlay { proxy in
+                    GeometryReader { geometry in
+                        Rectangle().fill(.clear).contentShape(Rectangle())
+                            .onContinuousHover { phase in
+                                switch phase {
+                                case .active(let location):
+                                    if let year: String = proxy.value(atX: location.x) { hoveredYear = year }
+                                case .ended:
+                                    hoveredYear = nil
+                                }
+                            }
+                        
+                        if let hYear = hoveredYear, let yr = Int(hYear), let item = data.first(where: { $0.year == yr }) {
+                            if let xPosition = proxy.position(forX: hYear) {
+                                DGRTooltip(year: item.year, dgr: item.dgr, privacyMode: privacyMode)
+                                    .position(x: max(50, min(geometry.size.width - 50, xPosition)), y: 40)
+                            }
+                        }
                     }
                 }
                 .chartXSelection(value: $hoveredYear)
                 .chartXScale(domain: yearsDomain)
+                .chartYScale(domain: yMin...yMax)
                 .chartYAxis { AxisMarks(position: .leading) { value in AxisGridLine(); AxisTick(); if let v = value.as(Double.self) { AxisValueLabel("\(v.formatted(.number.precision(.fractionLength(0))))%") } } }
                 .chartXAxis {
                     AxisMarks(values: .automatic) { value in
@@ -1024,6 +1146,10 @@ struct DividendFullScreenChartView: View {
 // MARK: - THIS MONTH'S DIVIDEND TRACKER
 // =========================================================================
 
+// =========================================================================
+// MARK: - THIS MONTH'S DIVIDEND TRACKER
+// =========================================================================
+
 struct DividendsThisMonthSection: View {
     @ObservedObject var viewModel: PortfolioViewModel
     @Binding var privacyMode: Bool
@@ -1036,10 +1162,18 @@ struct DividendsThisMonthSection: View {
         viewModel.positions.filter { $0.dividendMonths.contains(currentMonth) }.sorted { $0.ticker < $1.ticker }
     }
     
+    // NOUVEAU : Application de la taxe globale pour avoir le montant NET attendu
+    var taxMultiplier: Double {
+        max(0.0, 1.0 - (viewModel.dividendTaxRate / 100.0))
+    }
+    
+    // NOUVEAU : Calcule le total attendu en NET
     var totalExpected: Double {
         payingStocks.reduce(0.0) { sum, pos in
             let monthsCount = max(1, pos.dividendMonths.count)
-            return sum + (pos.totalDividendEUR / Double(monthsCount))
+            let grossTotalEUR = pos.totalDividendEUR // C'est le brut converti
+            let netTotalEUR = grossTotalEUR * taxMultiplier
+            return sum + (netTotalEUR / Double(monthsCount))
         }
     }
     
@@ -1048,7 +1182,7 @@ struct DividendsThisMonthSection: View {
     
     var totalReceived: Double { receivedDict.values.reduce(0, +) }
     
-    // CORRECTION 3 : Force les 100% si on a reçu exactement la somme attendue
+    // Force les 100% si on a reçu exactement la somme attendue
     var progress: Double {
         guard totalExpected > 0 else { return 0 }
         let diff = abs(totalReceived - totalExpected)
@@ -1060,13 +1194,13 @@ struct DividendsThisMonthSection: View {
         receivedDict.filter { $0.value > 0 }.map { ChartDataItem(name: $0.key, value: $0.value) }.sorted { $0.value > $1.value }
     }
     
-    // CORRECTION 2 : Hauteur dynamique basée sur le nombre de lignes
+    // Hauteur dynamique basée sur le nombre de lignes
     var dynamicTableHeight: CGFloat {
         let rowHeight: CGFloat = 44
         let headerHeight: CGFloat = 32
         if payingStocks.isEmpty { return 100 }
         let calculated = CGFloat(payingStocks.count) * rowHeight + headerHeight
-        return min(max(calculated, 100), 400) // 400 max pour éviter de prendre tout l'écran s'il y a 20 actions
+        return min(max(calculated, 100), 400) // 400 max
     }
     
     var body: some View {
@@ -1113,7 +1247,7 @@ struct DividendsThisMonthSection: View {
                         }
                     }
                     .frame(maxWidth: .infinity)
-                    .frame(height: 250) // Hauteur fixe pour le donut pour qu'il reste esthétique
+                    .frame(height: 250)
                     
                     // --- DROITE : STATS & TABLEAU ---
                     VStack(alignment: .leading, spacing: 16) {
@@ -1142,7 +1276,7 @@ struct DividendsThisMonthSection: View {
                         VStack(spacing: 0) {
                             HStack {
                                 Text("Ticker").fontWeight(.bold).frame(width: 60, alignment: .leading)
-                                Text("Expected").fontWeight(.bold).frame(maxWidth: .infinity, alignment: .trailing)
+                                Text("Expected (Net)").fontWeight(.bold).frame(maxWidth: .infinity, alignment: .trailing)
                                 Text("Received").fontWeight(.bold).frame(width: 100, alignment: .trailing)
                             }
                             .font(.caption).foregroundColor(.secondary).padding(.horizontal, 12).padding(.vertical, 8)
@@ -1153,14 +1287,17 @@ struct DividendsThisMonthSection: View {
                             ScrollView {
                                 VStack(spacing: 0) {
                                     ForEach(payingStocks) { pos in
-                                        let expectedAmount = pos.totalDividendEUR / Double(max(1, pos.dividendMonths.count))
+                                        // NOUVEAU : Application de la taxe pour la valeur attendue par ligne
+                                        let grossAmountEUR = pos.totalDividendEUR / Double(max(1, pos.dividendMonths.count))
+                                        let expectedNetAmountEUR = grossAmountEUR * taxMultiplier
+                                        
                                         HStack {
                                             HStack(spacing: 6) {
                                                 Circle().fill(viewModel.color(for: pos.ticker)).frame(width: 8, height: 8)
                                                 Text(pos.ticker).fontWeight(.bold)
                                             }.frame(width: 60, alignment: .leading)
                                             
-                                            Text(expectedAmount.formatted(.currency(code: "EUR"))).foregroundColor(.secondary).blur(radius: privacyMode ? 6 : 0).frame(maxWidth: .infinity, alignment: .trailing)
+                                            Text(expectedNetAmountEUR.formatted(.currency(code: "EUR"))).foregroundColor(.secondary).blur(radius: privacyMode ? 6 : 0).frame(maxWidth: .infinity, alignment: .trailing)
                                             
                                             TickerMonthField(ticker: pos.ticker, value: binding(for: pos.ticker), privacyMode: privacyMode)
                                                 .frame(width: 100, alignment: .trailing)
@@ -1171,7 +1308,7 @@ struct DividendsThisMonthSection: View {
                                 }
                             }
                         }
-                        .frame(height: dynamicTableHeight) // CORRECTION 2 : Application de la hauteur dynamique
+                        .frame(height: dynamicTableHeight)
                         .cornerRadius(8)
                         .overlay(RoundedRectangle(cornerRadius: 8).stroke(Color.gray.opacity(0.2), lineWidth: 1))
                     }
