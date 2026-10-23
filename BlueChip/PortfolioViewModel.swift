@@ -984,6 +984,29 @@ extension PortfolioViewModel {
         backup.manualWealthAssets = manualWealthAssets.map { LegacyWealthAsset(id: $0.id, name: $0.name, invested: $0.invested, current: $0.current, isAutoFilled: $0.isAutoFilled) }
         backup.manualWealthLiabilities = manualWealthLiabilities.map { LegacyWealthLiability(id: $0.id, name: $0.name, amount: $0.amount, initialAmount: $0.initialAmount) }
         
+        // 3. Global AppSettings manquants
+        backup.dividendTaxRate = dividendTaxRate
+        backup.userTimeZoneIdentifier = userTimeZoneIdentifier
+        
+        // 4. Capture universelle des UserDefaults (AppStorage)
+        var prefs: [String: String] = [:]
+        let ud = UserDefaults.standard
+        
+        // Chaînes de caractères
+        for key in ["appTheme", "geminiApiKey", "wl_urlGuruFocus", "wl_urlTipRanks", "wl_urlValuation"] {
+            if let str = ud.string(forKey: key) { prefs[key] = str }
+        }
+        // Booléens
+        for key in ["forcePrivacyOnStartup", "requireAuthOnStartup", "proj_enableMonthlyContrib", "proj_enableDRIP", "proj_enableInflation"] {
+            prefs[key] = String(ud.bool(forKey: key))
+        }
+        // Doubles
+        for key in ["valuation_marginOfSafety", "watchlist_marginOfSafety", "proj_timeHorizonYears", "proj_monthlyContribAmount", "proj_inflationRate"] {
+            prefs[key] = String(ud.double(forKey: key))
+        }
+        
+        backup.userPreferences = prefs
+        
         let encoder = JSONEncoder()
         encoder.outputFormatting = .prettyPrinted // Rend le fichier lisible par un humain
         return try? encoder.encode(backup)
@@ -1016,6 +1039,23 @@ extension PortfolioViewModel {
         if let v = backup.wealthGoalType { self.wealthGoalType = v }
         if let v = backup.wealthGoalTarget { self.wealthGoalTarget = v }
         if let v = backup.safeWithdrawalRate { self.safeWithdrawalRate = v }
+        
+        if let tax = backup.dividendTaxRate { self.dividendTaxRate = tax }
+        if let tz = backup.userTimeZoneIdentifier { self.userTimeZoneIdentifier = tz }
+        
+        // Restaurer les UserDefaults (AppStorage)
+        if let prefs = backup.userPreferences {
+            let ud = UserDefaults.standard
+            for (key, val) in prefs {
+                if ["appTheme", "geminiApiKey", "wl_urlGuruFocus", "wl_urlTipRanks", "wl_urlValuation"].contains(key) {
+                    ud.set(val, forKey: key)
+                } else if ["forcePrivacyOnStartup", "requireAuthOnStartup", "proj_enableMonthlyContrib", "proj_enableDRIP", "proj_enableInflation"].contains(key) {
+                    ud.set(val == "true", forKey: key)
+                } else {
+                    if let doubleVal = Double(val) { ud.set(doubleVal, forKey: key) }
+                }
+            }
+        }
         
         // 4. Restaurer les entités complexes
         if let legPos = backup.positions {

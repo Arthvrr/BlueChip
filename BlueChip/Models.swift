@@ -425,6 +425,13 @@ struct LegacyPortfolioSaveData: Codable {
     var safeWithdrawalRate: Double?
     
     var watchlistItems: [LegacyWatchlistItem]?
+    
+    var dividendTaxRate: Double?
+    var userTimeZoneIdentifier: String?
+
+    // UserDefaults / AppStorage Preferences
+    var userPreferences: [String: String]?
+    
 }
 
 struct LegacyPosition: Codable { var id: UUID; let ticker: String; var quantity: Double; var averageCost: Double; var currentPrice: Double; var currency: String; var usdToEurRate: Double; var annualDividendNet: Double; var country: String; var sector: String; var marketCap: String; var dividendMonths: Set<Int>; var purchaseDate: Date; var dividendGrowth5Y: Double; var revenueExposures: [RevenueSegment]?; var fundamentalValues: [String: Double]?; var targetPrice: Double?; var guruFocusPrice: Double?; var tipRanksPrice: Double?; var currentPE: Double?; var forwardPE: Double?; var historicalPE10Y: Double?; var peg: Double?; var pFcf: Double? }

@@ -201,8 +201,8 @@ struct ExposureView: View {
                 
                 // HEADER
                 HStack {
-                    Text("Geographic Revenue Exposure").font(.title).fontWeight(.bold)
-                    Spacer()
+                    //Text("Geographic Revenue Exposure").font(.title).fontWeight(.bold)
+                    //Spacer()
                 }
                 
                 // 1. DASHBOARD
@@ -218,16 +218,16 @@ struct ExposureView: View {
                     let estFxRisk = rowPct // Risque de change = tout ce qui n'est pas aux US
                     
                     HStack(spacing: 16) {
-                        DashboardCard(title: "Weighted USA Exposure", value: usaPct.formatted(.percent.precision(.fractionLength(1))), titleIcon: "star.fill", privacyMode: $privacyMode)
-                        DashboardCard(title: "Weighted ROW Exposure", value: rowPct.formatted(.percent.precision(.fractionLength(1))), titleIcon: "globe.europe.africa.fill", privacyMode: $privacyMode)
-                        DashboardCard(title: "Unassigned Revenue", value: unknownPct.formatted(.percent.precision(.fractionLength(1))), titleIcon: "questionmark.circle.fill", privacyMode: $privacyMode)
-                        DashboardCard(title: "Primary Market Target", value: topRegionStr, titleIcon: "chart.bar.fill", privacyMode: $privacyMode)
+                        DashboardCard(title: "Weighted USA Exposure", value: usaPct.formatted(.percent.precision(.fractionLength(1))), privacyMode: $privacyMode)
+                        DashboardCard(title: "Weighted ROW Exposure", value: rowPct.formatted(.percent.precision(.fractionLength(1))), privacyMode: $privacyMode)
+                        DashboardCard(title: "Unassigned Revenue", value: unknownPct.formatted(.percent.precision(.fractionLength(1))),  privacyMode: $privacyMode)
+                        DashboardCard(title: "Primary Market Target", value: topRegionStr, privacyMode: $privacyMode)
                     }
                     HStack(spacing: 16) {
                         DashboardCard(title: "Total Regions Tracked", value: "\(allRegions.count)", titleIcon: nil, privacyMode: $privacyMode)
-                        DashboardCard(title: "Fully Mapped Stocks", value: "\(fullyMapped) / \(viewModel.positions.count)", titleIcon: nil, privacyMode: $privacyMode)
-                        DashboardCard(title: "Max Single-Region Focus", value: maxConcentration.formatted(.percent.precision(.fractionLength(1))), titleIcon: nil, privacyMode: $privacyMode)
-                        DashboardCard(title: "Est. FX Risk (Non-USA)", value: estFxRisk.formatted(.percent.precision(.fractionLength(1))), titleIcon: nil, privacyMode: $privacyMode)
+                        DashboardCard(title: "Fully Mapped Stocks", value: "\(fullyMapped) / \(viewModel.positions.count)", privacyMode: $privacyMode)
+                        DashboardCard(title: "Max Single-Region Focus", value: maxConcentration.formatted(.percent.precision(.fractionLength(1))), privacyMode: $privacyMode)
+                        DashboardCard(title: "Est. FX Risk (Non-USA)", value: estFxRisk.formatted(.percent.precision(.fractionLength(1))),  privacyMode: $privacyMode)
                     }
                 }
                 

@@ -48,9 +48,9 @@ struct WealthView: View {
                 // 1. DASHBOARD: 8 SUMMARY CARDS
                 VStack(spacing: 16) {
                     HStack(spacing: 16) {
-                        DashboardCard(title: "True Net Worth", value: viewModel.trueNetWorth.formatted(.currency(code: "EUR")), titleIcon: "building.columns.fill", privacyMode: $privacyMode)
-                        DashboardCard(title: "Total Assets", value: viewModel.totalAssets.formatted(.currency(code: "EUR")), titleIcon: nil, privacyMode: $privacyMode)
-                        DashboardCard(title: "Total Liabilities", value: viewModel.totalLiabilities.formatted(.currency(code: "EUR")), titleIcon: nil, privacyMode: $privacyMode)
+                        DashboardCard(title: "True Net Worth", value: viewModel.trueNetWorth.formatted(.currency(code: "EUR")), privacyMode: $privacyMode)
+                        DashboardCard(title: "Total Assets", value: viewModel.totalAssets.formatted(.currency(code: "EUR")), privacyMode: $privacyMode)
+                        DashboardCard(title: "Total Liabilities", value: viewModel.totalLiabilities.formatted(.currency(code: "EUR")), privacyMode: $privacyMode)
                         
                         // Net P/L (Assets)
                         VStack(alignment: .leading, spacing: 6) {
@@ -63,8 +63,8 @@ struct WealthView: View {
                     }
                     
                     HStack(spacing: 16) {
-                        DashboardCard(title: "Wealth Goal", value: viewModel.wealthGoalTarget.formatted(.currency(code: "EUR")), titleIcon: "star.fill", privacyMode: $privacyMode)
-                        DashboardCard(title: "Overall Assets ROI", value: viewModel.totalWealthVariationPercent.formatted(.percent.precision(.fractionLength(2)).sign(strategy: .always())), titleIcon: nil, privacyMode: $privacyMode)
+                        DashboardCard(title: "Wealth Goal", value: viewModel.wealthGoalTarget.formatted(.currency(code: "EUR")), privacyMode: $privacyMode)
+                        DashboardCard(title: "Overall Assets ROI", value: viewModel.totalWealthVariationPercent.formatted(.percent.precision(.fractionLength(2)).sign(strategy: .always())), privacyMode: $privacyMode)
                         
                         // Debt-to-Asset Ratio
                         VStack(alignment: .leading, spacing: 6) {
@@ -75,7 +75,7 @@ struct WealthView: View {
                                 .blur(radius: isPrivate ? 8 : 0)
                         }.padding().frame(maxWidth: .infinity, alignment: .leading).frame(height: 110).background(Color(NSColor.controlBackgroundColor)).cornerRadius(10).shadow(color: Color.black.opacity(0.05), radius: 2, x: 0, y: 1)
                         
-                        DashboardCard(title: "Brokerage Weight", value: viewModel.wealthStockWeight.formatted(.percent.precision(.fractionLength(2))), titleIcon: "chart.pie.fill", privacyMode: $privacyMode)
+                        DashboardCard(title: "Brokerage Weight", value: viewModel.wealthStockWeight.formatted(.percent.precision(.fractionLength(2))), privacyMode: $privacyMode)
                     }
                 }
                 

@@ -1,6 +1,10 @@
 FINISH V1.0 BlueChip :
 
-3. demander à l'IA des idées d'ajouts !! que ce soit Pages ou features
+ajouter lignes de tendances à certains graphes (1 growth et 1 dividends)
+
+ajouter lignes de moyennes à certains graphes
+
+supprimer icône à chaque case d'header (reste plus que fundamentals) et ajouter mini description à chaque graphe de l'appli
 
 PLUS TARD :
 
@@ -8,14 +12,8 @@ page Renforcement (voir quelles actions renforcer, avec delta pru - prix actuel,
 
 créer plusieurs portefeuilles
 
-ajouter lignes de tendances à certains graphes (1 growth et 1 dividends)
-
-ajouter lignes de moyennes à graphes
-
 si recherche de graphe ouvre graphe en mode zoom, si recherche event ouvre event en mode zoom
 
-ajouter icône à chaque case d'header et ajouter mini description à chaque graphe de l'appli
-
-export en csv pour pouvoir après redéposer dessus
-
 widgets (calendrier, montant total, dividendes par mois)
+
+ajouter clic sur chaque case du header du dashboard (avec petite explication de ce que c'est en anglais + valeur en grand)

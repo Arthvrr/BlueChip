@@ -124,7 +124,7 @@ struct FundamentalsView: View {
             VStack(spacing: 24) {
                 
                 HStack(spacing: 12) {
-                    Text("Stock Quality Screener").font(.title).fontWeight(.bold)
+                    //Text("Stock Quality Screener").font(.title).fontWeight(.bold)
                     Spacer()
                     
                     // NOUVEAU : Bouton pour réorganiser

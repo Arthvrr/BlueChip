@@ -202,7 +202,7 @@ struct CalendarView: View {
                 
                 // HEADER
                 HStack {
-                    Text("Investor Calendar").font(.title).fontWeight(.bold)
+                    //Text("Investor Calendar").font(.title).fontWeight(.bold)
                     Spacer()
                     
                     // NOUVEAU : Bouton Export iCal
