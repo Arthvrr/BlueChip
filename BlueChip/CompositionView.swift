@@ -23,12 +23,11 @@ struct ModernDonutChart: View {
     @State private var selectedAngleValue: Double? = nil
     @State private var hiddenItems: Set<String> = []
     
-    // MODIFIÉ : Tri alphabétique, mais "Cash" est forcé tout à la fin
     var sortedData: [ChartDataItem] {
         data.sorted { a, b in
-            if a.name == "Cash" { return false } // 'a' (Cash) va à la fin
-            if b.name == "Cash" { return true }  // 'b' (Cash) va à la fin
-            return a.name < b.name               // Le reste est trié par ordre alphabétique
+            if a.name == "Cash" { return false }
+            if b.name == "Cash" { return true }
+            return a.name < b.name
         }
     }
     
@@ -36,9 +35,7 @@ struct ModernDonutChart: View {
         sortedData.filter { !hiddenItems.contains($0.name) }
     }
     
-    // MODIFIÉ : Nouvelle couleur pour le Cash
     func color(for name: String) -> Color {
-        // On remplace .yellow par .teal pour éviter le doublon avec Visa
         if name == "Cash" || name == "Remaining Cash" {
             return Color(red: 0.76, green: 0.84, blue: 0.18)
         }
@@ -51,7 +48,6 @@ struct ModernDonutChart: View {
         return .gray
     }
 
-    
     var body: some View {
         VStack {
             HStack {
@@ -74,7 +70,7 @@ struct ModernDonutChart: View {
                     }
                 }.animation(.easeInOut(duration: 0.2), value: selectedAngleValue)
             }
-            BlueChipWatermark()
+            HStack { Text("Shows the distribution of your \(title.lowercased())").font(.caption2).foregroundColor(.secondary); Spacer(); BlueChipWatermark() }
         }.padding().frame(minHeight: 360, maxHeight: isExpanded ? .infinity : 360).background(Color(NSColor.controlBackgroundColor)).cornerRadius(12).shadow(color: Color.black.opacity(0.05), radius: 2, x: 0, y: 1)
     }
     
@@ -132,7 +128,7 @@ struct PRUPriceChart: View {
                         }
                 }.chartLegend(.hidden).chartXSelection(value: $hoveredTicker)
             }
-            BlueChipWatermark()
+            HStack { Text("Compares average unit cost to the current market price").font(.caption2).foregroundColor(.secondary); Spacer(); BlueChipWatermark() }
         }.padding().frame(minHeight: 360, maxHeight: isExpanded ? .infinity : 360).background(Color(NSColor.controlBackgroundColor)).cornerRadius(12).shadow(color: Color.black.opacity(0.05), radius: 2, x: 0, y: 1)
     }
 }
@@ -140,6 +136,7 @@ struct PRUPriceChart: View {
 struct ROIComboChart: View {
     @ObservedObject var viewModel: PortfolioViewModel
     let positions: [Position]
+    let trueROIValue: Double // Permet le calcul de la moyenne globale
     var isExpanded: Bool = false
     @Binding var expandedChart: ChartZoomType?
     @Binding var privacyMode: Bool
@@ -150,6 +147,17 @@ struct ROIComboChart: View {
     
     var uniqueTickers: [String] { positions.map { $0.ticker }.sorted() }
     var filteredPositions: [Position] { positions.filter { !hiddenTickers.contains($0.ticker) } }
+    
+    // NOUVEAU: Donne une marge d'espace de 25% en haut pour que l'infobulle respire
+    var yMax: Double {
+        let maxROI = filteredPositions.map { $0.roiValue }.max() ?? 100
+        return maxROI > 0 ? maxROI * 1.25 : 100
+    }
+    
+    var yMin: Double {
+        let minROI = filteredPositions.map { $0.roiValue }.min() ?? 0
+        return minROI < 0 ? minROI * 1.25 : 0
+    }
     
     var body: some View {
         VStack {
@@ -163,28 +171,79 @@ struct ROIComboChart: View {
                     Button(action: { withAnimation { if hiddenMetrics.contains("Euros") { hiddenMetrics.remove("Euros") } else { hiddenMetrics.insert("Euros") } } }) {
                         HStack(spacing: 6) { Rectangle().fill(Color.gray.opacity(hiddenMetrics.contains("Euros") ? 0.3 : 0.6)).frame(width: 12, height: 10).cornerRadius(2); Text("P/L (€)").font(.caption).foregroundColor(hiddenMetrics.contains("Euros") ? .secondary : .primary) }
                     }.buttonStyle(.plain)
+                    
                     Button(action: { withAnimation { if hiddenMetrics.contains("Percent") { hiddenMetrics.remove("Percent") } else { hiddenMetrics.insert("Percent") } } }) {
                         HStack(spacing: 6) { Circle().stroke(Color.gray, lineWidth: 2).frame(width: 10, height: 10); Text("P/L (%)").font(.caption).foregroundColor(hiddenMetrics.contains("Percent") ? .secondary : .primary) }
                     }.buttonStyle(.plain).opacity(hiddenMetrics.contains("Percent") ? 0.4 : 1.0)
+                    
+                    Button(action: { withAnimation { if hiddenMetrics.contains("Average") { hiddenMetrics.remove("Average") } else { hiddenMetrics.insert("Average") } } }) {
+                        HStack(spacing: 6) { Rectangle().fill(Color.gray.opacity(0.5)).frame(width: 12, height: 2); Text("Avg (€)").font(.caption).foregroundColor(hiddenMetrics.contains("Average") ? .secondary : .primary) }
+                    }.buttonStyle(.plain).opacity(hiddenMetrics.contains("Average") ? 0.4 : 1.0)
                 }
                 InteractiveLegendView(items: uniqueTickers, colorMap: { viewModel.color(for: $0) }, hiddenItems: $hiddenTickers)
             }.padding(.bottom, 8)
+            
             if filteredPositions.isEmpty { Spacer(); Text("No data").foregroundColor(.secondary); Spacer() } else {
                 Chart {
+                    if !hiddenMetrics.contains("Average") {
+                        let avgROI = trueROIValue / Double(max(1, positions.count))
+                        RuleMark(y: .value("Average P/L", avgROI))
+                            .foregroundStyle(Color.gray.opacity(0.5))
+                            .lineStyle(StrokeStyle(lineWidth: 1.5, dash: [4, 4]))
+                            .annotation(position: .top, alignment: .leading) {
+                                Text("Avg: \(avgROI.formatted(.currency(code: "EUR").precision(.fractionLength(0))))")
+                                    .font(.caption2).foregroundColor(.gray)
+                                    .blur(radius: privacyMode ? 6 : 0)
+                            }
+                    }
+                    
                     ForEach(filteredPositions) { pos in
                         if !hiddenMetrics.contains("Euros") {
-                            BarMark(x: .value("Ticker", pos.ticker), y: .value("P/L (€)", pos.roiValue)).foregroundStyle(pos.roiValue >= 0 ? Color.green.opacity(0.7) : Color.red.opacity(0.7)).cornerRadius(4)
-                                .annotation(position: pos.roiValue >= 0 ? .top : .bottom) { if hoveredTicker == pos.ticker { Text(pos.roiValue.formatted(.currency(code: "EUR"))).font(.system(size: 9, weight: .bold)).blur(radius: privacyMode ? 6 : 0).padding(2).background(Color(NSColor.windowBackgroundColor).opacity(0.8)).cornerRadius(2) } }
+                            BarMark(x: .value("Ticker", pos.ticker), y: .value("P/L (€)", pos.roiValue))
+                                .foregroundStyle(pos.roiValue >= 0 ? Color.green.opacity(0.7) : Color.red.opacity(0.7))
+                                .cornerRadius(4)
                         }
                         if !hiddenMetrics.contains("Percent") {
-                            LineMark(x: .value("Ticker", pos.ticker), y: .value("P/L (%)", pos.roiValue)).foregroundStyle(Color.primary.opacity(0.6)).interpolationMethod(.monotone)
-                            PointMark(x: .value("Ticker", pos.ticker), y: .value("P/L (%)", pos.roiValue)).foregroundStyle(Color.primary)
-                                .annotation(position: pos.roiValue >= 0 ? .top : .bottom) { if hoveredTicker == pos.ticker { Text(pos.roiPercent.formatted(.percent.precision(.fractionLength(1)))).font(.system(size: 9, weight: .bold)).blur(radius: privacyMode ? 6 : 0).padding(2).background(Color(NSColor.windowBackgroundColor).opacity(0.8)).cornerRadius(2).offset(y: pos.roiValue >= 0 ? -15 : 15) } }
+                            LineMark(x: .value("Ticker", pos.ticker), y: .value("P/L (%)", pos.roiValue))
+                                .foregroundStyle(Color.primary.opacity(0.6))
+                                .interpolationMethod(.monotone)
+                            PointMark(x: .value("Ticker", pos.ticker), y: .value("P/L (%)", pos.roiValue))
+                                .foregroundStyle(Color.primary)
                         }
                     }
-                }.chartLegend(.hidden).chartXSelection(value: $hoveredTicker)
+                    
+                    // NOUVEAU: Le RuleMark centralise l'infobulle ! (Zéro erreur de compilation, zéro écrasement)
+                    if let hTicker = hoveredTicker, let pos = filteredPositions.first(where: { $0.ticker == hTicker }) {
+                        RuleMark(x: .value("Ticker", hTicker))
+                            .foregroundStyle(Color.secondary.opacity(0.3))
+                            .zIndex(-1)
+                            .annotation(position: .top, overflowResolution: .init(x: .fit(to: .chart), y: .fit(to: .chart))) {
+                                VStack(alignment: .center, spacing: 4) {
+                                    Text(hTicker).font(.caption.bold())
+                                    if !hiddenMetrics.contains("Euros") {
+                                        Text(pos.roiValue.formatted(.currency(code: "EUR")))
+                                            .font(.caption2)
+                                            .foregroundColor(pos.roiValue >= 0 ? .green : .red)
+                                            .blur(radius: privacyMode ? 6 : 0)
+                                    }
+                                    if !hiddenMetrics.contains("Percent") {
+                                        Text(pos.roiPercent.formatted(.percent.precision(.fractionLength(1))))
+                                            .font(.caption2)
+                                            .blur(radius: privacyMode ? 6 : 0)
+                                    }
+                                }
+                                .padding(6)
+                                .background(Color(NSColor.windowBackgroundColor).opacity(0.95))
+                                .cornerRadius(6)
+                                .shadow(radius: 4)
+                            }
+                    }
+                }
+                .chartLegend(.hidden)
+                .chartXSelection(value: $hoveredTicker)
+                .chartYScale(domain: yMin...yMax)
             }
-            BlueChipWatermark()
+            HStack { Text("Displays absolute (€) and relative (%) unrealized gains or losses").font(.caption2).foregroundColor(.secondary); Spacer(); BlueChipWatermark() }
         }.padding().frame(minHeight: 360, maxHeight: isExpanded ? .infinity : 360).background(Color(NSColor.controlBackgroundColor)).cornerRadius(12).shadow(color: Color.black.opacity(0.05), radius: 2, x: 0, y: 1)
     }
 }
@@ -232,7 +291,7 @@ struct ModernScatterPlotChart: View {
                  .chartYAxis { AxisMarks { value in AxisGridLine(); AxisTick(); if let v = value.as(Double.self) { AxisValueLabel(v.formatted(.percent.precision(.fractionLength(0)))) } } }
                  .chartXSelection(value: $hoveredWeight)
             }
-            BlueChipWatermark()
+            HStack { Text("Visualizes the relationship between position weight and performance").font(.caption2).foregroundColor(.secondary); Spacer(); BlueChipWatermark() }
         }.padding().frame(minHeight: 360, maxHeight: isExpanded ? .infinity : 360).background(Color(NSColor.controlBackgroundColor)).cornerRadius(12).shadow(color: Color.black.opacity(0.05), radius: 2, x: 0, y: 1)
     }
 }
@@ -278,7 +337,7 @@ struct CapitalStatusChart: View {
                     }
                 }.animation(.easeInOut(duration: 0.2), value: selectedAngleValue)
             }
-            BlueChipWatermark()
+            HStack { Text("Breaks down total invested capital into profitable vs underwater positions").font(.caption2).foregroundColor(.secondary); Spacer(); BlueChipWatermark() }
         }.padding().frame(minHeight: 360, maxHeight: isExpanded ? .infinity : 360).background(Color(NSColor.controlBackgroundColor)).cornerRadius(12).shadow(color: Color.black.opacity(0.05), radius: 2, x: 0, y: 1)
     }
     func findItem(for value: Double) -> ChartDataItem { var cum = 0.0; for item in filteredData { cum += item.value; if value <= cum { return item } }; return filteredData.last! }
@@ -356,7 +415,7 @@ struct PerformanceHeatmap: View {
             if positions.isEmpty { Spacer(); Text("No data").foregroundColor(.secondary); Spacer() } else {
                 GeometryReader { geo in ZStack(alignment: .topLeading) { ForEach(layoutNodes(in: CGRect(origin: .zero, size: geo.size))) { node in HeatmapNodeView(node: node, hoveredTicker: $hoveredTicker, privacyMode: $privacyMode) } } }
             }
-            BlueChipWatermark()
+            HStack { Text("Area represents position value, color intensity represents P/L (%)").font(.caption2).foregroundColor(.secondary); Spacer(); BlueChipWatermark() }
         }.padding().frame(minHeight: 360, maxHeight: isExpanded ? .infinity : 360).background(Color(NSColor.controlBackgroundColor)).cornerRadius(12).shadow(color: Color.black.opacity(0.05), radius: 2, x: 0, y: 1)
     }
 }
@@ -374,6 +433,17 @@ struct DailyROIChart: View {
     var uniqueTickers: [String] { positions.map { $0.ticker }.sorted() }
     var filteredPositions: [Position] { positions.filter { !hiddenTickers.contains($0.ticker) } }
     
+    // NOUVEAU: Donne une marge d'espace de 25% en haut et en bas
+    var yMax: Double {
+        let maxVal = filteredPositions.map { $0.dailyROIValue }.max() ?? 10
+        return maxVal > 0 ? maxVal * 1.25 : 10
+    }
+    
+    var yMin: Double {
+        let minVal = filteredPositions.map { $0.dailyROIValue }.min() ?? 0
+        return minVal < 0 ? minVal * 1.25 : 0
+    }
+    
     var body: some View {
         VStack {
             HStack {
@@ -384,15 +454,38 @@ struct DailyROIChart: View {
             InteractiveLegendView(items: uniqueTickers, colorMap: { viewModel.color(for: $0) }, hiddenItems: $hiddenTickers).padding(.bottom, 8)
             
             if filteredPositions.isEmpty { Spacer(); Text("No data").foregroundColor(.secondary); Spacer() } else {
-                Chart(filteredPositions) { pos in
-                    BarMark(x: .value("Ticker", pos.ticker), y: .value("Daily P/L", pos.dailyROIValue))
-                        .foregroundStyle(pos.dailyROIValue >= 0 ? Color.green.opacity(0.7) : Color.red.opacity(0.7)).cornerRadius(4)
-                        .annotation(position: pos.dailyROIValue >= 0 ? .top : .bottom) {
-                            if hoveredTicker == pos.ticker { Text(pos.dailyROIValue.formatted(.currency(code: "EUR").sign(strategy: .always()))).font(.system(size: 9, weight: .bold)).blur(radius: privacyMode ? 6 : 0).padding(2).background(Color(NSColor.windowBackgroundColor).opacity(0.8)).cornerRadius(2) }
-                        }
-                }.chartLegend(.hidden).chartXSelection(value: $hoveredTicker)
+                Chart {
+                    ForEach(filteredPositions) { pos in
+                        BarMark(x: .value("Ticker", pos.ticker), y: .value("Daily P/L", pos.dailyROIValue))
+                            .foregroundStyle(pos.dailyROIValue >= 0 ? Color.green.opacity(0.7) : Color.red.opacity(0.7))
+                            .cornerRadius(4)
+                    }
+                    
+                    // NOUVEAU: Le RuleMark centralise l'infobulle pour éviter les erreurs de compilation et l'écrasement
+                    if let hTicker = hoveredTicker, let pos = filteredPositions.first(where: { $0.ticker == hTicker }) {
+                        RuleMark(x: .value("Ticker", hTicker))
+                            .foregroundStyle(Color.secondary.opacity(0.3))
+                            .zIndex(-1)
+                            .annotation(position: .top, overflowResolution: .init(x: .fit(to: .chart), y: .fit(to: .chart))) {
+                                VStack(alignment: .center, spacing: 4) {
+                                    Text(hTicker).font(.caption.bold())
+                                    Text(pos.dailyROIValue.formatted(.currency(code: "EUR").sign(strategy: .always())))
+                                        .font(.caption2)
+                                        .foregroundColor(pos.dailyROIValue >= 0 ? .green : .red)
+                                        .blur(radius: privacyMode ? 6 : 0)
+                                }
+                                .padding(6)
+                                .background(Color(NSColor.windowBackgroundColor).opacity(0.95))
+                                .cornerRadius(6)
+                                .shadow(radius: 4)
+                            }
+                    }
+                }
+                .chartLegend(.hidden)
+                .chartXSelection(value: $hoveredTicker)
+                .chartYScale(domain: yMin...yMax) // NOUVEAU: Applique les marges dynamiques
             }
-            BlueChipWatermark()
+            HStack { Text("Daily profit or loss contribution by holding").font(.caption2).foregroundColor(.secondary); Spacer(); BlueChipWatermark() }
         }.padding().frame(minHeight: 360, maxHeight: isExpanded ? .infinity : 360).background(Color(NSColor.controlBackgroundColor)).cornerRadius(12).shadow(color: Color.black.opacity(0.05), radius: 2, x: 0, y: 1)
     }
 }
@@ -499,6 +592,11 @@ struct FullScreenChartView: View {
         return dict.map { ChartDataItem(name: $0.key, value: $0.value) }.sorted { $0.value > $1.value }
     }
     
+    var trueROIValue: Double {
+        let totalInvested = viewModel.manuallyInvested > 0 ? viewModel.manuallyInvested : viewModel.positionsInvestedSum
+        return viewModel.currentTotalCapital - totalInvested
+    }
+    
     var body: some View {
         VStack(spacing: 20) {
             HStack { Text(titleForZoom).font(.title).fontWeight(.bold); Spacer(); Button(action: { dismiss() }) { Image(systemName: "xmark.circle.fill").font(.title).foregroundColor(.secondary) }.buttonStyle(.plain) }
@@ -508,12 +606,12 @@ struct FullScreenChartView: View {
             case .sectors: ModernDonutChart(data: viewModel.allocationBySector, title: "Sector Allocation", zoomType: zoomType, palette: sectorColors, isExpanded: true, expandedChart: .constant(nil), privacyMode: $privacyMode)
             case .marketCaps: ModernDonutChart(data: viewModel.allocationByMarketCap, title: "Market Cap Allocation", zoomType: zoomType, palette: marketCapColors, isExpanded: true, expandedChart: .constant(nil), privacyMode: $privacyMode)
             case .priceCompare: PRUPriceChart(viewModel: viewModel, data: viewModel.priceComparisonData, isExpanded: true, expandedChart: .constant(nil), privacyMode: $privacyMode)
-            case .roiCombo: ROIComboChart(viewModel: viewModel, positions: viewModel.positions, isExpanded: true, expandedChart: .constant(nil), privacyMode: $privacyMode)
+            case .roiCombo: ROIComboChart(viewModel: viewModel, positions: viewModel.positions, trueROIValue: trueROIValue, isExpanded: true, expandedChart: .constant(nil), privacyMode: $privacyMode)
             case .scatter: ModernScatterPlotChart(viewModel: viewModel, data: viewModel.scatterData, isExpanded: true, expandedChart: .constant(nil), privacyMode: $privacyMode)
             case .capitalStatus: CapitalStatusChart(data: viewModel.capitalStatusData, isExpanded: true, expandedChart: .constant(nil), privacyMode: $privacyMode)
             case .heatmap: PerformanceHeatmap(positions: viewModel.positions, isExpanded: true, expandedChart: .constant(nil), privacyMode: $privacyMode)
             case .dailyRoi: DailyROIChart(viewModel: viewModel, positions: viewModel.positions, isExpanded: true, expandedChart: .constant(nil), privacyMode: $privacyMode)
-            case .currencies: ModernDonutChart(data: allocationByCurrency, title: "Currency Exposure", zoomType: zoomType, palette: [.blue, .green, .orange, .purple, .teal], isExpanded: true, expandedChart: .constant(nil), privacyMode: $privacyMode)
+            case .currencies: ModernDonutChart(data: allocationByCurrency, title: "Currency Exposure", zoomType: zoomType, palette: [.blue, .green, .orange, .purple, .teal, .indigo, .pink], isExpanded: true, expandedChart: .constant(nil), privacyMode: $privacyMode)
             case .correlation: CorrelationMatrixChart(viewModel: viewModel, isExpanded: true, expandedChart: .constant(nil), privacyMode: $privacyMode)
             }
         }.padding(30).frame(minWidth: 900, minHeight: 700)
@@ -549,7 +647,6 @@ struct CompositionTabView: View {
     @State private var showInvestedSheet = false
     @State private var showGoalSheet = false
     
-    // NOUVEAU: Pour différencier Ajouter / Éditer
     @State private var showAddPositionSheet = false
     @State private var positionToEdit: Position? = nil
     
@@ -579,14 +676,14 @@ struct CompositionTabView: View {
         return dict.map { ChartDataItem(name: $0.key, value: $0.value) }.sorted { $0.value > $1.value }
     }
     
-    // HAUTEUR DYNAMIQUE RESPONSIVE (Demande 3)
+    // HAUTEUR DYNAMIQUE RESPONSIVE
     var dynamicTableHeight: CGFloat {
-        let rowHeight: CGFloat = 36 // Hauteur légèrement augmentée pour le logo et nom d'entreprise
+        let rowHeight: CGFloat = 36
         let headerHeight: CGFloat = 40
-        let baseHeight: CGFloat = 100 // État vide
+        let baseHeight: CGFloat = 100
         if viewModel.positions.isEmpty { return baseHeight }
         let calculated = CGFloat(viewModel.positions.count) * rowHeight + headerHeight + 20
-        return min(max(calculated, 150), 600) // Entre 150pt et 600pt max
+        return min(max(calculated, 150), 600)
     }
     
     var body: some View {
@@ -595,8 +692,8 @@ struct CompositionTabView: View {
                 // --- DASHBOARD ---
                 VStack(spacing: 16) {
                     HStack(spacing: 16) {
-                        Button(action: { showCashSheet = true }) { DashboardCard(title: "Cash", value: viewModel.availableCash.formatted(.currency(code: "EUR")), titleIcon: "pencil", privacyMode: $privacyMode) }.buttonStyle(.plain)
-                        Button(action: { showInvestedSheet = true }) { DashboardCard(title: "Initial Investment", value: viewModel.manuallyInvested.formatted(.currency(code: "EUR")), titleIcon: "pencil", privacyMode: $privacyMode) }.buttonStyle(.plain)
+                        Button(action: { showCashSheet = true }) { DashboardCard(title: "Cash", value: viewModel.availableCash.formatted(.currency(code: "EUR")), privacyMode: $privacyMode) }.buttonStyle(.plain)
+                        Button(action: { showInvestedSheet = true }) { DashboardCard(title: "Initial Investment", value: viewModel.manuallyInvested.formatted(.currency(code: "EUR")), privacyMode: $privacyMode) }.buttonStyle(.plain)
                         DashboardCard(title: "Total (Current + Cash)", value: viewModel.currentTotalCapital.formatted(.currency(code: "EUR")), privacyMode: $privacyMode)
                         DashboardCard(title: "Stock Value", value: viewModel.totalValue.formatted(.currency(code: "EUR")), privacyMode: $privacyMode)
                     }
@@ -616,71 +713,100 @@ struct CompositionTabView: View {
                 GoalProgressBar(title: viewModel.currentGoalType.rawValue, currentValue: viewModel.currentGoalValue, targetValue: viewModel.currentGoalTarget, privacyMode: $privacyMode).contentShape(Rectangle()).onTapGesture(count: 2) { showGoalSheet = true }
                 
                 // --- TABLE ---
-                VStack(spacing: 0) {
+                VStack(alignment: .leading, spacing: 8) {
+                    HStack {
+                        Text("Positions Breakdown").font(.title2).fontWeight(.bold).foregroundColor(.secondary)
+                        Spacer()
+                        Text("(Double-click a position to edit)").font(.caption).foregroundColor(.secondary).italic()
+                    }.padding(.bottom, 4)
                     
-                    Table(viewModel.positions, selection: $selection, sortOrder: $viewModel.sortOrder) {
-                        TableColumn("Ticker", value: \.ticker) { position in
-                            HStack {
-                                if let logoData = position.logoData, let nsImage = NSImage(data: logoData) {
-                                    Image(nsImage: nsImage)
-                                        .resizable()
-                                        .scaledToFit()
-                                        .scaleEffect(position.logoScale) // <-- Applique le zoom choisi
-                                        .frame(width: 24, height: 24)
-                                        .background(Color.white)
-                                        .clipShape(Circle())
-                                } else {
-                                    Circle().fill(viewModel.color(for: position.ticker).opacity(0.8))
-                                        .frame(width: 24, height: 24)
-                                        .overlay(Text(position.ticker.prefix(1)).font(.caption).fontWeight(.bold).foregroundColor(.white))
-                                }
-                                
-                                VStack(alignment: .leading, spacing: 2) {
-                                    Text(position.ticker).font(.system(.body, design: .monospaced)).fontWeight(.bold)
-                                    if !position.companyName.isEmpty {
-                                        Text(position.companyName).font(.system(size: 9)).foregroundColor(.secondary).lineLimit(1)
+                    VStack(spacing: 0) {
+                        Table(viewModel.positions, selection: $selection, sortOrder: $viewModel.sortOrder) {
+                            TableColumn("Ticker", value: \.ticker) { position in
+                                HStack {
+                                    if let logoData = position.logoData, let nsImage = NSImage(data: logoData) {
+                                        Image(nsImage: nsImage)
+                                            .resizable()
+                                            .scaledToFit()
+                                            .scaleEffect(position.logoScale)
+                                            .frame(width: 24, height: 24)
+                                            .background(Color.white)
+                                            .clipShape(Circle())
+                                    } else {
+                                        Circle().fill(viewModel.color(for: position.ticker).opacity(0.8))
+                                            .frame(width: 24, height: 24)
+                                            .overlay(Text(position.ticker.prefix(1)).font(.caption).fontWeight(.bold).foregroundColor(.white))
+                                    }
+                                    
+                                    VStack(alignment: .leading, spacing: 2) {
+                                        Text(position.ticker).font(.system(.body, design: .monospaced)).fontWeight(.bold)
+                                        if !position.companyName.isEmpty {
+                                            Text(position.companyName).font(.system(size: 9)).foregroundColor(.secondary).lineLimit(1)
+                                        }
                                     }
                                 }
+                                .contentShape(Rectangle()).onTapGesture(count: 2) { positionToEdit = position }.contextMenu { Button(role: .destructive) { viewModel.deletePosition(id: position.id) } label: { Label("Delete", systemImage: "trash") } }
                             }
-                            .contentShape(Rectangle()).onTapGesture(count: 2) { positionToEdit = position }.contextMenu { Button(role: .destructive) { viewModel.deletePosition(id: position.id) } label: { Label("Delete", systemImage: "trash") } }
+                            
+                            TableColumn("Qty", value: \.quantity) { pos in Text("\(pos.quantity, specifier: "%.2f")").blur(radius: privacyMode ? 6 : 0).frame(maxWidth: .infinity, alignment: .leading).contentShape(Rectangle()).onTapGesture(count: 2) { positionToEdit = pos } }
+                            TableColumn("Price", value: \.currentPrice) { pos in Text(pos.currentPrice, format: .currency(code: pos.currency)).blur(radius: privacyMode ? 6 : 0).frame(maxWidth: .infinity, alignment: .leading).contentShape(Rectangle()).onTapGesture(count: 2) { positionToEdit = pos } }
+                            TableColumn("Avg Cost", value: \.averageCost) { pos in Text(pos.averageCost, format: .currency(code: pos.currency)).foregroundColor(.secondary).blur(radius: privacyMode ? 6 : 0).frame(maxWidth: .infinity, alignment: .leading).contentShape(Rectangle()).onTapGesture(count: 2) { positionToEdit = pos } }
+                            TableColumn("Total Value", value: \.currentValueEUR) { pos in Text(pos.currentValueEUR, format: .currency(code: "EUR")).fontWeight(.medium).blur(radius: privacyMode ? 6 : 0).frame(maxWidth: .infinity, alignment: .leading).contentShape(Rectangle()).onTapGesture(count: 2) { positionToEdit = pos } }
+                            TableColumn("P/L €", value: \.roiValue) { pos in Text(pos.roiValue, format: .currency(code: "EUR").sign(strategy: .always())).foregroundColor(getColor(for: pos.roiValue)).fontWeight(.medium).blur(radius: privacyMode ? 6 : 0).frame(maxWidth: .infinity, alignment: .leading).contentShape(Rectangle()).onTapGesture(count: 2) { positionToEdit = pos } }
+                            TableColumn("P/L %", value: \.roiPercent) { pos in Text(pos.roiPercent, format: .percent.precision(.fractionLength(2)).sign(strategy: .always())).padding(.horizontal, 8).padding(.vertical, 2).background(getColor(for: pos.roiValue).opacity(0.1)).foregroundColor(getColor(for: pos.roiValue)).cornerRadius(4).blur(radius: privacyMode ? 6 : 0).frame(maxWidth: .infinity, alignment: .leading).contentShape(Rectangle()).onTapGesture(count: 2) { positionToEdit = pos } }
                         }
-                        
-                        TableColumn("Qty", value: \.quantity) { pos in Text("\(pos.quantity, specifier: "%.2f")").blur(radius: privacyMode ? 6 : 0).frame(maxWidth: .infinity, alignment: .leading).contentShape(Rectangle()).onTapGesture(count: 2) { positionToEdit = pos } }
-                        TableColumn("Price", value: \.currentPrice) { pos in Text(pos.currentPrice, format: .currency(code: pos.currency)).blur(radius: privacyMode ? 6 : 0).frame(maxWidth: .infinity, alignment: .leading).contentShape(Rectangle()).onTapGesture(count: 2) { positionToEdit = pos } }
-                        TableColumn("Avg Cost", value: \.averageCost) { pos in Text(pos.averageCost, format: .currency(code: pos.currency)).foregroundColor(.secondary).blur(radius: privacyMode ? 6 : 0).frame(maxWidth: .infinity, alignment: .leading).contentShape(Rectangle()).onTapGesture(count: 2) { positionToEdit = pos } }
-                        TableColumn("Total Value", value: \.currentValueEUR) { pos in Text(pos.currentValueEUR, format: .currency(code: "EUR")).fontWeight(.medium).blur(radius: privacyMode ? 6 : 0).frame(maxWidth: .infinity, alignment: .leading).contentShape(Rectangle()).onTapGesture(count: 2) { positionToEdit = pos } }
-                        TableColumn("P/L €", value: \.roiValue) { pos in Text(pos.roiValue, format: .currency(code: "EUR").sign(strategy: .always())).foregroundColor(getColor(for: pos.roiValue)).fontWeight(.medium).blur(radius: privacyMode ? 6 : 0).frame(maxWidth: .infinity, alignment: .leading).contentShape(Rectangle()).onTapGesture(count: 2) { positionToEdit = pos } }
-                        TableColumn("P/L %", value: \.roiPercent) { pos in Text(pos.roiPercent, format: .percent.precision(.fractionLength(2)).sign(strategy: .always())).padding(.horizontal, 8).padding(.vertical, 2).background(getColor(for: pos.roiValue).opacity(0.1)).foregroundColor(getColor(for: pos.roiValue)).cornerRadius(4).blur(radius: privacyMode ? 6 : 0).frame(maxWidth: .infinity, alignment: .leading).contentShape(Rectangle()).onTapGesture(count: 2) { positionToEdit = pos } }
+                        .tableStyle(.inset)
                     }
-                    .tableStyle(.inset)
+                    .frame(height: dynamicTableHeight)
+                    .background(Color(NSColor.controlBackgroundColor))
+                    .cornerRadius(8)
+                    .overlay(RoundedRectangle(cornerRadius: 8).stroke(Color.gray.opacity(0.2), lineWidth: 1))
                 }
-                .frame(height: dynamicTableHeight)
-                .background(Color(NSColor.controlBackgroundColor))
-                .cornerRadius(12)
-                .shadow(color: Color.black.opacity(0.05), radius: 2, x: 0, y: 1)
+                .padding().background(Color(NSColor.controlBackgroundColor)).cornerRadius(12).shadow(color: Color.black.opacity(0.05), radius: 2, x: 0, y: 1)
                 
-                // --- CHARTS (12 GRAPHS) ---
-                VStack(spacing: 24) {
+                // --- CHARTS ---
+                VStack(alignment: .leading, spacing: 12) {
+                    Text("Asset Allocation Overview").font(.title2).fontWeight(.bold).foregroundColor(.secondary)
                     HStack(spacing: 24) {
                         ModernDonutChart(data: viewModel.allocationByPosition, title: "Weight by Position", zoomType: .positions, palette: positionColors, expandedChart: $chartToZoom, privacyMode: $privacyMode)
                         ModernDonutChart(data: viewModel.allocationByCountry, title: "Geographic Exposure", zoomType: .countries, palette: geographicColors, expandedChart: $chartToZoom, privacyMode: $privacyMode)
                     }
+                }
+                
+                VStack(alignment: .leading, spacing: 12) {
+                    Text("Sector & Market Cap Breakdown").font(.title2).fontWeight(.bold).foregroundColor(.secondary)
                     HStack(spacing: 24) {
                         ModernDonutChart(data: viewModel.allocationBySector, title: "Sector Allocation", zoomType: .sectors, palette: sectorColors, expandedChart: $chartToZoom, privacyMode: $privacyMode)
                         ModernDonutChart(data: viewModel.allocationByMarketCap, title: "Market Cap Allocation", zoomType: .marketCaps, palette: marketCapColors, expandedChart: $chartToZoom, privacyMode: $privacyMode)
                     }
+                }
+                
+                VStack(alignment: .leading, spacing: 12) {
+                    Text("Currency Exposure & Asset Correlation").font(.title2).fontWeight(.bold).foregroundColor(.secondary)
                     HStack(spacing: 24) {
                         ModernDonutChart(data: allocationByCurrency, title: "Currency Exposure", zoomType: .currencies, palette: [.blue, .green, .orange, .purple, .teal, .indigo, .pink], expandedChart: $chartToZoom, privacyMode: $privacyMode)
                         CorrelationMatrixChart(viewModel: viewModel, expandedChart: $chartToZoom, privacyMode: $privacyMode)
                     }
+                }
+                
+                VStack(alignment: .leading, spacing: 12) {
+                    Text("Valuation & Performance").font(.title2).fontWeight(.bold).foregroundColor(.secondary)
                     HStack(spacing: 24) {
                         PRUPriceChart(viewModel: viewModel, data: viewModel.priceComparisonData, expandedChart: $chartToZoom, privacyMode: $privacyMode)
-                        ROIComboChart(viewModel: viewModel, positions: viewModel.positions, expandedChart: $chartToZoom, privacyMode: $privacyMode)
+                        ROIComboChart(viewModel: viewModel, positions: viewModel.positions, trueROIValue: trueROIValue, expandedChart: $chartToZoom, privacyMode: $privacyMode)
                     }
+                }
+                
+                VStack(alignment: .leading, spacing: 12) {
+                    Text("Risk & Capital Status").font(.title2).fontWeight(.bold).foregroundColor(.secondary)
                     HStack(spacing: 24) {
                         ModernScatterPlotChart(viewModel: viewModel, data: viewModel.scatterData, expandedChart: $chartToZoom, privacyMode: $privacyMode)
                         CapitalStatusChart(data: viewModel.capitalStatusData, expandedChart: $chartToZoom, privacyMode: $privacyMode)
                     }
+                }
+                
+                VStack(alignment: .leading, spacing: 12) {
+                    Text("Momentum & Daily Action").font(.title2).fontWeight(.bold).foregroundColor(.secondary)
                     HStack(spacing: 24) {
                         PerformanceHeatmap(positions: viewModel.positions, expandedChart: $chartToZoom, privacyMode: $privacyMode)
                         DailyROIChart(viewModel: viewModel, positions: viewModel.positions, expandedChart: $chartToZoom, privacyMode: $privacyMode)
@@ -729,7 +855,7 @@ struct EditPositionView: View {
     // Importation de fichier (Finder) et paramètre de Zoom
     @State private var showFileImporter = false
     @State private var logoData: Data? = nil
-    @State private var logoScale: Double = 1.0 // <-- NOUVEAU: Mémorise le zoom
+    @State private var logoScale: Double = 1.0 // <-- Mémorise le zoom
     
     let monthsLabel = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"]
 
@@ -925,7 +1051,7 @@ struct EditPositionView: View {
         ticker = pos.ticker
         companyName = pos.companyName
         logoData = pos.logoData
-        logoScale = pos.logoScale // <-- On récupère le zoom sauvegardé
+        logoScale = pos.logoScale
         country = pos.country
         sector = pos.sector
         marketCap = pos.marketCap
@@ -960,10 +1086,8 @@ struct EditPositionView: View {
             pos.dividendMonths = selectedMonths
             viewModel.objectWillChange.send()
         } else {
-            // NOUVEAU : 1. Vérifier si le Ticker existe déjà dans le portefeuille
             if let existingPos = viewModel.positions.first(where: { $0.ticker == cleanTicker }) {
                 
-                // 2. Fusionner : Calculer le nouveau PRU pondéré et additionner les quantités
                 let totalQty = existingPos.quantity + safeQty
                 if totalQty > 0 {
                     let currentTotalCost = existingPos.quantity * existingPos.averageCost
@@ -972,7 +1096,6 @@ struct EditPositionView: View {
                 }
                 existingPos.quantity = totalQty
                 
-                // 3. Optionnel : Mettre à jour les autres infos si elles ont été saisies lors de ce "renforcement"
                 if !companyName.isEmpty { existingPos.companyName = companyName }
                 if logoData != nil {
                     existingPos.logoData = logoData
@@ -980,18 +1103,16 @@ struct EditPositionView: View {
                 }
                 if safeDiv > 0 { existingPos.annualDividendNet = safeDiv }
                 
-                // On prévient l'interface de se mettre à jour
                 viewModel.objectWillChange.send()
                 
             } else {
-                // COMME AVANT : Création d'une toute nouvelle position
                 let newPos = Position(
                     id: UUID(),
                     ticker: cleanTicker,
                     quantity: safeQty,
                     averageCost: safeAvg,
                     currentPrice: 0.0,
-                    currency: "USD", // Par défaut USD pour actions US/ADR comme TSM
+                    currency: "USD",
                     usdToEurRate: 0.92,
                     annualDividendNet: safeDiv,
                     country: country,
@@ -1008,20 +1129,15 @@ struct EditPositionView: View {
                 context.insert(newPos)
                 viewModel.positions.append(newPos)
                 
-                // Fetch automatique du cours et de la devise réelle dès l'ajout
                 Task {
                     let service = YahooFinanceService()
-                    
-                    // 1. Récupère le prix de l'action
                     if let data = await service.fetchStockData(for: cleanTicker) {
                         await MainActor.run {
                             newPos.currentPrice = data.price
                             newPos.currency = data.currency
                         }
                         
-                        // 2. Si la devise est l'USD, on va chercher le vrai taux de change en direct
                         if data.currency.uppercased() == "USD" {
-                            // "EUR=X" est le ticker Yahoo Finance pour le taux USD/EUR
                             if let fxData = await service.fetchStockData(for: "EUR=X") {
                                 await MainActor.run {
                                     newPos.usdToEurRate = fxData.price
@@ -1031,7 +1147,6 @@ struct EditPositionView: View {
                                 await MainActor.run { viewModel.objectWillChange.send() }
                             }
                         } else if data.currency.uppercased() == "EUR" {
-                            // Si c'est déjà en Euro, le taux est de 1
                             await MainActor.run {
                                 newPos.usdToEurRate = 1.0
                                 viewModel.objectWillChange.send()
@@ -1045,6 +1160,4 @@ struct EditPositionView: View {
         }
         dismiss()
     }
-
-
 }
