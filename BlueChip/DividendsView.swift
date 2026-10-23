@@ -367,10 +367,6 @@ struct DividendsGrowthAndSeasonalitySection: View {
     }
 }
 
-// =========================================================================
-// MARK: - DIVIDEND CUSTOM UI COMPONENTS & CHARTS
-// =========================================================================
-
 // MARK: - CHART 1: EXPECTED MONTHLY
 struct ExpectedMonthlyDividendChart: View {
     @ObservedObject var viewModel: PortfolioViewModel
@@ -406,6 +402,17 @@ struct ExpectedMonthlyDividendChart: View {
         aggregatedData.filter { !hiddenTypes.contains($0.type) }
     }
     
+    // NOUVEAU : Calcul des moyennes mensuelles
+    var averageGross: Double {
+        let allGross = aggregatedData.filter { $0.type == "Gross" }.map { $0.amount }
+        return allGross.reduce(0, +) / 12.0
+    }
+    
+    var averageNet: Double {
+        let allNet = aggregatedData.filter { $0.type == "Net" }.map { $0.amount }
+        return allNet.reduce(0, +) / 12.0
+    }
+    
     var yMaxStatic: Double {
         let maxTotal = filteredData.map { $0.amount }.max() ?? 10.0
         return maxTotal > 0 ? maxTotal * 1.25 : 100.0
@@ -419,30 +426,54 @@ struct ExpectedMonthlyDividendChart: View {
                 if !isExpanded { Button(action: { expandedChart = .expectedMonthly }) { Image(systemName: "plus.magnifyingglass").foregroundColor(.secondary) }.buttonStyle(.plain) }
             }.padding(.bottom, 4)
             
+            // NOUVEAU : Légende interactive à 4 éléments
             HStack(spacing: 16) {
                 Button(action: { toggle("Gross") }) {
-                    HStack(spacing: 6) { Circle().fill(Color.green).frame(width: 8, height: 8); Text("Gross").font(.caption).foregroundColor(hiddenTypes.contains("Gross") ? .secondary : .primary) }
+                    HStack(spacing: 4) { Circle().fill(Color.green).frame(width: 8, height: 8); Text("Gross").font(.caption).foregroundColor(hiddenTypes.contains("Gross") ? .secondary : .primary) }
                 }.buttonStyle(.plain).opacity(hiddenTypes.contains("Gross") ? 0.4 : 1.0)
                 
                 Button(action: { toggle("Net") }) {
-                    HStack(spacing: 6) { Circle().fill(Color.green.opacity(0.5)).frame(width: 8, height: 8); Text("Net").font(.caption).foregroundColor(hiddenTypes.contains("Net") ? .secondary : .primary) }
+                    HStack(spacing: 4) { Circle().fill(Color.green.opacity(0.5)).frame(width: 8, height: 8); Text("Net").font(.caption).foregroundColor(hiddenTypes.contains("Net") ? .secondary : .primary) }
                 }.buttonStyle(.plain).opacity(hiddenTypes.contains("Net") ? 0.4 : 1.0)
+                
+                Button(action: { toggle("Avg Gross") }) {
+                    HStack(spacing: 4) { Rectangle().fill(Color.green).frame(width: 12, height: 2); Text("Avg Gross").font(.caption).foregroundColor(hiddenTypes.contains("Avg Gross") ? .secondary : .primary) }
+                }.buttonStyle(.plain).opacity(hiddenTypes.contains("Avg Gross") ? 0.4 : 1.0)
+                
+                Button(action: { toggle("Avg Net") }) {
+                    HStack(spacing: 4) { Rectangle().fill(Color.green.opacity(0.5)).frame(width: 12, height: 2); Text("Avg Net").font(.caption).foregroundColor(hiddenTypes.contains("Avg Net") ? .secondary : .primary) }
+                }.buttonStyle(.plain).opacity(hiddenTypes.contains("Avg Net") ? 0.4 : 1.0)
             }.padding(.bottom, 8)
             
             if filteredData.isEmpty { Spacer(); Text("No data").foregroundColor(.secondary); Spacer() } else {
-                Chart(filteredData) { item in
-                    BarMark(x: .value("Month", item.month), y: .value("Amount", item.amount))
-                        .foregroundStyle(item.type == "Gross" ? Color.green : Color.green.opacity(0.5))
-                        .position(by: .value("Type", item.type))
-                        .cornerRadius(4)
-                        .annotation(position: .top) {
-                            if hoveredMonth == item.month && item.amount > 0 {
-                                Text(item.amount.formatted(.currency(code: "EUR").precision(.fractionLength(2))))
-                                    .font(.system(size: 8, weight: .bold))
-                                    .foregroundColor(.secondary)
-                                    .blur(radius: privacyMode ? 6 : 0)
+                Chart {
+                    ForEach(filteredData) { item in
+                        BarMark(x: .value("Month", item.month), y: .value("Amount", item.amount))
+                            .foregroundStyle(item.type == "Gross" ? Color.green : Color.green.opacity(0.5))
+                            .position(by: .value("Type", item.type))
+                            .cornerRadius(4)
+                            .annotation(position: .top) {
+                                if hoveredMonth == item.month && item.amount > 0 {
+                                    Text(item.amount.formatted(.currency(code: "EUR").precision(.fractionLength(2))))
+                                        .font(.system(size: 8, weight: .bold))
+                                        .foregroundColor(.secondary)
+                                        .blur(radius: privacyMode ? 6 : 0)
+                                }
                             }
-                        }
+                    }
+                    
+                    // NOUVEAU : Dessin des lignes de moyenne
+                    if !hiddenTypes.contains("Avg Gross") {
+                        RuleMark(y: .value("Avg Gross", averageGross))
+                            .foregroundStyle(Color.green.opacity(0.8))
+                            .lineStyle(StrokeStyle(lineWidth: 1.5, dash: [5, 4]))
+                    }
+                    
+                    if !hiddenTypes.contains("Avg Net") {
+                        RuleMark(y: .value("Avg Net", averageNet))
+                            .foregroundStyle(Color.green.opacity(0.4))
+                            .lineStyle(StrokeStyle(lineWidth: 1.5, dash: [3, 3]))
+                    }
                 }
                 .chartLegend(.hidden)
                 .chartXScale(domain: allMonths)
@@ -457,30 +488,147 @@ struct ExpectedMonthlyDividendChart: View {
     func toggle(_ type: String) { withAnimation { if hiddenTypes.contains(type) { hiddenTypes.remove(type) } else { hiddenTypes.insert(type) } } }
 }
 
+// --- SOUS-VUE POUR L'INFOBULLE DU STOCK YIELD CHART ---
+struct StockYieldTooltip: View {
+    let ticker: String
+    let yield: Double
+    let privacyMode: Bool
+    
+    var body: some View {
+        VStack(alignment: .center, spacing: 4) {
+            Text(ticker).font(.caption.bold())
+            Text("\(yield.formatted(.number.precision(.fractionLength(2))))%")
+                .font(.caption2)
+                .foregroundColor(.primary)
+                .blur(radius: privacyMode ? 6 : 0)
+        }
+        .padding(6)
+        .background(Color(NSColor.windowBackgroundColor).opacity(0.95))
+        .cornerRadius(6)
+        .shadow(radius: 4)
+        .fixedSize()
+    }
+}
+
 // MARK: - CHART 2: STOCK YIELD
 struct StockYieldChart: View {
     @ObservedObject var viewModel: PortfolioViewModel
     @Binding var privacyMode: Bool
-    var isExpanded: Bool = false; @Binding var expandedChart: DividendChartZoomType?
+    var isExpanded: Bool = false
+    @Binding var expandedChart: DividendChartZoomType?
+    
     @State private var hoveredTicker: String? = nil
+    @State private var hiddenMetrics: Set<String> = [] // Gère le masquage de la ligne de moyenne
+    @State private var hiddenTickers: Set<String> = [] // NOUVEAU : Gère le masquage des positions individuelles
+    
+    // NOUVEAU : Calcul du rendement moyen pondéré (ajusté selon les positions visibles)
+    var portfolioAverageYield: Double {
+        let visiblePositions = viewModel.positions.filter { !hiddenTickers.contains($0.ticker) }
+        let totalValue = visiblePositions.reduce(0) { $0 + $1.currentValueEUR }
+        let totalDivs = visiblePositions.reduce(0) { $0 + $1.totalDividendEUR }
+        return totalValue > 0 ? (totalDivs / totalValue) * 100.0 : 0.0
+    }
+    
+    var filteredData: [StockYieldDataItem] {
+        viewModel.stockYieldsData.filter { !hiddenTickers.contains($0.ticker) }
+    }
+    
+    var uniqueTickers: [String] {
+        viewModel.stockYieldsData.map { $0.ticker }.sorted()
+    }
+    
+    // Ajustement dynamique de l'échelle Y
+    var yMax: Double {
+        let maxYield = filteredData.map { $0.yield }.max() ?? 10
+        let maxTotal = max(maxYield, portfolioAverageYield)
+        return maxTotal > 0 ? maxTotal * 1.25 : 10
+    }
+
     var body: some View {
         VStack {
             HStack {
                 if !isExpanded { Text("Current Stock Yield (by Ticker)").font(.headline).foregroundColor(.secondary) }
                 Spacer()
-                if !isExpanded { Button(action: { expandedChart = .stockYield }) { Image(systemName: "plus.magnifyingglass").foregroundColor(.secondary) }.buttonStyle(.plain) }
-            }.padding(.bottom, 8)
-            if viewModel.stockYieldsData.isEmpty { Spacer(); Text("No data").foregroundColor(.secondary); Spacer() } else {
-                Chart(viewModel.stockYieldsData) { item in
-                    LineMark(x: .value("Ticker", item.ticker), y: .value("Yield", item.yield)).foregroundStyle(Color.gray.opacity(0.4)).interpolationMethod(.monotone)
-                    PointMark(x: .value("Ticker", item.ticker), y: .value("Yield", item.yield)).foregroundStyle(viewModel.color(for: item.ticker)).symbolSize(hoveredTicker == item.ticker ? 100 : 40)
-                        .annotation(position: .top) { if hoveredTicker == item.ticker { Text("\(item.yield.formatted(.number.precision(.fractionLength(2))))%").font(.system(size: 9, weight: .bold)).foregroundColor(.secondary).blur(radius: privacyMode ? 6 : 0) } }
+                
+                // Légende interactive pour masquer la moyenne
+                HStack(spacing: 12) {
+                    Button(action: { withAnimation { if hiddenMetrics.contains("Average") { hiddenMetrics.remove("Average") } else { hiddenMetrics.insert("Average") } } }) {
+                        HStack(spacing: 6) {
+                            Rectangle().fill(Color.gray.opacity(0.5)).frame(width: 12, height: 2)
+                            Text("Avg Yield").font(.caption).foregroundColor(hiddenMetrics.contains("Average") ? .secondary : .primary)
+                        }
+                    }.buttonStyle(.plain).opacity(hiddenMetrics.contains("Average") ? 0.4 : 1.0)
+                }
+                
+                if !isExpanded { Button(action: { expandedChart = .stockYield }) { Image(systemName: "plus.magnifyingglass").foregroundColor(.secondary) }.buttonStyle(.plain).padding(.leading, 8) }
+            }.padding(.bottom, 4)
+            
+            // NOUVEAU : Légende interactive pour afficher/masquer les tickers
+            InteractiveLegendView(items: uniqueTickers, colorMap: { viewModel.color(for: $0) }, hiddenItems: $hiddenTickers)
+                .padding(.bottom, 8)
+            
+            if filteredData.isEmpty {
+                Spacer(); Text("No data").foregroundColor(.secondary); Spacer()
+            } else {
+                Chart {
+                    // Ligne pointillée de la moyenne globale pondérée
+                    if !hiddenMetrics.contains("Average") {
+                        RuleMark(y: .value("Average Yield", portfolioAverageYield))
+                            .foregroundStyle(Color.gray.opacity(0.5))
+                            .lineStyle(StrokeStyle(lineWidth: 1.5, dash: [4, 4]))
+                            .annotation(position: .top, alignment: .leading) {
+                                Text("Avg: \(portfolioAverageYield.formatted(.number.precision(.fractionLength(1))))%")
+                                    .font(.caption2).foregroundColor(.gray)
+                                    .blur(radius: privacyMode ? 6 : 0)
+                            }
+                    }
+                    
+                    ForEach(filteredData) { item in
+                        LineMark(x: .value("Ticker", item.ticker), y: .value("Yield", item.yield))
+                            .foregroundStyle(Color.gray.opacity(0.4))
+                            .interpolationMethod(.monotone)
+                        
+                        PointMark(x: .value("Ticker", item.ticker), y: .value("Yield", item.yield))
+                            .foregroundStyle(viewModel.color(for: item.ticker))
+                            .symbolSize(hoveredTicker == item.ticker ? 100 : 40)
+                    }
+                    
+                    if let hTicker = hoveredTicker, !hiddenTickers.contains(hTicker) {
+                        RuleMark(x: .value("Ticker", hTicker))
+                            .foregroundStyle(Color.secondary.opacity(0.3))
+                            .zIndex(-1)
+                    }
+                }
+                .chartOverlay { proxy in
+                    GeometryReader { geometry in
+                        Rectangle().fill(.clear).contentShape(Rectangle())
+                            .onContinuousHover { phase in
+                                switch phase {
+                                case .active(let location):
+                                    if let ticker: String = proxy.value(atX: location.x) { hoveredTicker = ticker }
+                                case .ended:
+                                    hoveredTicker = nil
+                                }
+                            }
+                        
+                        if let hTicker = hoveredTicker, let item = filteredData.first(where: { $0.ticker == hTicker }) {
+                            if let xPosition = proxy.position(forX: hTicker) {
+                                StockYieldTooltip(
+                                    ticker: item.ticker,
+                                    yield: item.yield,
+                                    privacyMode: privacyMode
+                                )
+                                .position(x: max(40, min(geometry.size.width - 40, xPosition)), y: 35)
+                            }
+                        }
+                    }
                 }
                 .chartLegend(.hidden)
+                .chartYScale(domain: 0...yMax)
                 .chartYAxis { AxisMarks(position: .leading) { value in AxisGridLine(); AxisTick(); if let v = value.as(Double.self) { AxisValueLabel("\(v.formatted(.number.precision(.fractionLength(0))))%") } } }
                 .chartXSelection(value: $hoveredTicker)
             }
-            HStack { Text("Current dividend yield percentage for each portfolio holding").font(.caption2).foregroundColor(.secondary); Spacer(); BlueChipWatermark() }
+            HStack { Text("Current dividend yield percentage for each portfolio holding vs portfolio average").font(.caption2).foregroundColor(.secondary); Spacer(); BlueChipWatermark() }
         }.padding().frame(minHeight: 360, maxHeight: isExpanded ? .infinity : 360).background(Color(NSColor.controlBackgroundColor)).cornerRadius(12).shadow(color: Color.black.opacity(0.05), radius: 2, x: 0, y: 1)
     }
 }
@@ -668,26 +816,144 @@ struct TotalDividendsDonutChart: View {
     func findItem(for value: Double) -> ChartDataItem { var cum = 0.0; for item in filteredData { cum += item.value; if value <= cum { return item } }; return filteredData.last! }
 }
 
+// --- SOUS-VUE POUR L'INFOBULLE DU YIELD ON COST CHART ---
+struct YocTooltip: View {
+    let ticker: String
+    let yoc: Double
+    let privacyMode: Bool
+    
+    var body: some View {
+        VStack(alignment: .center, spacing: 4) {
+            Text(ticker).font(.caption.bold())
+            Text("\(yoc.formatted(.number.precision(.fractionLength(2))))%")
+                .font(.caption2)
+                .foregroundColor(.primary)
+                .blur(radius: privacyMode ? 6 : 0)
+        }
+        .padding(6)
+        .background(Color(NSColor.windowBackgroundColor).opacity(0.95))
+        .cornerRadius(6)
+        .shadow(radius: 4)
+        .fixedSize()
+    }
+}
+
 // MARK: - CHART 6: YIELD ON COST
 struct YieldOnCostChart: View {
     @ObservedObject var viewModel: PortfolioViewModel
     @Binding var privacyMode: Bool
-    var isExpanded: Bool = false; @Binding var expandedChart: DividendChartZoomType?
+    var isExpanded: Bool = false
+    @Binding var expandedChart: DividendChartZoomType?
+    
     @State private var hoveredTicker: String? = nil
-    var data: [ChartDataItem] { viewModel.positions.filter { $0.investedAmountEUR > 0 && $0.totalDividendEUR > 0 }.map { ChartDataItem(name: $0.ticker, value: ($0.totalDividendEUR / $0.investedAmountEUR) * 100.0) }.sorted { $0.name < $1.name } }
+    @State private var hiddenMetrics: Set<String> = []
+    @State private var hiddenTickers: Set<String> = []
+    
+    // Positions valides (avec investissement et dividendes) non masquées
+    var visiblePositions: [Position] {
+        viewModel.positions.filter { $0.investedAmountEUR > 0 && $0.totalDividendEUR > 0 && !hiddenTickers.contains($0.ticker) }
+    }
+    
+    var uniqueTickers: [String] {
+        viewModel.positions.filter { $0.investedAmountEUR > 0 && $0.totalDividendEUR > 0 }.map { $0.ticker }.sorted()
+    }
+    
+    // Calcul de la moyenne pondérée (Weighted Average YOC)
+    var portfolioAverageYOC: Double {
+        let totalInvested = visiblePositions.reduce(0) { $0 + $1.investedAmountEUR }
+        let totalDivs = visiblePositions.reduce(0) { $0 + $1.totalDividendEUR }
+        return totalInvested > 0 ? (totalDivs / totalInvested) * 100.0 : 0.0
+    }
+    
+    var yMax: Double {
+        let maxYoc = visiblePositions.map { ($0.totalDividendEUR / $0.investedAmountEUR) * 100.0 }.max() ?? 10
+        let maxTotal = max(maxYoc, portfolioAverageYOC)
+        return maxTotal > 0 ? maxTotal * 1.25 : 10
+    }
+    
     var body: some View {
         VStack {
             HStack {
                 if !isExpanded { Text("Yield On Cost (YOC)").font(.headline).foregroundColor(.secondary) }
                 Spacer()
-                if !isExpanded { Button(action: { expandedChart = .yoc }) { Image(systemName: "plus.magnifyingglass").foregroundColor(.secondary) }.buttonStyle(.plain) }
-            }.padding(.bottom, 8)
-            if data.isEmpty { Spacer(); Text("No data").foregroundColor(.secondary); Spacer() } else {
-                Chart(data) { item in
-                    BarMark(x: .value("Ticker", item.name), y: .value("YOC", item.value)).foregroundStyle(viewModel.color(for: item.name)).cornerRadius(4)
-                        .annotation(position: .top) { if hoveredTicker == item.name { Text("\(item.value.formatted(.number.precision(.fractionLength(2))))%").font(.system(size: 9, weight: .bold)).foregroundColor(.secondary).blur(radius: privacyMode ? 6 : 0) } }
+                
+                HStack(spacing: 12) {
+                    Button(action: { withAnimation { if hiddenMetrics.contains("Average") { hiddenMetrics.remove("Average") } else { hiddenMetrics.insert("Average") } } }) {
+                        HStack(spacing: 6) {
+                            Rectangle().fill(Color.primary.opacity(0.7)).frame(width: 12, height: 2)
+                            Text("Avg YOC").font(.caption).foregroundColor(hiddenMetrics.contains("Average") ? .secondary : .primary)
+                        }
+                    }.buttonStyle(.plain).opacity(hiddenMetrics.contains("Average") ? 0.4 : 1.0)
+                }
+                
+                if !isExpanded { Button(action: { expandedChart = .yoc }) { Image(systemName: "plus.magnifyingglass").foregroundColor(.secondary) }.buttonStyle(.plain).padding(.leading, 8) }
+            }.padding(.bottom, 4)
+            
+            InteractiveLegendView(items: uniqueTickers, colorMap: { viewModel.color(for: $0) }, hiddenItems: $hiddenTickers)
+                .padding(.bottom, 8)
+            
+            if visiblePositions.isEmpty {
+                Spacer(); Text("No data").foregroundColor(.secondary); Spacer()
+            } else {
+                Chart {
+                    // 1. Les barres en arrière-plan
+                    ForEach(visiblePositions) { pos in
+                        let yoc = (pos.totalDividendEUR / pos.investedAmountEUR) * 100.0
+                        BarMark(x: .value("Ticker", pos.ticker), y: .value("YOC", yoc))
+                            .foregroundStyle(viewModel.color(for: pos.ticker))
+                            .cornerRadius(4)
+                        
+                        if let hTicker = hoveredTicker, pos.ticker == hTicker {
+                            RuleMark(x: .value("Ticker", hTicker))
+                                .foregroundStyle(Color.secondary.opacity(0.3))
+                                .zIndex(-1)
+                        }
+                    }
+                    
+                    // 2. MODIFIÉ : La ligne de moyenne placée APRES les barres + zIndex(10)
+                    if !hiddenMetrics.contains("Average") {
+                        RuleMark(y: .value("Average YOC", portfolioAverageYOC))
+                            .foregroundStyle(Color.primary.opacity(0.7)) // Couleur plus visible
+                            .lineStyle(StrokeStyle(lineWidth: 1.5, dash: [4, 4]))
+                            .zIndex(10) // Force le placement par-dessus les barres
+                            .annotation(position: .top, alignment: .leading) {
+                                Text("Avg: \(portfolioAverageYOC.formatted(.number.precision(.fractionLength(1))))%")
+                                    .font(.caption2.bold())
+                                    .foregroundColor(.primary)
+                                    .padding(.horizontal, 4).padding(.vertical, 2)
+                                    .background(Color(NSColor.windowBackgroundColor).opacity(0.8))
+                                    .cornerRadius(4)
+                                    .blur(radius: privacyMode ? 6 : 0)
+                            }
+                    }
+                }
+                .chartOverlay { proxy in
+                    GeometryReader { geometry in
+                        Rectangle().fill(.clear).contentShape(Rectangle())
+                            .onContinuousHover { phase in
+                                switch phase {
+                                case .active(let location):
+                                    if let ticker: String = proxy.value(atX: location.x) { hoveredTicker = ticker }
+                                case .ended:
+                                    hoveredTicker = nil
+                                }
+                            }
+                        
+                        if let hTicker = hoveredTicker, let pos = visiblePositions.first(where: { $0.ticker == hTicker }) {
+                            if let xPosition = proxy.position(forX: hTicker) {
+                                let yoc = (pos.totalDividendEUR / pos.investedAmountEUR) * 100.0
+                                YocTooltip(
+                                    ticker: pos.ticker,
+                                    yoc: yoc,
+                                    privacyMode: privacyMode
+                                )
+                                .position(x: max(40, min(geometry.size.width - 40, xPosition)), y: 35)
+                            }
+                        }
+                    }
                 }
                 .chartLegend(.hidden)
+                .chartYScale(domain: 0...yMax)
                 .chartYAxis { AxisMarks(position: .leading) { value in AxisGridLine(); AxisTick(); if let v = value.as(Double.self) { AxisValueLabel("\(v.formatted(.number.precision(.fractionLength(0))))%") } } }
                 .chartXSelection(value: $hoveredTicker)
             }
