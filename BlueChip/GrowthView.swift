@@ -19,14 +19,12 @@ struct GrowthView: View {
     @State private var showGoalSheet = false
     @State private var chartToZoom: GrowthChartZoomType? = nil
     
-    // On calcule la valeur cible dynamiquement selon le type choisi
     var currentGoalValueForProgressBar: Double {
         switch viewModel.growthGoalType {
         case .targetReturnPercent:
             return viewModel.averageReturnPercent * 100
             
         case .targetReturnCurrency:
-            // CORRECTION : Le retour de l'année en cours uniquement (Current Year Return in €)
             let currentYear = Calendar.current.component(.year, from: Date())
             if let yearData = viewModel.growthYears.first(where: { $0.year == currentYear }) {
                 let base = yearData.startWallet + yearData.invested
@@ -81,7 +79,7 @@ struct GrowthView: View {
 }
 
 // =========================================================================
-// MARK: - FORMULAIRE GOAL (Dédié à la Croissance - Design Uniformisé)
+// MARK: - FORMULAIRE GOAL
 // =========================================================================
 struct EditGrowthGoalView: View {
     @Environment(\.dismiss) var dismiss
@@ -97,66 +95,42 @@ struct EditGrowthGoalView: View {
     
     var body: some View {
         VStack(spacing: 0) {
-            // Header
             HStack {
                 Text("Set Annual Growth Goal").font(.title2).fontWeight(.bold)
                 Spacer()
-                Button(action: { dismiss() }) {
-                    Image(systemName: "xmark.circle.fill").font(.title2).foregroundColor(.secondary)
-                }.buttonStyle(.plain)
-            }
-            .padding()
-            
+                Button(action: { dismiss() }) { Image(systemName: "xmark.circle.fill").font(.title2).foregroundColor(.secondary) }.buttonStyle(.plain)
+            }.padding()
             Divider()
             
-            // Content
             VStack(alignment: .leading, spacing: 16) {
                 GroupBox {
                     VStack(spacing: 16) {
                         HStack {
                             Text("Goal Type:")
                             Spacer()
-                            Picker("", selection: $selectedGoal) {
-                                ForEach(GrowthGoalType.allCases, id: \.self) { type in Text(type.rawValue).tag(type) }
-                            }
-                            .labelsHidden()
-                            .frame(width: 150)
+                            Picker("", selection: $selectedGoal) { ForEach(GrowthGoalType.allCases, id: \.self) { type in Text(type.rawValue).tag(type) } }
+                            .labelsHidden().frame(width: 150)
                         }
-                        
                         Divider().opacity(0.5)
-                        
                         HStack {
                             Text("Target Amount:")
                             Spacer()
-                            TextField("e.g. 5000", value: $targetInput, format: .number)
-                                .textFieldStyle(.roundedBorder)
-                                .multilineTextAlignment(.trailing)
-                                .frame(width: 150)
+                            TextField("e.g. 5000", value: $targetInput, format: .number).textFieldStyle(.roundedBorder).multilineTextAlignment(.trailing).frame(width: 150)
                         }
-                    }
-                    .padding(.vertical, 4)
+                    }.padding(.vertical, 4)
                 }
-            }
-            .padding()
+            }.padding()
             
             Spacer()
             Divider()
-            
-            // Footer
             HStack {
-                Button("Cancel") { dismiss() }
-                    .keyboardShortcut(.cancelAction)
+                Button("Cancel") { dismiss() }.keyboardShortcut(.cancelAction)
                 Spacer()
                 Button("Save Goal") {
-                    viewModel.growthGoalType = selectedGoal
-                    viewModel.growthGoalTarget = targetInput
-                    dismiss()
-                }
-                .keyboardShortcut(.defaultAction)
-                .buttonStyle(.borderedProminent)
+                    viewModel.growthGoalType = selectedGoal; viewModel.growthGoalTarget = targetInput; dismiss()
+                }.keyboardShortcut(.defaultAction).buttonStyle(.borderedProminent)
             }.padding()
-        }
-        .frame(width: 400, height: 280) // Taille parfaite pour macOS
+        }.frame(width: 400, height: 280)
     }
 }
 
@@ -218,7 +192,6 @@ struct GrowthDashboardSection: View {
         }
     }
 }
-
 
 // =========================================================================
 // MARK: - TABLEAU SPREADSHEET
@@ -350,16 +323,10 @@ struct GrowthField: View {
         TextField("0", text: $textValue)
             .textFieldStyle(.plain).frame(maxWidth: .infinity, alignment: .leading)
             .blur(radius: privacyMode ? 6 : 0)
-            .onAppear {
-                if value != 0 { textValue = value.formatted(.number.grouping(.never)) }
-            }
+            .onAppear { if value != 0 { textValue = value.formatted(.number.grouping(.never)) } }
             .onChange(of: textValue) { _, newValue in
                 let cleanString = newValue.replacingOccurrences(of: ",", with: ".")
-                if let doubleVal = Double(cleanString) {
-                    value = doubleVal
-                } else if newValue.isEmpty {
-                    value = 0
-                }
+                if let doubleVal = Double(cleanString) { value = doubleVal } else if newValue.isEmpty { value = 0 }
                 viewModel.objectWillChange.send()
             }
     }
@@ -489,13 +456,12 @@ struct CashVsStocksChart: View {
                 }
                 .animation(.easeInOut(duration: 0.2), value: selectedAngleValue)
             }
-            BlueChipWatermark()
+            HStack { Text("Breaks down portfolio allocation between liquidity and equities").font(.caption2).foregroundColor(.secondary); Spacer(); BlueChipWatermark() }
         }
         .padding()
         .frame(minHeight: isExpanded ? 500 : 300, maxHeight: isExpanded ? .infinity : 300)
         .background(Color(NSColor.controlBackgroundColor)).cornerRadius(12).shadow(color: Color.black.opacity(0.05), radius: 2, x: 0, y: 1)
     }
-    
     func findItem(for value: Double) -> ChartDataItem? { var cum = 0.0; for item in filteredData { cum += item.value; if value <= cum { return item } }; return filteredData.last }
 }
 
@@ -551,13 +517,12 @@ struct CapitalVsGainsChart: View {
                 }
                 .animation(.easeInOut(duration: 0.2), value: selectedAngleValue)
             }
-            BlueChipWatermark()
+            HStack { Text("Shows the proportion of initial deposits versus accumulated growth").font(.caption2).foregroundColor(.secondary); Spacer(); BlueChipWatermark() }
         }
         .padding()
         .frame(minHeight: isExpanded ? 500 : 300, maxHeight: isExpanded ? .infinity : 300)
         .background(Color(NSColor.controlBackgroundColor)).cornerRadius(12).shadow(color: Color.black.opacity(0.05), radius: 2, x: 0, y: 1)
     }
-    
     func findItem(for value: Double) -> ChartDataItem? { var cum = 0.0; for item in filteredData { cum += item.value; if value <= cum { return item } }; return filteredData.last }
 }
 
@@ -617,14 +582,47 @@ struct GainsProvenanceChart: View {
                 }
                 .animation(.easeInOut(duration: 0.2), value: selectedAngleValue)
             }
-            BlueChipWatermark()
+            HStack { Text("Splits total gains between passive income and capital appreciation").font(.caption2).foregroundColor(.secondary); Spacer(); BlueChipWatermark() }
         }
         .padding()
         .frame(minHeight: isExpanded ? 500 : 300, maxHeight: isExpanded ? .infinity : 300)
         .background(Color(NSColor.controlBackgroundColor)).cornerRadius(12).shadow(color: Color.black.opacity(0.05), radius: 2, x: 0, y: 1)
     }
-    
     func findItem(for value: Double) -> ChartDataItem? { var cum = 0.0; for item in filteredData { cum += item.value; if value <= cum { return item } }; return filteredData.last }
+}
+
+// --- SOUS-VUE POUR L'INFOBULLE DU GRAPHIQUE DES RETOURS ANNUELS ---
+struct AnnualReturnsTooltip: View {
+    let year: Int
+    let returnEUR: Double
+    let returnPercent: Double
+    let showEuros: Bool
+    let showPercent: Bool
+    let privacyMode: Bool
+    
+    var body: some View {
+        VStack(alignment: .center, spacing: 4) {
+            Text(String(year)).font(.caption.bold())
+            
+            if showEuros {
+                Text(returnEUR.formatted(.currency(code: "EUR").precision(.fractionLength(2)).sign(strategy: .always())))
+                    .font(.caption2)
+                    .foregroundColor(returnEUR >= 0 ? .green : .red)
+                    .blur(radius: privacyMode ? 6 : 0)
+            }
+            if showPercent {
+                Text(String(format: "%+.2f%%", returnPercent))
+                    .font(.caption2)
+                    .foregroundColor(returnPercent >= 0 ? .green : .red)
+                    .blur(radius: privacyMode ? 6 : 0)
+            }
+        }
+        .padding(6)
+        .background(Color(NSColor.windowBackgroundColor).opacity(0.95))
+        .cornerRadius(6)
+        .shadow(radius: 4)
+        .fixedSize()
+    }
 }
 
 // CHART 4: Annual Returns
@@ -662,9 +660,10 @@ struct AnnualReturnsComboChart: View {
     @State private var hiddenSeries: Set<String> = []
     @State private var hoveredYear: String? = nil
 
-    var hoveredItem: AnnualReturnItem? {
-        guard let y = hoveredYear, let yr = Int(y) else { return nil }
-        return data.first { $0.year == yr }
+    var yMax: Double { return maxAbsEUR * 1.25 }
+    var yMin: Double {
+        let minReturn = data.map { $0.returnEUR }.min() ?? 0
+        return minReturn < 0 ? minReturn * 1.25 : 0
     }
 
     var body: some View {
@@ -690,20 +689,6 @@ struct AnnualReturnsComboChart: View {
                 if !isExpanded { Button(action: { expandedChart = .annualReturnsCombo }) { Image(systemName: "plus.magnifyingglass").foregroundColor(.secondary) }.buttonStyle(.plain).padding(.leading, 8) }
             }.padding(.bottom, 4)
 
-            if let item = hoveredItem {
-                HStack(spacing: 16) {
-                    Text(String(item.year)).fontWeight(.bold)
-                    Text(item.returnEUR.formatted(.currency(code: "EUR").precision(.fractionLength(2)).sign(strategy: .always())))
-                        .foregroundColor(item.returnEUR >= 0 ? .green : .red).fontWeight(.semibold).blur(radius: privacyMode ? 6 : 0)
-                    Text(String(format: "%+.2f%%", item.returnPercent))
-                        .padding(.horizontal, 6).padding(.vertical, 2)
-                        .background((item.returnPercent >= 0 ? Color.green : Color.red).opacity(0.1))
-                        .foregroundColor(item.returnPercent >= 0 ? .green : .red)
-                        .cornerRadius(4).fontWeight(.semibold).blur(radius: privacyMode ? 6 : 0)
-                }
-                .font(.caption).padding(.horizontal, 8).padding(.vertical, 4).background(Color(NSColor.windowBackgroundColor)).cornerRadius(6).transition(.opacity)
-            }
-
             if data.isEmpty {
                 Spacer()
                 Text("Fill in the Growth table to see annual returns.").foregroundColor(.secondary).frame(maxWidth: .infinity, alignment: .center)
@@ -714,27 +699,99 @@ struct AnnualReturnsComboChart: View {
                         ForEach(data) { item in
                             BarMark(x: .value("Year", String(item.year)), y: .value("Return €", item.returnEUR))
                                 .foregroundStyle(item.returnEUR >= 0 ? Color.blue.opacity(0.55) : Color.red.opacity(0.55)).cornerRadius(4)
-                                .opacity(hoveredYear == nil || hoveredYear == String(item.year) ? 1.0 : 0.4)
                         }
                     }
                     if !hiddenSeries.contains("Return %") {
                         ForEach(data) { item in
                             LineMark(x: .value("Year", String(item.year)), y: .value("Return % (scaled)", scaledPct(item.returnPercent)))
                                 .foregroundStyle(Color.orange).lineStyle(StrokeStyle(lineWidth: 2))
-                                .symbol { Circle().fill(item.returnPercent >= 0 ? Color.orange : Color.red).frame(width: 7, height: 7) }
+                                .interpolationMethod(.monotone)
+                            
+                            PointMark(x: .value("Year", String(item.year)), y: .value("Return % (scaled)", scaledPct(item.returnPercent)))
+                                .foregroundStyle(item.returnPercent >= 0 ? Color.orange : Color.red)
+                        }
+                    }
+                    
+                    if let y = hoveredYear { RuleMark(x: .value("Year", y)).foregroundStyle(Color.secondary.opacity(0.4)).lineStyle(StrokeStyle(lineWidth: 1, dash: [4, 3])).zIndex(-1) }
+                }
+                .chartOverlay { proxy in
+                    GeometryReader { geometry in
+                        Rectangle().fill(.clear).contentShape(Rectangle())
+                            .onContinuousHover { phase in
+                                switch phase {
+                                case .active(let location):
+                                    if let year: String = proxy.value(atX: location.x) { hoveredYear = year }
+                                case .ended:
+                                    hoveredYear = nil
+                                }
+                            }
+                        
+                        if let y = hoveredYear, let yr = Int(y), let item = data.first(where: { $0.year == yr }) {
+                            if let xPosition = proxy.position(forX: y) {
+                                AnnualReturnsTooltip(
+                                    year: item.year,
+                                    returnEUR: item.returnEUR,
+                                    returnPercent: item.returnPercent,
+                                    showEuros: !hiddenSeries.contains("Return €"),
+                                    showPercent: !hiddenSeries.contains("Return %"),
+                                    privacyMode: privacyMode
+                                )
+                                .position(x: max(40, min(geometry.size.width - 40, xPosition)), y: 35)
+                            }
                         }
                     }
                 }
                 .chartXSelection(value: $hoveredYear)
+                .chartYScale(domain: yMin...yMax)
                 .chartYAxis { AxisMarks(position: .leading) { value in AxisGridLine(); AxisTick(); AxisValueLabel { if let v = value.as(Double.self) { Text(v.formatted(.currency(code: "EUR").precision(.fractionLength(0)))).font(.system(size: 10)) } } } }
                 .chartXAxis { AxisMarks { value in AxisValueLabel { if let s = value.as(String.self) { Text(s).font(.caption) } } } }
-                .animation(.easeInOut(duration: 0.15), value: hoveredYear)
             }
-            BlueChipWatermark()
+            HStack { Text("Shows year-over-year absolute and relative portfolio performance").font(.caption2).foregroundColor(.secondary); Spacer(); BlueChipWatermark() }
         }
         .padding().frame(minHeight: isExpanded ? 500 : 300, maxHeight: isExpanded ? .infinity : 300).background(Color(NSColor.controlBackgroundColor)).cornerRadius(12).shadow(color: Color.black.opacity(0.05), radius: 2, x: 0, y: 1)
     }
     func toggle(_ key: String) { if hiddenSeries.contains(key) { hiddenSeries.remove(key) } else { hiddenSeries.insert(key) } }
+}
+
+// --- SOUS-VUE POUR L'INFOBULLE DU GRAPHIQUE INVESTED VS VALUE ---
+struct InvestedVsValueTooltip: View {
+    let year: String
+    let pItem: InvestedVsValueChart.InvestedVsValueItem?
+    let iItem: InvestedVsValueChart.InvestedVsValueItem?
+    let hiddenItems: Set<String>
+    let privacyMode: Bool
+    
+    var body: some View {
+        VStack(alignment: .leading, spacing: 4) {
+            Text(year).font(.caption.bold())
+            
+            if !hiddenItems.contains("Portfolio Value"), let p = pItem {
+                HStack(spacing: 4) {
+                    Circle().fill(Color.blue).frame(width: 7, height: 7)
+                    Text("Value: \(p.value.formatted(.currency(code: "EUR").precision(.fractionLength(0))))")
+                        .font(.caption2).foregroundColor(.blue).blur(radius: privacyMode ? 6 : 0)
+                }
+            }
+            if !hiddenItems.contains("Cumulative Invested"), let i = iItem {
+                HStack(spacing: 4) {
+                    Circle().fill(Color.gray).frame(width: 7, height: 7)
+                    Text("Invested: \(i.value.formatted(.currency(code: "EUR").precision(.fractionLength(0))))")
+                        .font(.caption2).foregroundColor(.secondary).blur(radius: privacyMode ? 6 : 0)
+                }
+            }
+            if let p = pItem, let i = iItem, !hiddenItems.contains("Portfolio Value"), !hiddenItems.contains("Cumulative Invested") {
+                let diff = p.value - i.value
+                Text("Diff: \(diff.formatted(.currency(code: "EUR").precision(.fractionLength(0)).sign(strategy: .always())))")
+                    .font(.caption2.bold()).foregroundColor(diff >= 0 ? .green : .red).blur(radius: privacyMode ? 6 : 0)
+                    .padding(.top, 2)
+            }
+        }
+        .padding(6)
+        .background(Color(NSColor.windowBackgroundColor).opacity(0.95))
+        .cornerRadius(6)
+        .shadow(radius: 4)
+        .fixedSize()
+    }
 }
 
 // CHART 5: Invested cumulé vs Valeur
@@ -778,19 +835,6 @@ struct InvestedVsValueChart: View {
                 if !isExpanded { Button(action: { expandedChart = .investedVsValue }) { Image(systemName: "plus.magnifyingglass").foregroundColor(.secondary) }.buttonStyle(.plain).padding(.leading, 8) }
             }.padding(.bottom, 4)
 
-            if let pItem = hoveredPortfolio {
-                HStack(spacing: 16) {
-                    Text(String(pItem.year)).fontWeight(.bold)
-                    if !hiddenItems.contains("Portfolio Value") { HStack(spacing: 4) { Circle().fill(Color.blue).frame(width: 7, height: 7); Text(pItem.value.formatted(.currency(code: "EUR").precision(.fractionLength(0)))).foregroundColor(.blue).fontWeight(.semibold).blur(radius: privacyMode ? 6 : 0) } }
-                    if !hiddenItems.contains("Cumulative Invested"), let iItem = hoveredInvested { HStack(spacing: 4) { Circle().fill(Color.gray).frame(width: 7, height: 7); Text(iItem.value.formatted(.currency(code: "EUR").precision(.fractionLength(0)))).foregroundColor(.secondary).fontWeight(.semibold).blur(radius: privacyMode ? 6 : 0) } }
-                    if let iItem = hoveredInvested, !hiddenItems.contains("Portfolio Value"), !hiddenItems.contains("Cumulative Invested") {
-                        let diff = pItem.value - iItem.value
-                        Text(diff.formatted(.currency(code: "EUR").precision(.fractionLength(0)).sign(strategy: .always()))).foregroundColor(diff >= 0 ? .green : .red).fontWeight(.bold).blur(radius: privacyMode ? 6 : 0)
-                    }
-                }
-                .font(.caption).padding(.horizontal, 8).padding(.vertical, 4).background(Color(NSColor.windowBackgroundColor)).cornerRadius(6).transition(.opacity)
-            }
-
             if cleanData.isEmpty {
                 Spacer()
                 Text("Fill in the Growth table to see the evolution.").foregroundColor(.secondary).frame(maxWidth: .infinity, alignment: .center)
@@ -802,25 +846,75 @@ struct InvestedVsValueChart: View {
                             AreaMark(x: .value("Year", String(item.year)), y: .value("€", item.value), series: .value("Series", "portfolio"))
                                 .foregroundStyle(LinearGradient(colors: [Color.blue.opacity(0.35), Color.blue.opacity(0.05)], startPoint: .top, endPoint: .bottom)).interpolationMethod(.monotone)
                             LineMark(x: .value("Year", String(item.year)), y: .value("€", item.value), series: .value("Series", "portfolio"))
-                                .foregroundStyle(Color.blue).lineStyle(StrokeStyle(lineWidth: 2.5)).interpolationMethod(.monotone).symbol { Circle().fill(Color.blue).frame(width: 7, height: 7) }
+                                .foregroundStyle(Color.blue).lineStyle(StrokeStyle(lineWidth: 2.5)).interpolationMethod(.monotone)
                         }
                     }
                     if !hiddenItems.contains("Cumulative Invested") {
                         ForEach(investedItems) { item in
                             LineMark(x: .value("Year", String(item.year)), y: .value("€", item.value), series: .value("Series", "invested"))
-                                .foregroundStyle(Color.gray.opacity(0.7)).lineStyle(StrokeStyle(lineWidth: 2, dash: [6, 4])).interpolationMethod(.linear).symbol { Circle().fill(Color.gray).frame(width: 6, height: 6) }
+                                .foregroundStyle(Color.gray.opacity(0.7)).lineStyle(StrokeStyle(lineWidth: 2, dash: [6, 4])).interpolationMethod(.linear)
                         }
                     }
-                    if let y = hoveredYear { RuleMark(x: .value("Year", y)).foregroundStyle(Color.secondary.opacity(0.4)).lineStyle(StrokeStyle(lineWidth: 1, dash: [4, 3])) }
+                    if let y = hoveredYear { RuleMark(x: .value("Year", y)).foregroundStyle(Color.secondary.opacity(0.4)).lineStyle(StrokeStyle(lineWidth: 1, dash: [4, 3])).zIndex(-1) }
+                }
+                .chartOverlay { proxy in
+                    GeometryReader { geometry in
+                        Rectangle().fill(.clear).contentShape(Rectangle())
+                            .onContinuousHover { phase in
+                                switch phase {
+                                case .active(let location):
+                                    if let year: String = proxy.value(atX: location.x) { hoveredYear = year }
+                                case .ended:
+                                    hoveredYear = nil
+                                }
+                            }
+                        
+                        if let y = hoveredYear {
+                            if let xPosition = proxy.position(forX: y) {
+                                InvestedVsValueTooltip(
+                                    year: y,
+                                    pItem: hoveredPortfolio,
+                                    iItem: hoveredInvested,
+                                    hiddenItems: hiddenItems,
+                                    privacyMode: privacyMode
+                                )
+                                .position(x: max(60, min(geometry.size.width - 60, xPosition)), y: 45)
+                            }
+                        }
+                    }
                 }
                 .chartXSelection(value: $hoveredYear)
                 .chartYAxis { AxisMarks(position: .leading) { value in AxisGridLine(); AxisTick(); AxisValueLabel { if let v = value.as(Double.self) { Text(v.formatted(.currency(code: "EUR").precision(.fractionLength(0)))).font(.system(size: 10)) } } } }
                 .chartXAxis { AxisMarks { value in AxisValueLabel { if let s = value.as(String.self) { Text(s).font(.caption) } } } }
-                .animation(.easeInOut(duration: 0.1), value: hoveredYear)
             }
-            BlueChipWatermark()
+            HStack { Text("Tracks the widening gap between deposited capital and total portfolio value").font(.caption2).foregroundColor(.secondary); Spacer(); BlueChipWatermark() }
         }
         .padding().frame(minHeight: isExpanded ? 500 : 300, maxHeight: isExpanded ? .infinity : 300).background(Color(NSColor.controlBackgroundColor)).cornerRadius(12).shadow(color: Color.black.opacity(0.05), radius: 2, x: 0, y: 1)
+    }
+}
+
+// --- SOUS-VUE POUR L'INFOBULLE DU WATERFALL CHART ---
+struct WaterfallTooltip: View {
+    let item: WaterfallItem
+    let privacyMode: Bool
+    
+    var body: some View {
+        VStack(alignment: .center, spacing: 4) {
+            Text(item.name).font(.caption.bold())
+            
+            let diff = abs(item.end - item.start)
+            let isNegative = item.name == "Capital Losses"
+            
+            Text(diff.formatted(.currency(code: "EUR").precision(.fractionLength(0)).sign(strategy: .always())))
+                .font(.caption2)
+                .foregroundColor(isNegative ? .red : (item.name == "Capital Gains" ? .green : .primary))
+                .blur(radius: privacyMode ? 6 : 0)
+        }
+        .padding(6)
+        .background(Color(NSColor.windowBackgroundColor).opacity(0.95))
+        .cornerRadius(6)
+        .shadow(radius: 4)
+        .fixedSize()
     }
 }
 
@@ -834,6 +928,7 @@ struct WealthWaterfallChart: View {
     @Binding var expandedChart: GrowthChartZoomType?
     
     @State private var hiddenItems: Set<String> = []
+    @State private var hoveredCategory: String? = nil // NOUVEAU: Pour le survol
     
     var baseData: [WaterfallItem] {
         let currentYear = Calendar.current.component(.year, from: Date())
@@ -883,19 +978,61 @@ struct WealthWaterfallChart: View {
                     )
                     .foregroundStyle(item.color)
                     .cornerRadius(4)
-                    .annotation(position: .top, alignment: .center) {
-                        let diff = abs(item.end - item.start)
-                        Text(diff.formatted(.currency(code: "EUR").precision(.fractionLength(0))))
-                            .font(.caption.bold())
-                            .foregroundColor(.secondary)
-                            .blur(radius: privacyMode ? 6 : 0)
+                    
+                    if let hCat = hoveredCategory, item.name == hCat {
+                        RuleMark(x: .value("Category", hCat))
+                            .foregroundStyle(Color.secondary.opacity(0.3))
+                            .zIndex(-1)
                     }
                 }
+                .chartOverlay { proxy in
+                    GeometryReader { geometry in
+                        Rectangle().fill(.clear).contentShape(Rectangle())
+                            .onContinuousHover { phase in
+                                switch phase {
+                                case .active(let location):
+                                    if let cat: String = proxy.value(atX: location.x) { hoveredCategory = cat }
+                                case .ended:
+                                    hoveredCategory = nil
+                                }
+                            }
+                        
+                        if let hCat = hoveredCategory, let item = filteredData.first(where: { $0.name == hCat }) {
+                            if let xPosition = proxy.position(forX: hCat) {
+                                WaterfallTooltip(item: item, privacyMode: privacyMode)
+                                    .position(x: max(60, min(geometry.size.width - 60, xPosition)), y: 35)
+                            }
+                        }
+                    }
+                }
+                .chartXSelection(value: $hoveredCategory)
                 .chartYAxis { AxisMarks(position: .leading) { value in AxisGridLine(); AxisTick(); AxisValueLabel { if let v = value.as(Double.self) { Text(v.formatted(.currency(code: "EUR").notation(.compactName))) } } } }
             }
             HStack { Text("Shows the exact bridge from your initial capital to your current wealth").font(.caption2).foregroundColor(.secondary); Spacer(); BlueChipWatermark() }
         }
         .padding().frame(minHeight: isExpanded ? 500 : 300, maxHeight: isExpanded ? .infinity : 300).background(Color(NSColor.controlBackgroundColor)).cornerRadius(12).shadow(color: Color.black.opacity(0.05), radius: 2, x: 0, y: 1)
+    }
+}
+
+// --- SOUS-VUE POUR L'INFOBULLE DU GRAPHIQUE MOIC ---
+struct MoICTooltip: View {
+    let year: Int
+    let multiple: Double
+    let privacyMode: Bool
+    
+    var body: some View {
+        VStack(alignment: .center, spacing: 4) {
+            Text(String(year)).font(.caption.bold())
+            Text("\(multiple.formatted(.number.precision(.fractionLength(2))))x")
+                .font(.caption2.bold())
+                .foregroundColor(multiple >= 1.0 ? .green : .red)
+                .blur(radius: privacyMode ? 6 : 0)
+        }
+        .padding(6)
+        .background(Color(NSColor.windowBackgroundColor).opacity(0.95))
+        .cornerRadius(6)
+        .shadow(radius: 4)
+        .fixedSize()
     }
 }
 
@@ -941,6 +1078,11 @@ struct MoICMultipleChart: View {
     }
     
     var hoveredItem: MoICSeriesItem? { guard let y = hoveredYear, let yr = Int(y) else { return nil }; return data.first { $0.year == yr } }
+    
+    var yMax: Double {
+        let maxMult = data.map { $0.multiple }.max() ?? 2.0
+        return max(2.0, maxMult * 1.25)
+    }
 
     var body: some View {
         VStack(alignment: .leading, spacing: 8) {
@@ -949,18 +1091,6 @@ struct MoICMultipleChart: View {
                 Spacer()
                 if !isExpanded { Button(action: { expandedChart = .momMultiple }) { Image(systemName: "plus.magnifyingglass").foregroundColor(.secondary) }.buttonStyle(.plain) }
             }.padding(.bottom, 4)
-            
-            if let item = hoveredItem {
-                HStack(spacing: 16) {
-                    Text(String(item.year)).fontWeight(.bold)
-                    Text("\(item.multiple.formatted(.number.precision(.fractionLength(2))))x")
-                        .foregroundColor(item.multiple >= 1.0 ? .green : .red).fontWeight(.bold)
-                        .blur(radius: privacyMode ? 6 : 0)
-                }
-                .font(.caption).padding(.horizontal, 8).padding(.vertical, 4).background(Color(NSColor.windowBackgroundColor)).cornerRadius(6).transition(.opacity)
-            } else {
-                Text("Hover to view multiplier").font(.caption).foregroundColor(.clear)
-            }
             
             if data.isEmpty {
                 Spacer(); Text("Not enough data to calculate multiple.").foregroundColor(.secondary).frame(maxWidth: .infinity, alignment: .center); Spacer()
@@ -976,22 +1106,69 @@ struct MoICMultipleChart: View {
                             .foregroundStyle(Color.indigo)
                             .lineStyle(StrokeStyle(lineWidth: 2.5))
                             .interpolationMethod(.monotone)
-                        
-                        PointMark(x: .value("Year", String(item.year)), y: .value("Multiple", item.multiple))
-                            .foregroundStyle(Color.indigo)
-                            .symbol { Circle().fill(item.multiple >= 1.0 ? Color.indigo : Color.red).frame(width: 8, height: 8) }
                     }
-                    if let y = hoveredYear { RuleMark(x: .value("Year", y)).foregroundStyle(Color.secondary.opacity(0.4)).lineStyle(StrokeStyle(lineWidth: 1, dash: [4, 3])) }
+                    
+                    if let y = hoveredYear { RuleMark(x: .value("Year", y)).foregroundStyle(Color.secondary.opacity(0.4)).lineStyle(StrokeStyle(lineWidth: 1, dash: [4, 3])).zIndex(-1) }
+                }
+                .chartOverlay { proxy in
+                    GeometryReader { geometry in
+                        Rectangle().fill(.clear).contentShape(Rectangle())
+                            .onContinuousHover { phase in
+                                switch phase {
+                                case .active(let location):
+                                    if let year: String = proxy.value(atX: location.x) { hoveredYear = year }
+                                case .ended:
+                                    hoveredYear = nil
+                                }
+                            }
+                        
+                        if let y = hoveredYear, let yr = Int(y), let item = data.first(where: { $0.year == yr }) {
+                            if let xPosition = proxy.position(forX: y) {
+                                MoICTooltip(year: item.year, multiple: item.multiple, privacyMode: privacyMode)
+                                    .position(x: max(40, min(geometry.size.width - 40, xPosition)), y: 35)
+                            }
+                        }
+                    }
                 }
                 .chartXSelection(value: $hoveredYear)
                 .chartXScale(domain: yearsDomain)
-                .chartYScale(domain: .automatic(includesZero: false))
+                .chartYScale(domain: 0...yMax)
                 .chartYAxis { AxisMarks(position: .leading) { value in AxisGridLine(); AxisTick(); AxisValueLabel { if let v = value.as(Double.self) { Text("\(v.formatted(.number.precision(.fractionLength(1))))x").font(.system(size: 10)) } } } }
                 .chartXAxis { AxisMarks { value in AxisValueLabel { if let s = value.as(String.self) { Text(s).font(.caption) } } } }
             }
             HStack { Text("Total Value divided by Total Invested Capital").font(.caption2).foregroundColor(.secondary); Spacer(); BlueChipWatermark() }
         }
         .padding().frame(minHeight: isExpanded ? 500 : 300, maxHeight: isExpanded ? .infinity : 300).background(Color(NSColor.controlBackgroundColor)).cornerRadius(12).shadow(color: Color.black.opacity(0.05), radius: 2, x: 0, y: 1)
+    }
+}
+
+// --- SOUS-VUE POUR L'INFOBULLE DU TIPPING POINT CHART ---
+struct TippingPointTooltip: View {
+    let year: String
+    let contrib: Double
+    let market: Double
+    let privacyMode: Bool
+    
+    var body: some View {
+        VStack(alignment: .leading, spacing: 4) {
+            Text(year).font(.caption.bold())
+            
+            HStack(spacing: 4) {
+                Circle().fill(Color.gray).frame(width: 7, height: 7)
+                Text("Saved: \(contrib.formatted(.currency(code: "EUR").precision(.fractionLength(0))))")
+                    .font(.caption2).foregroundColor(.secondary).blur(radius: privacyMode ? 6 : 0)
+            }
+            HStack(spacing: 4) {
+                Circle().fill(market >= 0 ? Color.green : Color.red).frame(width: 7, height: 7)
+                Text("Market: \(market.formatted(.currency(code: "EUR").precision(.fractionLength(0)).sign(strategy: .always())))")
+                    .font(.caption2).foregroundColor(market >= 0 ? .green : .red).blur(radius: privacyMode ? 6 : 0)
+            }
+        }
+        .padding(6)
+        .background(Color(NSColor.windowBackgroundColor).opacity(0.95))
+        .cornerRadius(6)
+        .shadow(radius: 4)
+        .fixedSize()
     }
 }
 
@@ -1048,6 +1225,15 @@ struct TippingPointChart: View {
     
     var hoveredContributions: Double? { baseData.first { String($0.year) == hoveredYear && $0.type == "Contributions" }?.value }
     var hoveredMarketReturn: Double? { baseData.first { String($0.year) == hoveredYear && $0.type == "Market Returns" }?.value }
+    
+    var yMax: Double {
+        let maxVal = baseData.map { $0.value }.max() ?? 1000
+        return maxVal > 0 ? maxVal * 1.25 : 1000
+    }
+    var yMin: Double {
+        let minVal = baseData.map { $0.value }.min() ?? 0
+        return minVal < 0 ? minVal * 1.25 : 0
+    }
 
     var body: some View {
         VStack(alignment: .leading, spacing: 8) {
@@ -1059,37 +1245,88 @@ struct TippingPointChart: View {
             
             InteractiveLegendView(items: ["Contributions", "Market Returns"], colorMap: { color(for: $0) }, hiddenItems: $hiddenItems).padding(.bottom, 8)
             
-            if let y = hoveredYear, let contrib = hoveredContributions, let mReturn = hoveredMarketReturn {
-                HStack(spacing: 16) {
-                    Text(y).fontWeight(.bold)
-                    Text("Contributions: \(contrib.formatted(.currency(code: "EUR").precision(.fractionLength(0))))")
-                        .foregroundColor(.secondary).fontWeight(.semibold).blur(radius: privacyMode ? 6 : 0)
-                    Text("Market: \(mReturn.formatted(.currency(code: "EUR").precision(.fractionLength(0)).sign(strategy: .always())))")
-                        .foregroundColor(mReturn >= 0 ? .green : .red).fontWeight(.semibold).blur(radius: privacyMode ? 6 : 0)
-                }
-                .font(.caption).padding(.horizontal, 8).padding(.vertical, 4).background(Color(NSColor.windowBackgroundColor)).cornerRadius(6).transition(.opacity)
-            } else {
-                Text("Hover to view").font(.caption).foregroundColor(.clear)
-            }
-            
             if baseData.isEmpty {
                 Spacer(); Text("No data").foregroundColor(.secondary).frame(maxWidth: .infinity, alignment: .center); Spacer()
             } else {
-                Chart(filteredData) { item in
-                    BarMark(
-                        x: .value("Year", String(item.year)),
-                        y: .value("Value", item.value)
-                    )
-                    .foregroundStyle(color(for: item.type, value: item.value))
-                    .position(by: .value("Type", item.type))
-                    .cornerRadius(4)
+                Chart {
+                    ForEach(filteredData) { item in
+                        BarMark(
+                            x: .value("Year", String(item.year)),
+                            y: .value("Value", item.value)
+                        )
+                        .foregroundStyle(color(for: item.type, value: item.value))
+                        .position(by: .value("Type", item.type))
+                        .cornerRadius(4)
+                    }
+                    if let y = hoveredYear { RuleMark(x: .value("Year", y)).foregroundStyle(Color.secondary.opacity(0.4)).lineStyle(StrokeStyle(lineWidth: 1, dash: [4, 3])).zIndex(-1) }
+                }
+                .chartOverlay { proxy in
+                    GeometryReader { geometry in
+                        Rectangle().fill(.clear).contentShape(Rectangle())
+                            .onContinuousHover { phase in
+                                switch phase {
+                                case .active(let location):
+                                    if let year: String = proxy.value(atX: location.x) { hoveredYear = year }
+                                case .ended:
+                                    hoveredYear = nil
+                                }
+                            }
+                        
+                        if let y = hoveredYear, let contrib = hoveredContributions, let mReturn = hoveredMarketReturn {
+                            if let xPosition = proxy.position(forX: y) {
+                                TippingPointTooltip(
+                                    year: y,
+                                    contrib: contrib,
+                                    market: mReturn,
+                                    privacyMode: privacyMode
+                                )
+                                .position(x: max(60, min(geometry.size.width - 60, xPosition)), y: 45)
+                            }
+                        }
+                    }
                 }
                 .chartXSelection(value: $hoveredYear)
                 .chartXScale(domain: yearsDomain)
+                .chartYScale(domain: yMin...yMax)
                 .chartYAxis { AxisMarks(position: .leading) { value in AxisGridLine(); AxisTick(); AxisValueLabel { if let v = value.as(Double.self) { Text(v.formatted(.currency(code: "EUR").notation(.compactName))) } } } }
             }
             HStack { Text("Watch for the year your money works harder than you").font(.caption2).foregroundColor(.secondary); Spacer(); BlueChipWatermark() }
         }.padding().frame(minHeight: isExpanded ? 500 : 300, maxHeight: isExpanded ? .infinity : 300).background(Color(NSColor.controlBackgroundColor)).cornerRadius(12).shadow(color: Color.black.opacity(0.05), radius: 2, x: 0, y: 1)
+    }
+}
+
+// --- SOUS-VUE POUR L'INFOBULLE DU GRAPHIQUE COMPOUNDING PIE ---
+struct CompoundingPieTooltip: View {
+    let year: String
+    let pItem: CompoundingPieItem?
+    let gItem: CompoundingPieItem?
+    let hiddenItems: Set<String>
+    let privacyMode: Bool
+    
+    var body: some View {
+        VStack(alignment: .leading, spacing: 4) {
+            Text(year).font(.caption.bold())
+            
+            if !hiddenItems.contains("Principal"), let p = pItem {
+                HStack(spacing: 4) {
+                    Circle().fill(Color.blue).frame(width: 7, height: 7)
+                    Text("Principal: \(p.percentage.formatted(.number.precision(.fractionLength(1))))%")
+                        .font(.caption2).foregroundColor(.blue).blur(radius: privacyMode ? 6 : 0)
+                }
+            }
+            if !hiddenItems.contains("Growth"), let g = gItem {
+                HStack(spacing: 4) {
+                    Circle().fill(Color.green).frame(width: 7, height: 7)
+                    Text("Growth: \(g.percentage.formatted(.number.precision(.fractionLength(1))))%")
+                        .font(.caption2).foregroundColor(.green).blur(radius: privacyMode ? 6 : 0)
+                }
+            }
+        }
+        .padding(6)
+        .background(Color(NSColor.windowBackgroundColor).opacity(0.95))
+        .cornerRadius(6)
+        .shadow(radius: 4)
+        .fixedSize()
     }
 }
 
@@ -1152,37 +1389,48 @@ struct CompoundingPieChart: View {
             
             InteractiveLegendView(items: ["Principal", "Growth"], colorMap: color, hiddenItems: $hiddenItems).padding(.bottom, 8)
             
-            if let y = hoveredYear, let pItem = hoveredPrincipal, let gItem = hoveredGrowth {
-                HStack(spacing: 16) {
-                    Text(y).fontWeight(.bold)
-                    Text("Principal: \(pItem.percentage.formatted(.number.precision(.fractionLength(1))))%")
-                        .foregroundColor(.blue).fontWeight(.semibold).blur(radius: privacyMode ? 6 : 0)
-                    Text("Growth: \(gItem.percentage.formatted(.number.precision(.fractionLength(1))))%")
-                        .foregroundColor(.green).fontWeight(.semibold).blur(radius: privacyMode ? 6 : 0)
-                }
-                .font(.caption).padding(.horizontal, 8).padding(.vertical, 4).background(Color(NSColor.windowBackgroundColor)).cornerRadius(6).transition(.opacity)
-            } else {
-                Text("Hover to view").font(.caption).foregroundColor(.clear)
-            }
-            
             if baseData.isEmpty {
                 Spacer(); Text("No data").foregroundColor(.secondary).frame(maxWidth: .infinity, alignment: .center); Spacer()
             } else {
-                Chart(filteredData) { item in
-                    BarMark(
-                        x: .value("Year", String(item.year)),
-                        y: .value("Percentage", item.percentage)
-                    )
-                    .foregroundStyle(color(for: item.category))
-                    
-                    if let y = hoveredYear {
-                        RuleMark(x: .value("Year", y))
-                            .foregroundStyle(Color.secondary.opacity(0.4))
-                            .lineStyle(StrokeStyle(lineWidth: 1, dash: [4, 3]))
+                Chart {
+                    ForEach(filteredData) { item in
+                        BarMark(
+                            x: .value("Year", String(item.year)),
+                            y: .value("Percentage", item.percentage)
+                        )
+                        .foregroundStyle(color(for: item.category))
+                    }
+                    if let y = hoveredYear { RuleMark(x: .value("Year", y)).foregroundStyle(Color.secondary.opacity(0.4)).lineStyle(StrokeStyle(lineWidth: 1, dash: [4, 3])).zIndex(-1) }
+                }
+                .chartOverlay { proxy in
+                    GeometryReader { geometry in
+                        Rectangle().fill(.clear).contentShape(Rectangle())
+                            .onContinuousHover { phase in
+                                switch phase {
+                                case .active(let location):
+                                    if let year: String = proxy.value(atX: location.x) { hoveredYear = year }
+                                case .ended:
+                                    hoveredYear = nil
+                                }
+                            }
+                        
+                        if let y = hoveredYear {
+                            if let xPosition = proxy.position(forX: y) {
+                                CompoundingPieTooltip(
+                                    year: y,
+                                    pItem: hoveredPrincipal,
+                                    gItem: hoveredGrowth,
+                                    hiddenItems: hiddenItems,
+                                    privacyMode: privacyMode
+                                )
+                                .position(x: max(60, min(geometry.size.width - 60, xPosition)), y: 45)
+                            }
+                        }
                     }
                 }
                 .chartXSelection(value: $hoveredYear)
                 .chartXScale(domain: yearsDomain)
+                .chartYScale(domain: 0...110) // Marge pour l'infobulle
                 .chartYAxis { AxisMarks(position: .leading) { value in AxisGridLine(); AxisTick(); AxisValueLabel { if let v = value.as(Double.self) { Text("\(v.formatted(.number.precision(.fractionLength(0))))%") } } } }
             }
             HStack { Text("Shows how returns snowball and overtake your principal over time").font(.caption2).foregroundColor(.secondary); Spacer(); BlueChipWatermark() }
