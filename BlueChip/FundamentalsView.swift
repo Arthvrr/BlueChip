@@ -258,11 +258,7 @@ struct FundamentalsDashboardSection: View {
         VStack(spacing: 16) {
             let trackedStocks = viewModel.positions.filter { ($0.fundamentalValues?.count ?? 0) > 0 }
             
-            let totalVal = viewModel.positions.reduce(0) { $0 + $1.currentValueEUR }
-            let avgScore = viewModel.positions.reduce(0) { sum, pos in
-                let w = totalVal > 0 ? pos.currentValueEUR / totalVal : 0
-                return sum + (getTotalScore(pos) * w)
-            }
+            let avgScore = trackedStocks.isEmpty ? 0 : trackedStocks.reduce(0) { $0 + getTotalScore($1) } / Double(trackedStocks.count)
             let avgScorePct = maxPossibleScore > 0 ? (avgScore / maxPossibleScore) : 0
             
             let bestStock = trackedStocks.max(by: { getTotalScore($0) < getTotalScore($1) })
@@ -691,18 +687,15 @@ struct FundamentalsTotalScoreChart: View {
                     
                     // MODIFIÉ : Ligne Average passée à la fin pour être au premier plan + zIndex(10)
                     if !hiddenMetrics.contains("Average") {
-                        let totalVal = viewModel.positions.reduce(0) { $0 + $1.currentValueEUR }
-                        let weightedScore = viewModel.positions.reduce(0) { sum, pos in
-                            let w = totalVal > 0 ? pos.currentValueEUR / totalVal : 0
-                            return sum + (getTotalScore(pos) * w)
-                        }
                         
-                        RuleMark(y: .value("Average", weightedScore))
+                        let avgScore = filteredPositions.isEmpty ? 0 : filteredPositions.reduce(0) { $0 + getTotalScore($1) } / Double(filteredPositions.count)
+                        
+                        RuleMark(y: .value("Average", avgScore))
                             .foregroundStyle(Color.primary.opacity(0.7)) // Plus visible
                             .lineStyle(StrokeStyle(lineWidth: 2, dash: [4, 4]))
                             .zIndex(10) // <-- Force le placement au premier plan
                             .annotation(position: .top, alignment: .leading) {
-                                Text("Avg: \(weightedScore.formatted(.number.precision(.fractionLength(1))))")
+                                Text("Avg: \(avgScore.formatted(.number.precision(.fractionLength(1))))")
                                     .font(.caption2.bold())
                                     .foregroundColor(.primary)
                                     .padding(.horizontal, 4).padding(.vertical, 2)
