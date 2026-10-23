@@ -133,6 +133,38 @@ struct PRUPriceChart: View {
     }
 }
 
+// --- SOUS-VUE POUR L'INFOBULLE DU ROI COMBO CHART ---
+struct ROIComboTooltip: View {
+    let ticker: String
+    let roiValue: Double
+    let roiPercent: Double
+    let showEuros: Bool
+    let showPercent: Bool
+    let privacyMode: Bool
+    
+    var body: some View {
+        VStack(alignment: .center, spacing: 4) {
+            Text(ticker).font(.caption.bold())
+            
+            if showEuros {
+                Text(roiValue.formatted(.currency(code: "EUR")))
+                    .font(.caption2)
+                    .foregroundColor(roiValue >= 0 ? .green : .red)
+                    .blur(radius: privacyMode ? 6 : 0)
+            }
+            if showPercent {
+                Text(roiPercent.formatted(.percent.precision(.fractionLength(1))))
+                    .font(.caption2)
+                    .blur(radius: privacyMode ? 6 : 0)
+            }
+        }
+        .padding(6)
+        .background(Color(NSColor.windowBackgroundColor).opacity(0.95))
+        .cornerRadius(6)
+        .shadow(radius: 4)
+    }
+}
+
 struct ROIComboChart: View {
     @ObservedObject var viewModel: PortfolioViewModel
     let positions: [Position]
@@ -148,7 +180,7 @@ struct ROIComboChart: View {
     var uniqueTickers: [String] { positions.map { $0.ticker }.sorted() }
     var filteredPositions: [Position] { positions.filter { !hiddenTickers.contains($0.ticker) } }
     
-    // NOUVEAU: Donne une marge d'espace de 25% en haut pour que l'infobulle respire
+    // Marges d'espace de 25% en haut et en bas pour que l'infobulle respire
     var yMax: Double {
         let maxROI = filteredPositions.map { $0.roiValue }.max() ?? 100
         return maxROI > 0 ? maxROI * 1.25 : 100
@@ -212,31 +244,41 @@ struct ROIComboChart: View {
                         }
                     }
                     
-                    // NOUVEAU: Le RuleMark centralise l'infobulle ! (Zéro erreur de compilation, zéro écrasement)
-                    if let hTicker = hoveredTicker, let pos = filteredPositions.first(where: { $0.ticker == hTicker }) {
+                    // Ligne verticale grise de survol uniquement
+                    if let hTicker = hoveredTicker, filteredPositions.contains(where: { $0.ticker == hTicker }) {
                         RuleMark(x: .value("Ticker", hTicker))
                             .foregroundStyle(Color.secondary.opacity(0.3))
                             .zIndex(-1)
-                            .annotation(position: .top, overflowResolution: .init(x: .fit(to: .chart), y: .fit(to: .chart))) {
-                                VStack(alignment: .center, spacing: 4) {
-                                    Text(hTicker).font(.caption.bold())
-                                    if !hiddenMetrics.contains("Euros") {
-                                        Text(pos.roiValue.formatted(.currency(code: "EUR")))
-                                            .font(.caption2)
-                                            .foregroundColor(pos.roiValue >= 0 ? .green : .red)
-                                            .blur(radius: privacyMode ? 6 : 0)
-                                    }
-                                    if !hiddenMetrics.contains("Percent") {
-                                        Text(pos.roiPercent.formatted(.percent.precision(.fractionLength(1))))
-                                            .font(.caption2)
-                                            .blur(radius: privacyMode ? 6 : 0)
-                                    }
+                    }
+                }
+                // NOUVEAU : On gère le survol et l'infobulle avec chartOverlay
+                .chartOverlay { proxy in
+                    GeometryReader { geometry in
+                        Rectangle().fill(.clear).contentShape(Rectangle())
+                            .onContinuousHover { phase in
+                                switch phase {
+                                case .active(let location):
+                                    if let ticker: String = proxy.value(atX: location.x) { hoveredTicker = ticker }
+                                case .ended:
+                                    hoveredTicker = nil
                                 }
-                                .padding(6)
-                                .background(Color(NSColor.windowBackgroundColor).opacity(0.95))
-                                .cornerRadius(6)
-                                .shadow(radius: 4)
                             }
+                        
+                        // Dessin de l'infobulle
+                        if let hTicker = hoveredTicker, let pos = filteredPositions.first(where: { $0.ticker == hTicker }) {
+                            if let xPosition = proxy.position(forX: hTicker) {
+                                ROIComboTooltip(
+                                    ticker: hTicker,
+                                    roiValue: pos.roiValue,
+                                    roiPercent: pos.roiPercent,
+                                    showEuros: !hiddenMetrics.contains("Euros"),
+                                    showPercent: !hiddenMetrics.contains("Percent"),
+                                    privacyMode: privacyMode
+                                )
+                                // Force l'infobulle à rester en dessous du plafond
+                                .position(x: max(40, min(geometry.size.width - 40, xPosition)), y: 35)
+                            }
+                        }
                     }
                 }
                 .chartLegend(.hidden)
@@ -433,7 +475,7 @@ struct DailyROIChart: View {
     var uniqueTickers: [String] { positions.map { $0.ticker }.sorted() }
     var filteredPositions: [Position] { positions.filter { !hiddenTickers.contains($0.ticker) } }
     
-    // NOUVEAU: Donne une marge d'espace de 25% en haut et en bas
+    // Conserve les marges dynamiques pour que les barres ne touchent pas le plafond
     var yMax: Double {
         let maxVal = filteredPositions.map { $0.dailyROIValue }.max() ?? 10
         return maxVal > 0 ? maxVal * 1.25 : 10
@@ -459,14 +501,31 @@ struct DailyROIChart: View {
                         BarMark(x: .value("Ticker", pos.ticker), y: .value("Daily P/L", pos.dailyROIValue))
                             .foregroundStyle(pos.dailyROIValue >= 0 ? Color.green.opacity(0.7) : Color.red.opacity(0.7))
                             .cornerRadius(4)
+                        
+                        // Ligne verticale grise de survol uniquement
+                        if let hTicker = hoveredTicker, pos.ticker == hTicker {
+                            RuleMark(x: .value("Ticker", hTicker))
+                                .foregroundStyle(Color.secondary.opacity(0.3))
+                                .zIndex(-1)
+                        }
                     }
-                    
-                    // NOUVEAU: Le RuleMark centralise l'infobulle pour éviter les erreurs de compilation et l'écrasement
-                    if let hTicker = hoveredTicker, let pos = filteredPositions.first(where: { $0.ticker == hTicker }) {
-                        RuleMark(x: .value("Ticker", hTicker))
-                            .foregroundStyle(Color.secondary.opacity(0.3))
-                            .zIndex(-1)
-                            .annotation(position: .top, overflowResolution: .init(x: .fit(to: .chart), y: .fit(to: .chart))) {
+                }
+                // NOUVEAU : On gère le survol et l'infobulle de manière totalement indépendante avec chartOverlay
+                .chartOverlay { proxy in
+                    GeometryReader { geometry in
+                        Rectangle().fill(.clear).contentShape(Rectangle())
+                            .onContinuousHover { phase in
+                                switch phase {
+                                case .active(let location):
+                                    if let ticker: String = proxy.value(atX: location.x) { hoveredTicker = ticker }
+                                case .ended:
+                                    hoveredTicker = nil
+                                }
+                            }
+                        
+                        // L'infobulle est dessinée manuellement aux coordonnées parfaites
+                        if let hTicker = hoveredTicker, let pos = filteredPositions.first(where: { $0.ticker == hTicker }) {
+                            if let xPosition = proxy.position(forX: hTicker) {
                                 VStack(alignment: .center, spacing: 4) {
                                     Text(hTicker).font(.caption.bold())
                                     Text(pos.dailyROIValue.formatted(.currency(code: "EUR").sign(strategy: .always())))
@@ -478,12 +537,14 @@ struct DailyROIChart: View {
                                 .background(Color(NSColor.windowBackgroundColor).opacity(0.95))
                                 .cornerRadius(6)
                                 .shadow(radius: 4)
+                                // Le y: 35 force l'infobulle à rester en dessous du plafond pour ne jamais être coupée !
+                                .position(x: max(40, min(geometry.size.width - 40, xPosition)), y: 35)
                             }
+                        }
                     }
                 }
                 .chartLegend(.hidden)
-                .chartXSelection(value: $hoveredTicker)
-                .chartYScale(domain: yMin...yMax) // NOUVEAU: Applique les marges dynamiques
+                .chartYScale(domain: yMin...yMax)
             }
             HStack { Text("Daily profit or loss contribution by holding").font(.caption2).foregroundColor(.secondary); Spacer(); BlueChipWatermark() }
         }.padding().frame(minHeight: 360, maxHeight: isExpanded ? .infinity : 360).background(Color(NSColor.controlBackgroundColor)).cornerRadius(12).shadow(color: Color.black.opacity(0.05), radius: 2, x: 0, y: 1)
