@@ -46,16 +46,15 @@ struct FundamentalsView: View {
     @Environment(\.modelContext) private var context
     
     @State private var showAddCriterion: Bool = false
-    @State private var showReorderSheet: Bool = false // NOUVEAU
+    @State private var showReorderSheet: Bool = false
     @State private var editingCriterion: FundamentalCriterion? = nil
     @State private var editingCell: (position: Position, criterion: FundamentalCriterion)? = nil
     @State private var chartToZoom: FundamentalsChartZoomType? = nil
     
-    // MODIFIÉ : Utilise la propriété `order` pour trier les sections et les critères
     var groupedCriteria: [(section: String, criteria: [FundamentalCriterion])] {
         let dict = Dictionary(grouping: viewModel.fundamentalCriteria, by: { $0.section })
         return dict.map { (section: $0.key, criteria: $0.value.sorted(by: {
-            if $0.order == $1.order { return $0.name < $1.name } // Fallback alphabétique
+            if $0.order == $1.order { return $0.name < $1.name }
             return $0.order < $1.order
         })) }.sorted { group1, group2 in
             let min1 = group1.criteria.map { $0.order }.min() ?? Int.max
@@ -123,22 +122,7 @@ struct FundamentalsView: View {
         ScrollView(.vertical) {
             VStack(spacing: 24) {
                 
-                HStack(spacing: 12) {
-                    //Text("Stock Quality Screener").font(.title).fontWeight(.bold)
-                    Spacer()
-                    
-                    // NOUVEAU : Bouton pour réorganiser
-                    Button(action: { showReorderSheet = true }) {
-                        Label("Reorder Layout", systemImage: "arrow.up.arrow.down")
-                    }
-                    .buttonStyle(.bordered)
-                    
-                    Button(action: { showAddCriterion = true }) {
-                        Label("Add Criterion", systemImage: "plus")
-                    }
-                    .buttonStyle(.borderedProminent)
-                }
-                
+                // 1. DASHBOARD
                 FundamentalsDashboardSection(
                     viewModel: viewModel,
                     privacyMode: $privacyMode,
@@ -146,6 +130,7 @@ struct FundamentalsView: View {
                     getTotalScore: getTotalScore
                 )
                 
+                // 2. SPREADSHEET
                 FundamentalsSpreadsheetSection(
                     viewModel: viewModel,
                     groupedCriteria: groupedCriteria,
@@ -153,89 +138,89 @@ struct FundamentalsView: View {
                     getTotalScore: getTotalScore,
                     privacyMode: $privacyMode,
                     onCellTap: { pos, crit in editingCell = (pos, crit) },
-                    onCriterionTap: { crit in editingCriterion = crit }
+                    onCriterionTap: { crit in editingCriterion = crit },
+                    onAddCriterion: { showAddCriterion = true },
+                    onReorder: { showReorderSheet = true }
                 )
                 
-                HStack(alignment: .top, spacing: 24) {
-                    FundamentalsTotalScoreChart(
-                        viewModel: viewModel,
-                        maxPossibleScore: maxPossibleScore,
-                        getTotalScore: getTotalScore,
-                        privacyMode: $privacyMode,
-                        expandedChart: $chartToZoom
-                    )
-                    
-                    FundamentalsScoreCompositionChart(
-                        viewModel: viewModel,
-                        uniqueSections: Array(Set(viewModel.fundamentalCriteria.map { $0.section })).sorted(),
-                        solidColorForSection: solidColor,
-                        getStockSectionScorePct: getStockSectionScorePct,
-                        privacyMode: $privacyMode,
-                        expandedChart: $chartToZoom
-                    )
+                // 3. SECTIONS GRAPHIQUES
+                VStack(alignment: .leading, spacing: 12) {
+                    Text("Quality & Composition Breakdown").font(.title2).fontWeight(.bold).foregroundColor(.secondary)
+                    HStack(alignment: .top, spacing: 24) {
+                        FundamentalsTotalScoreChart(
+                            viewModel: viewModel,
+                            maxPossibleScore: maxPossibleScore,
+                            getTotalScore: getTotalScore,
+                            privacyMode: $privacyMode,
+                            expandedChart: $chartToZoom
+                        )
+                        
+                        FundamentalsScoreCompositionChart(
+                            viewModel: viewModel,
+                            uniqueSections: Array(Set(viewModel.fundamentalCriteria.map { $0.section })).sorted(),
+                            solidColorForSection: solidColor,
+                            getStockSectionScorePct: getStockSectionScorePct,
+                            privacyMode: $privacyMode,
+                            expandedChart: $chartToZoom
+                        )
+                    }
                 }
                 
-                HStack(alignment: .top, spacing: 24) {
-                    FundamentalsQualityMatrixChart(
-                        viewModel: viewModel,
-                        maxPossibleScore: maxPossibleScore,
-                        getTotalScore: getTotalScore,
-                        colorForTicker: colorForTicker,
-                        privacyMode: $privacyMode,
-                        expandedChart: $chartToZoom
-                    )
-                    
-                    FundamentalsLineChart(
-                        viewModel: viewModel,
-                        uniqueSections: Array(Set(viewModel.fundamentalCriteria.map { $0.section })).sorted(),
-                        getStockSectionScorePct: getStockSectionScorePct,
-                        colorForTicker: colorForTicker,
-                        privacyMode: $privacyMode,
-                        expandedChart: $chartToZoom
-                    )
+                VStack(alignment: .leading, spacing: 12) {
+                    Text("Quality Matrix & Segment Analysis").font(.title2).fontWeight(.bold).foregroundColor(.secondary)
+                    HStack(alignment: .top, spacing: 24) {
+                        FundamentalsQualityMatrixChart(
+                            viewModel: viewModel,
+                            maxPossibleScore: maxPossibleScore,
+                            getTotalScore: getTotalScore,
+                            colorForTicker: colorForTicker,
+                            privacyMode: $privacyMode,
+                            expandedChart: $chartToZoom
+                        )
+                        
+                        FundamentalsLineChart(
+                            viewModel: viewModel,
+                            uniqueSections: Array(Set(viewModel.fundamentalCriteria.map { $0.section })).sorted(),
+                            getStockSectionScorePct: getStockSectionScorePct,
+                            colorForTicker: colorForTicker,
+                            privacyMode: $privacyMode,
+                            expandedChart: $chartToZoom
+                        )
+                    }
                 }
                 
-                HStack(alignment: .top, spacing: 24) {
-                    FundamentalsPolarChart(
-                        viewModel: viewModel,
-                        uniqueSections: Array(Set(viewModel.fundamentalCriteria.map { $0.section })).sorted(),
-                        getStockSectionScorePct: getStockSectionScorePct,
-                        colorForSection: color,
-                        privacyMode: $privacyMode,
-                        expandedChart: $chartToZoom
-                    )
-                    
-                    FundamentalsRadarChart(
-                        viewModel: viewModel,
-                        uniqueSections: Array(Set(viewModel.fundamentalCriteria.map { $0.section })).sorted(),
-                        getStockSectionScorePct: getStockSectionScorePct,
-                        colorForTicker: colorForTicker,
-                        privacyMode: $privacyMode,
-                        expandedChart: $chartToZoom
-                    )
+                VStack(alignment: .leading, spacing: 12) {
+                    Text("Radar & Polar Quality Profiles").font(.title2).fontWeight(.bold).foregroundColor(.secondary)
+                    HStack(alignment: .top, spacing: 24) {
+                        FundamentalsPolarChart(
+                            viewModel: viewModel,
+                            uniqueSections: Array(Set(viewModel.fundamentalCriteria.map { $0.section })).sorted(),
+                            getStockSectionScorePct: getStockSectionScorePct,
+                            colorForSection: color,
+                            privacyMode: $privacyMode,
+                            expandedChart: $chartToZoom
+                        )
+                        
+                        FundamentalsRadarChart(
+                            viewModel: viewModel,
+                            uniqueSections: Array(Set(viewModel.fundamentalCriteria.map { $0.section })).sorted(),
+                            getStockSectionScorePct: getStockSectionScorePct,
+                            colorForTicker: colorForTicker,
+                            privacyMode: $privacyMode,
+                            expandedChart: $chartToZoom
+                        )
+                    }
                 }
             }
             .padding()
         }
-        .sheet(isPresented: $showAddCriterion) {
-            CriterionFormSheet(viewModel: viewModel, criterionToEdit: nil)
-        }
-        .sheet(item: $editingCriterion) { crit in
-            CriterionFormSheet(viewModel: viewModel, criterionToEdit: crit)
-        }
-        .sheet(isPresented: $showReorderSheet) {
-            ReorderScreenerSheet(viewModel: viewModel)
-        }
+        .sheet(isPresented: $showAddCriterion) { CriterionFormSheet(viewModel: viewModel, criterionToEdit: nil) }
+        .sheet(item: $editingCriterion) { crit in CriterionFormSheet(viewModel: viewModel, criterionToEdit: crit) }
+        .sheet(isPresented: $showReorderSheet) { ReorderScreenerSheet(viewModel: viewModel) }
         .sheet(item: Binding<EditingCellWrapper?>(
             get: { editingCell != nil ? EditingCellWrapper(position: editingCell!.position, criterion: editingCell!.criterion) : nil },
             set: { _ in editingCell = nil }
-        )) { wrapper in
-            ValueEntrySheet(
-                viewModel: viewModel,
-                position: wrapper.position,
-                criterion: wrapper.criterion
-            )
-        }
+        )) { wrapper in ValueEntrySheet(viewModel: viewModel, position: wrapper.position, criterion: wrapper.criterion) }
         .sheet(item: $chartToZoom) { type in
             FundamentalsFullScreenChartView(
                 zoomType: type,
@@ -260,7 +245,7 @@ struct EditingCellWrapper: Identifiable {
 }
 
 // =========================================================================
-// MARK: - DASHBOARD SECTION
+// MARK: - DASHBOARD SECTION (MODIFIÉ: Retour à 8 cases)
 // =========================================================================
 
 struct FundamentalsDashboardSection: View {
@@ -273,24 +258,28 @@ struct FundamentalsDashboardSection: View {
         VStack(spacing: 16) {
             let trackedStocks = viewModel.positions.filter { ($0.fundamentalValues?.count ?? 0) > 0 }
             
-            let avgScore = trackedStocks.isEmpty ? 0 : trackedStocks.reduce(0) { $0 + getTotalScore($1) } / Double(trackedStocks.count)
+            let totalVal = viewModel.positions.reduce(0) { $0 + $1.currentValueEUR }
+            let avgScore = viewModel.positions.reduce(0) { sum, pos in
+                let w = totalVal > 0 ? pos.currentValueEUR / totalVal : 0
+                return sum + (getTotalScore(pos) * w)
+            }
             let avgScorePct = maxPossibleScore > 0 ? (avgScore / maxPossibleScore) : 0
             
             let bestStock = trackedStocks.max(by: { getTotalScore($0) < getTotalScore($1) })
             let bestScore = bestStock != nil ? getTotalScore(bestStock!) : 0
             
             HStack(spacing: 16) {
-                DashboardCard(title: "Tracked Criteria", value: "\(viewModel.fundamentalCriteria.count)", titleIcon: "checklist", privacyMode: $privacyMode)
-                DashboardCard(title: "Stocks Analyzed", value: "\(trackedStocks.count) / \(viewModel.positions.count)", titleIcon: "magnifyingglass", privacyMode: $privacyMode)
-                DashboardCard(title: "Avg Portfolio Quality", value: "\(avgScore.formatted(.number.precision(.fractionLength(1)))) / \(Int(maxPossibleScore))", titleIcon: "star.fill", privacyMode: $privacyMode)
-                DashboardCard(title: "Avg Quality Score (%)", value: avgScorePct.formatted(.percent.precision(.fractionLength(1))), titleIcon: "percent", privacyMode: $privacyMode)
+                DashboardCard(title: "Tracked Criteria", value: "\(viewModel.fundamentalCriteria.count)", privacyMode: $privacyMode)
+                DashboardCard(title: "Stocks Analyzed", value: "\(trackedStocks.count) / \(viewModel.positions.count)", privacyMode: $privacyMode)
+                DashboardCard(title: "Avg Portfolio Quality", value: "\(avgScore.formatted(.number.precision(.fractionLength(1)))) / \(Int(maxPossibleScore))", privacyMode: $privacyMode)
+                DashboardCard(title: "Avg Quality Score (%)", value: avgScorePct.formatted(.percent.precision(.fractionLength(1))), privacyMode: $privacyMode)
             }
             
             HStack(spacing: 16) {
-                DashboardCard(title: "Top Quality Stock", value: bestStock?.ticker ?? "-", titleIcon: "trophy.fill", privacyMode: $privacyMode)
-                DashboardCard(title: "Top Stock Score", value: bestStock != nil ? "\(bestScore.formatted(.number.precision(.fractionLength(1))))" : "-", titleIcon: "crown.fill", privacyMode: $privacyMode)
-                DashboardCard(title: "Strongest Section", value: getStrongestSection(), titleIcon: "arrow.up.right.circle.fill", privacyMode: $privacyMode)
-                DashboardCard(title: "Weakest Section", value: getWeakestSection(), titleIcon: "arrow.down.right.circle.fill", privacyMode: $privacyMode)
+                DashboardCard(title: "Top Quality Stock", value: bestStock?.ticker ?? "-", privacyMode: $privacyMode)
+                DashboardCard(title: "Top Stock Score", value: bestStock != nil ? "\(bestScore.formatted(.number.precision(.fractionLength(1))))" : "-", privacyMode: $privacyMode)
+                DashboardCard(title: "Strongest Section", value: getStrongestSection(), privacyMode: $privacyMode)
+                DashboardCard(title: "Weakest Section", value: getWeakestSection(), privacyMode: $privacyMode)
             }
         }
     }
@@ -400,13 +389,28 @@ struct FundamentalsSpreadsheetSection: View {
     let onCellTap: (Position, FundamentalCriterion) -> Void
     let onCriterionTap: (FundamentalCriterion) -> Void
     
+    let onAddCriterion: () -> Void
+    let onReorder: () -> Void
+    
     let rowHeight: CGFloat = 40
     let colWidthInfo: CGFloat = 85
     let colWidthCrit: CGFloat = 110
     
     var body: some View {
         VStack(alignment: .leading, spacing: 8) {
-            Text("Screener Data").font(.title2).fontWeight(.bold)
+            
+            // MODIFIÉ : Titre du Screener et boutons sur la même ligne
+            HStack {
+                Text("Screener Data").font(.title2).fontWeight(.bold).foregroundColor(.secondary)
+                Spacer()
+                Button(action: onReorder) {
+                    HStack { Image(systemName: "arrow.up.arrow.down"); Text("Reorder Layout") }
+                }.buttonStyle(.bordered)
+                
+                Button(action: onAddCriterion) {
+                    HStack { Image(systemName: "plus"); Text("Add Criterion") }
+                }.buttonStyle(.borderedProminent)
+            }
             
             if viewModel.fundamentalCriteria.isEmpty {
                 VStack(spacing: 12) {
@@ -541,14 +545,13 @@ struct FundamentalsSpreadsheetSection: View {
 }
 
 // =========================================================================
-// MARK: - SHEET : RÉORGANISER LES COLONNES (NOUVEAU)
+// MARK: - SHEET : RÉORGANISER LES COLONNES
 // =========================================================================
 
 struct ReorderScreenerSheet: View {
     @Environment(\.dismiss) var dismiss
     @ObservedObject var viewModel: PortfolioViewModel
     
-    // Arrays temporaires pour manipuler l'ordre dans l'interface
     @State private var sections: [String] = []
     @State private var criteriaDict: [String: [FundamentalCriterion]] = [:]
     
@@ -557,80 +560,45 @@ struct ReorderScreenerSheet: View {
             HStack {
                 Text("Reorder Columns & Criteria").font(.title2).fontWeight(.bold)
                 Spacer()
-                Button("Done") { saveAndDismiss() }
-                    .buttonStyle(.borderedProminent)
-            }
-            .padding(20)
-            
+                Button("Done") { saveAndDismiss() }.buttonStyle(.borderedProminent)
+            }.padding(20)
             Divider()
             
             HStack(spacing: 20) {
-                // Colonne de gauche : Réorganiser les catégories
                 VStack(alignment: .leading, spacing: 10) {
-                    Text("1. Categories (Drag to reorder)")
-                        .font(.headline)
-                        .foregroundColor(.secondary)
-                    
+                    Text("1. Categories (Drag to reorder)").font(.headline).foregroundColor(.secondary)
                     List {
-                        ForEach(sections, id: \.self) { sec in
-                            Text(sec).fontWeight(.bold)
-                        }
-                        .onMove { indices, newOffset in
-                            sections.move(fromOffsets: indices, toOffset: newOffset)
-                        }
-                    }
-                    .listStyle(.bordered)
-                    .cornerRadius(8)
+                        ForEach(sections, id: \.self) { sec in Text(sec).fontWeight(.bold) }
+                        .onMove { indices, newOffset in sections.move(fromOffsets: indices, toOffset: newOffset) }
+                    }.listStyle(.bordered).cornerRadius(8)
                 }
                 
-                // Colonne de droite : Réorganiser les critères
                 VStack(alignment: .leading, spacing: 10) {
-                    Text("2. Criteria (Drag within category)")
-                        .font(.headline)
-                        .foregroundColor(.secondary)
-                    
+                    Text("2. Criteria (Drag within category)").font(.headline).foregroundColor(.secondary)
                     List {
                         ForEach(sections, id: \.self) { sec in
                             Section(header: Text(sec).fontWeight(.bold).foregroundColor(.primary)) {
                                 if let crits = criteriaDict[sec] {
-                                    ForEach(crits) { crit in
-                                        Text(crit.name)
-                                    }
-                                    .onMove { indices, newOffset in
-                                        criteriaDict[sec]?.move(fromOffsets: indices, toOffset: newOffset)
-                                    }
+                                    ForEach(crits) { crit in Text(crit.name) }
+                                    .onMove { indices, newOffset in criteriaDict[sec]?.move(fromOffsets: indices, toOffset: newOffset) }
                                 }
                             }
                         }
-                    }
-                    .listStyle(.bordered)
-                    .cornerRadius(8)
+                    }.listStyle(.bordered).cornerRadius(8)
                 }
-            }
-            .padding(20)
-        }
-        .frame(width: 700, height: 500)
-        .onAppear { setupData() }
+            }.padding(20)
+        }.frame(width: 700, height: 500).onAppear { setupData() }
     }
     
     func setupData() {
         let grouped = Dictionary(grouping: viewModel.fundamentalCriteria, by: { $0.section })
-        
-        let sortedGroups = grouped.map { (section: $0.key, criteria: $0.value.sorted(by: {
-            if $0.order == $1.order { return $0.name < $1.name }
-            return $0.order < $1.order
-        })) }.sorted { group1, group2 in
-            let min1 = group1.criteria.map { $0.order }.min() ?? Int.max
-            let min2 = group2.criteria.map { $0.order }.min() ?? Int.max
-            if min1 == min2 { return group1.section < group2.section }
-            return min1 < min2
+        let sortedGroups = grouped.map { (section: $0.key, criteria: $0.value.sorted(by: { if $0.order == $1.order { return $0.name < $1.name }; return $0.order < $1.order })) }.sorted { group1, group2 in
+            let min1 = group1.criteria.map { $0.order }.min() ?? Int.max; let min2 = group2.criteria.map { $0.order }.min() ?? Int.max
+            if min1 == min2 { return group1.section < group2.section }; return min1 < min2
         }
-        
         self.sections = sortedGroups.map { $0.section }
         var dict: [String: [FundamentalCriterion]] = [:]
-        for group in sortedGroups {
-            dict[group.section] = group.criteria
-        }
+        for group in sortedGroups { dict[group.section] = group.criteria }
         self.criteriaDict = dict
     }
     
@@ -639,10 +607,8 @@ struct ReorderScreenerSheet: View {
         for sec in sections {
             if let crits = criteriaDict[sec] {
                 for crit in crits {
-                    // Retrouver le critère original dans le ViewModel et lui assigner son nouvel ordre global
                     if let actualCrit = viewModel.fundamentalCriteria.first(where: { $0.id == crit.id }) {
-                        actualCrit.order = newOrderIndex
-                        newOrderIndex += 1
+                        actualCrit.order = newOrderIndex; newOrderIndex += 1
                     }
                 }
             }
@@ -656,6 +622,24 @@ struct ReorderScreenerSheet: View {
 // MARK: - VISUAL ANALYTICS (CHARTS)
 // =========================================================================
 
+struct FundamentalsTotalScoreTooltip: View {
+    let ticker: String
+    let score: Double
+    let privacyMode: Bool
+    
+    var body: some View {
+        VStack(alignment: .center, spacing: 4) {
+            Text(ticker).font(.caption.bold())
+            Text("\(score.formatted(.number.precision(.fractionLength(1)))) pts").font(.caption2).blur(radius: privacyMode ? 6 : 0)
+        }
+        .padding(6)
+        .background(Color(NSColor.windowBackgroundColor).opacity(0.95))
+        .cornerRadius(6)
+        .shadow(radius: 4)
+        .fixedSize() // MODIFIÉ : Assure un survol ultra compact
+    }
+}
+
 struct FundamentalsTotalScoreChart: View {
     @ObservedObject var viewModel: PortfolioViewModel
     let maxPossibleScore: Double
@@ -666,6 +650,7 @@ struct FundamentalsTotalScoreChart: View {
     
     @State private var hoveredTicker: String? = nil
     @State private var hiddenTickers: Set<String> = []
+    @State private var hiddenMetrics: Set<String> = [] // Pour la moyenne
 
     var body: some View {
         let filteredPositions = viewModel.positions.filter { !hiddenTickers.contains($0.ticker) }
@@ -679,38 +664,108 @@ struct FundamentalsTotalScoreChart: View {
                 }
             }.padding(.bottom, 4)
             
-            InteractiveLegendView(items: viewModel.positions.map { $0.ticker }, colorMap: { viewModel.color(for: $0) }, hiddenItems: $hiddenTickers)
-                .padding(.bottom, 8)
+            VStack(spacing: 4) {
+                Button(action: { withAnimation { if hiddenMetrics.contains("Average") { hiddenMetrics.remove("Average") } else { hiddenMetrics.insert("Average") } } }) {
+                    HStack(spacing: 6) { Rectangle().fill(Color.primary.opacity(0.7)).frame(width: 12, height: 2); Text("Portfolio Average").font(.caption).foregroundColor(hiddenMetrics.contains("Average") ? .secondary : .primary) }
+                }.buttonStyle(.plain).opacity(hiddenMetrics.contains("Average") ? 0.4 : 1.0)
+                
+                InteractiveLegendView(items: viewModel.positions.map { $0.ticker }, colorMap: { viewModel.color(for: $0) }, hiddenItems: $hiddenTickers)
+            }.padding(.bottom, 8)
             
             if viewModel.fundamentalCriteria.isEmpty || filteredPositions.isEmpty {
                 Spacer(); Text("No data").foregroundColor(.secondary); Spacer()
             } else {
-                Chart(filteredPositions.sorted(by: { getTotalScore($0) > getTotalScore($1) })) { pos in
-                    let score = getTotalScore(pos)
-                    BarMark(x: .value("Ticker", pos.ticker), y: .value("Score", score))
-                        .foregroundStyle(viewModel.color(for: pos.ticker).gradient).cornerRadius(4)
+                Chart {
+                    ForEach(filteredPositions.sorted(by: { getTotalScore($0) > getTotalScore($1) })) { pos in
+                        let score = getTotalScore(pos)
+                        BarMark(x: .value("Ticker", pos.ticker), y: .value("Score", score))
+                            .foregroundStyle(viewModel.color(for: pos.ticker).gradient).cornerRadius(4)
+                        
+                        // Ligne de repère grise
+                        if let hTicker = hoveredTicker, pos.ticker == hTicker {
+                            RuleMark(x: .value("Ticker", hTicker))
+                                .foregroundStyle(Color.secondary.opacity(0.3))
+                                .zIndex(-1)
+                        }
+                    }
                     
-                    if let hTicker = hoveredTicker, pos.ticker == hTicker {
-                        RuleMark(x: .value("Ticker", hTicker))
-                            .foregroundStyle(.secondary.opacity(0.3))
-                            .annotation(position: .top, overflowResolution: .init(x: .fit(to: .chart), y: .fit(to: .chart))) {
-                                VStack {
-                                    Text(hTicker).font(.caption.bold())
-                                    Text("\(score.formatted(.number.precision(.fractionLength(1)))) pts").font(.caption2).blur(radius: privacyMode ? 6 : 0)
-                                }.padding(6).background(Color(NSColor.windowBackgroundColor).opacity(0.95)).cornerRadius(6).shadow(radius: 4)
+                    // MODIFIÉ : Ligne Average passée à la fin pour être au premier plan + zIndex(10)
+                    if !hiddenMetrics.contains("Average") {
+                        let totalVal = viewModel.positions.reduce(0) { $0 + $1.currentValueEUR }
+                        let weightedScore = viewModel.positions.reduce(0) { sum, pos in
+                            let w = totalVal > 0 ? pos.currentValueEUR / totalVal : 0
+                            return sum + (getTotalScore(pos) * w)
+                        }
+                        
+                        RuleMark(y: .value("Average", weightedScore))
+                            .foregroundStyle(Color.primary.opacity(0.7)) // Plus visible
+                            .lineStyle(StrokeStyle(lineWidth: 2, dash: [4, 4]))
+                            .zIndex(10) // <-- Force le placement au premier plan
+                            .annotation(position: .top, alignment: .leading) {
+                                Text("Avg: \(weightedScore.formatted(.number.precision(.fractionLength(1))))")
+                                    .font(.caption2.bold())
+                                    .foregroundColor(.primary)
+                                    .padding(.horizontal, 4).padding(.vertical, 2)
+                                    .background(Color(NSColor.windowBackgroundColor).opacity(0.8))
+                                    .cornerRadius(4)
+                                    .blur(radius: privacyMode ? 6 : 0)
                             }
                     }
                 }
-                .chartYScale(domain: [0, max(maxPossibleScore, 1)])
+                .chartOverlay { proxy in
+                    GeometryReader { geometry in
+                        Rectangle().fill(.clear).contentShape(Rectangle())
+                            .onContinuousHover { phase in
+                                switch phase {
+                                case .active(let location):
+                                    if let ticker: String = proxy.value(atX: location.x) { hoveredTicker = ticker }
+                                case .ended:
+                                    hoveredTicker = nil
+                                }
+                            }
+                        
+                        if let hTicker = hoveredTicker, let pos = filteredPositions.first(where: { $0.ticker == hTicker }) {
+                            if let xPosition = proxy.position(forX: hTicker) {
+                                FundamentalsTotalScoreTooltip(ticker: hTicker, score: getTotalScore(pos), privacyMode: privacyMode)
+                                    .position(x: max(40, min(geometry.size.width - 40, xPosition)), y: 35)
+                            }
+                        }
+                    }
+                }
+                .chartYScale(domain: [0, max(maxPossibleScore, 1) * 1.1])
                 .chartLegend(.hidden)
                 .chartXSelection(value: $hoveredTicker)
             }
-            
-            Spacer()
-            BlueChipWatermark()
+            HStack { Text("Compares total quality scores across portfolio positions").font(.caption2).foregroundColor(.secondary); Spacer(); BlueChipWatermark() }
         }
         .padding().frame(minHeight: isExpanded ? 500 : 360, maxHeight: isExpanded ? .infinity : 360)
         .background(Color(NSColor.controlBackgroundColor)).cornerRadius(12).shadow(color: Color.black.opacity(0.05), radius: 2, x: 0, y: 1)
+    }
+}
+
+struct FundamentalsScoreCompositionTooltip: View {
+    let ticker: String
+    let pos: Position
+    let activeSections: [String]
+    let getStockSectionScorePct: (Position, String) -> Double
+    let solidColorForSection: (String) -> Color
+    let privacyMode: Bool
+    
+    var body: some View {
+        VStack(alignment: .leading, spacing: 4) {
+            Text(ticker).font(.caption.bold())
+            ForEach(activeSections, id: \.self) { section in
+                let pct = getStockSectionScorePct(pos, section)
+                HStack {
+                    Circle().fill(solidColorForSection(section)).frame(width: 6, height: 6)
+                    Text(section).font(.caption2)
+                    Spacer(minLength: 12)
+                    Text("\(pct.formatted(.number.precision(.fractionLength(1))))%").font(.caption2.bold()).blur(radius: privacyMode ? 6 : 0)
+                }
+            }
+        }
+        .padding(8).background(Color(NSColor.windowBackgroundColor).opacity(0.95)).cornerRadius(8).shadow(radius: 4)
+        .fixedSize() // MODIFIÉ : Assure un survol ultra compact
     }
 }
 
@@ -763,32 +818,66 @@ struct FundamentalsScoreCompositionChart: View {
                             .foregroundStyle(solidColorForSection(section))
                         }
                     }
-                    if let hTicker = hoveredTicker, let pos = viewModel.positions.first(where: { $0.ticker == hTicker }) {
-                        RuleMark(x: .value("Ticker", hTicker)).foregroundStyle(.secondary.opacity(0.3))
-                            .annotation(position: .top, overflowResolution: .init(x: .fit(to: .chart), y: .fit(to: .chart))) {
-                                VStack(alignment: .leading, spacing: 4) {
-                                    Text(hTicker).font(.caption.bold())
-                                    ForEach(activeSections, id: \.self) { section in
-                                        let pct = getStockSectionScorePct(pos, section)
-                                        HStack {
-                                            Circle().fill(solidColorForSection(section)).frame(width: 6, height: 6)
-                                            Text(section).font(.caption2)
-                                            Spacer(minLength: 12)
-                                            Text("\(pct.formatted(.number.precision(.fractionLength(1))))%").font(.caption2.bold()).blur(radius: privacyMode ? 6 : 0)
-                                        }
-                                    }
+                    if let hTicker = hoveredTicker {
+                        RuleMark(x: .value("Ticker", hTicker))
+                            .foregroundStyle(Color.secondary.opacity(0.3))
+                            .zIndex(-1)
+                    }
+                }
+                .chartOverlay { proxy in
+                    GeometryReader { geometry in
+                        Rectangle().fill(.clear).contentShape(Rectangle())
+                            .onContinuousHover { phase in
+                                switch phase {
+                                case .active(let location):
+                                    if let ticker: String = proxy.value(atX: location.x) { hoveredTicker = ticker }
+                                case .ended:
+                                    hoveredTicker = nil
                                 }
-                                .padding(8).background(Color(NSColor.windowBackgroundColor).opacity(0.95)).cornerRadius(8).shadow(radius: 4)
                             }
+                        
+                        if let hTicker = hoveredTicker, let pos = viewModel.positions.first(where: { $0.ticker == hTicker }) {
+                            if let xPosition = proxy.position(forX: hTicker) {
+                                FundamentalsScoreCompositionTooltip(
+                                    ticker: hTicker,
+                                    pos: pos,
+                                    activeSections: activeSections,
+                                    getStockSectionScorePct: getStockSectionScorePct,
+                                    solidColorForSection: solidColorForSection,
+                                    privacyMode: privacyMode
+                                )
+                                .position(x: max(60, min(geometry.size.width - 60, xPosition)), y: 60)
+                            }
+                        }
                     }
                 }
                 .chartLegend(.hidden)
                 .chartXSelection(value: $hoveredTicker)
             }
-            Spacer()
-            BlueChipWatermark()
+            HStack { Text("Shows the contribution of each fundamental section to the total score").font(.caption2).foregroundColor(.secondary); Spacer(); BlueChipWatermark() }
         }.padding().frame(minHeight: isExpanded ? 500 : 360, maxHeight: isExpanded ? .infinity : 360)
         .background(Color(NSColor.controlBackgroundColor)).cornerRadius(12).shadow(color: Color.black.opacity(0.05), radius: 2, x: 0, y: 1)
+    }
+}
+
+struct QualityMatrixTooltip: View {
+    let ticker: String
+    let score: Double
+    let weight: Double
+    let privacyMode: Bool
+    
+    var body: some View {
+        VStack {
+            Text(ticker).font(.caption.bold())
+            Text("\(score.formatted(.number.precision(.fractionLength(1)))) pts | \(weight.formatted(.percent.precision(.fractionLength(1))))")
+                .font(.caption2)
+                .blur(radius: privacyMode ? 6 : 0)
+        }
+        .padding(6)
+        .background(Color(NSColor.windowBackgroundColor).opacity(0.95))
+        .cornerRadius(6)
+        .shadow(radius: 4)
+        .fixedSize() // MODIFIÉ : Assure un survol ultra compact
     }
 }
 
@@ -837,10 +926,7 @@ struct FundamentalsQualityMatrixChart: View {
                     .symbolSize(100)
                     .annotation(position: .top, overflowResolution: .init(x: .fit(to: .chart), y: .fit(to: .chart))) {
                         if hoveredItem?.id == pos.id {
-                            VStack {
-                                Text(pos.ticker).font(.caption.bold())
-                                Text("\(score.formatted(.number.precision(.fractionLength(1)))) pts | \(weight.formatted(.percent.precision(.fractionLength(1))))").font(.caption2).blur(radius: privacyMode ? 6 : 0)
-                            }.padding(4).background(Color(NSColor.windowBackgroundColor).opacity(0.9)).cornerRadius(4)
+                            QualityMatrixTooltip(ticker: pos.ticker, score: score, weight: weight, privacyMode: privacyMode)
                         } else if isExpanded {
                             Text(pos.ticker).font(.system(size: 8)).foregroundColor(.secondary)
                         }
@@ -882,6 +968,7 @@ struct FundamentalsLineChartTooltip: View {
             }
         }
         .padding(8).background(Color(NSColor.windowBackgroundColor).opacity(0.95)).cornerRadius(8).shadow(radius: 4)
+        .fixedSize() // MODIFIÉ : Assure un survol ultra compact
     }
 }
 
@@ -896,6 +983,7 @@ struct FundamentalsLineChart: View {
     
     @State private var hoveredSection: String? = nil
     @State private var hiddenTickers: Set<String> = []
+    @State private var hiddenMetrics: Set<String> = [] // Pour la moyenne
     
     var filteredPositions: [Position] {
         viewModel.positions.filter { !hiddenTickers.contains($0.ticker) }
@@ -911,8 +999,13 @@ struct FundamentalsLineChart: View {
                 }
             }.padding(.bottom, 4)
             
-            InteractiveLegendView(items: viewModel.positions.map { $0.ticker }, colorMap: colorForTicker, hiddenItems: $hiddenTickers)
-                .padding(.bottom, 8)
+            VStack(spacing: 4) {
+                Button(action: { withAnimation { if hiddenMetrics.contains("Average") { hiddenMetrics.remove("Average") } else { hiddenMetrics.insert("Average") } } }) {
+                    HStack(spacing: 6) { Rectangle().fill(Color.primary.opacity(0.7)).frame(width: 12, height: 2); Text("Average Score").font(.caption).foregroundColor(hiddenMetrics.contains("Average") ? .secondary : .primary) }
+                }.buttonStyle(.plain).opacity(hiddenMetrics.contains("Average") ? 0.4 : 1.0)
+                
+                InteractiveLegendView(items: viewModel.positions.map { $0.ticker }, colorMap: colorForTicker, hiddenItems: $hiddenTickers)
+            }.padding(.bottom, 8)
             
             if uniqueSections.isEmpty || filteredPositions.isEmpty {
                 Spacer(); Text("No data").foregroundColor(.secondary); Spacer()
@@ -938,10 +1031,52 @@ struct FundamentalsLineChart: View {
                         }
                     }
                     
+                    // MODIFIÉ : Ligne Average au premier plan
+                    if !hiddenMetrics.contains("Average") {
+                        ForEach(uniqueSections, id: \.self) { section in
+                            let avgScore = filteredPositions.reduce(0.0) { sum, pos in
+                                sum + getStockSectionScorePct(pos, section)
+                            } / Double(max(1, filteredPositions.count))
+                            
+                            LineMark(
+                                x: .value("Section", section),
+                                y: .value("Score (%)", avgScore),
+                                series: .value("Ticker", "Average")
+                            )
+                            .foregroundStyle(Color.primary.opacity(0.7))
+                            .lineStyle(StrokeStyle(lineWidth: 3, dash: [6, 4]))
+                            .interpolationMethod(.linear)
+                            .zIndex(10) // <-- Force le placement au premier plan
+                            
+                            PointMark(
+                                x: .value("Section", section),
+                                y: .value("Score (%)", avgScore)
+                            )
+                            .foregroundStyle(Color.primary.opacity(0.7))
+                            .zIndex(10)
+                        }
+                    }
+                    
                     if let hSection = hoveredSection {
                         RuleMark(x: .value("Section", hSection))
-                            .foregroundStyle(.secondary.opacity(0.5))
-                            .annotation(position: .top, overflowResolution: .init(x: .fit(to: .chart), y: .fit(to: .chart))) {
+                            .foregroundStyle(Color.secondary.opacity(0.3))
+                            .zIndex(-1)
+                    }
+                }
+                .chartOverlay { proxy in
+                    GeometryReader { geometry in
+                        Rectangle().fill(.clear).contentShape(Rectangle())
+                            .onContinuousHover { phase in
+                                switch phase {
+                                case .active(let location):
+                                    if let section: String = proxy.value(atX: location.x) { hoveredSection = section }
+                                case .ended:
+                                    hoveredSection = nil
+                                }
+                            }
+                        
+                        if let hSection = hoveredSection {
+                            if let xPosition = proxy.position(forX: hSection) {
                                 FundamentalsLineChartTooltip(
                                     section: hSection,
                                     positions: filteredPositions,
@@ -949,19 +1084,19 @@ struct FundamentalsLineChart: View {
                                     colorForTicker: colorForTicker,
                                     privacyMode: privacyMode
                                 )
+                                .position(x: max(60, min(geometry.size.width - 60, xPosition)), y: 60)
                             }
+                        }
                     }
                 }
                 .chartForegroundStyleScale(mapping: { (ticker: String) -> Color in
                     colorForTicker(ticker)
                 })
-                .chartYScale(domain: [0, 100])
+                .chartYScale(domain: [0, 105]) // Marges pour l'infobulle
                 .chartLegend(.hidden)
                 .chartXSelection(value: $hoveredSection)
             }
-            
-            Spacer()
-            BlueChipWatermark()
+            HStack { Text("Analyzes quality consistency across different fundamental categories").font(.caption2).foregroundColor(.secondary); Spacer(); BlueChipWatermark() }
         }
         .padding().frame(minHeight: isExpanded ? 500 : 360, maxHeight: isExpanded ? .infinity : 360)
         .background(Color(NSColor.controlBackgroundColor)).cornerRadius(12).shadow(color: Color.black.opacity(0.05), radius: 2, x: 0, y: 1)
@@ -1051,9 +1186,7 @@ struct FundamentalsPolarChart: View {
                     }
                 }
             }
-            
-            Spacer()
-            BlueChipWatermark()
+            HStack { Text("Shows the weighted average quality of the entire portfolio by section").font(.caption2).foregroundColor(.secondary); Spacer(); BlueChipWatermark() }
         }
         .padding().frame(minHeight: isExpanded ? 500 : 360, maxHeight: isExpanded ? .infinity : 360)
         .background(Color(NSColor.controlBackgroundColor)).cornerRadius(12).shadow(color: Color.black.opacity(0.05), radius: 2, x: 0, y: 1)
@@ -1127,9 +1260,7 @@ struct FundamentalsRadarChart: View {
                     }
                 }
             }
-            
-            Spacer()
-            BlueChipWatermark()
+            HStack { Text("Visualizes the shape of each stock's quality profile").font(.caption2).foregroundColor(.secondary); Spacer(); BlueChipWatermark() }.padding(.top, 4)
         }
         .padding().frame(minHeight: isExpanded ? 500 : 360, maxHeight: isExpanded ? .infinity : 360)
         .background(Color(NSColor.controlBackgroundColor)).cornerRadius(12).shadow(color: Color.black.opacity(0.05), radius: 2, x: 0, y: 1)
@@ -1410,7 +1541,6 @@ struct CriterionFormSheet: View {
                         
                         viewModel.objectWillChange.send()
                     } else {
-                        // NOUVEAU : On assigne dynamiquement l'ordre pour les nouveaux
                         let newOrder = viewModel.fundamentalCriteria.count
                         let newCrit = FundamentalCriterion(
                             id: UUID(), name: name, section: sectionStr.isEmpty ? "UNCATEGORIZED" : sectionStr, weight: weight, type: type,
@@ -1477,7 +1607,6 @@ struct ValueEntrySheet: View {
                 Text(position.ticker).font(.title).fontWeight(.bold).foregroundColor(.blue)
                 
                 if let url = dynamicURL {
-                    // NOUVEAU : Bouton "Open" + Bouton "Copy" côte à côte
                     HStack(spacing: 8) {
                         Link(destination: url) {
                             HStack {
