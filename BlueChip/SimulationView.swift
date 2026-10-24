@@ -61,7 +61,7 @@ struct SimulationView: View {
     @State private var showSimulatedCashSheet: Bool = false
     @State private var editingSimulatedPosition: Position? = nil
 
-    // NOUVEAU : Hauteur Dynamique des Tableaux
+    // Hauteur Dynamique des Tableaux
     var dynamicTableHeight: CGFloat {
         let rowHeight: CGFloat = 36
         let headerHeight: CGFloat = 40
@@ -216,71 +216,89 @@ struct SimulationView: View {
                     privacyMode: $privacyMode
                 )
                 
-                SimulationDiffSection(diffs: simulationDiffs, privacyMode: $privacyMode)
+                VStack(alignment: .leading, spacing: 12) {
+                    Text("Sandbox Activity").font(.title2).fontWeight(.bold).foregroundColor(.secondary)
+                    SimulationDiffSection(diffs: simulationDiffs, privacyMode: $privacyMode)
+                }
                 
-                HStack(alignment: .top, spacing: 20) {
-                    VStack(alignment: .leading, spacing: 8) {
-                        HStack {
-                            Text("Current Portfolio").font(.title2).fontWeight(.bold)
-                            Spacer()
-                            Text(viewModel.currentTotalCapital.formatted(.currency(code: "EUR"))).font(.headline).foregroundColor(.secondary).blur(radius: privacyMode ? 6 : 0)
-                        }
-                        CurrentPortfolioTable(positions: viewModel.positions, totalCapital: viewModel.currentTotalCapital, privacyMode: $privacyMode)
-                            .frame(height: dynamicTableHeight) // Hauteur dynamique
-                    }.frame(maxWidth: .infinity)
-                    
-                    Divider()
-                    
-                    VStack(alignment: .leading, spacing: 8) {
-                        HStack {
-                            Text("Simulated Sandbox").font(.title2).fontWeight(.bold).foregroundColor(.blue)
-                            Spacer()
-                            Text(simulatedTotalCapital.formatted(.currency(code: "EUR"))).font(.headline).foregroundColor(.blue).blur(radius: privacyMode ? 6 : 0)
-                            
-                            Button(action: { showSimulatedCashSheet = true }) { Image(systemName: "eurosign.circle.fill").foregroundColor(.green).font(.title3) }.buttonStyle(.plain).help("Modify Simulated Cash")
-                            Button(action: { showAddSimulatedStock = true }) { Image(systemName: "plus.circle.fill").foregroundColor(.blue).font(.title3) }.buttonStyle(.plain).help("Add Simulated Stock")
-                            Button(action: resetSimulation) { Image(systemName: "arrow.counterclockwise.circle.fill").foregroundColor(.secondary).font(.title3) }.buttonStyle(.plain).help("Reset Sandbox")
-                        }
-                        SimulatedPortfolioTable(
-                            positions: $simulatedPositions,
-                            totalCapital: simulatedTotalCapital,
-                            privacyMode: $privacyMode,
-                            onEdit: { editingSimulatedPosition = $0 },
-                            onDelete: { id in
-                                if let pos = simulatedPositions.first(where: { $0.id == id }) {
-                                    let valEUR = pos.quantity * pos.currentPrice * (pos.currency == "USD" ? pos.usdToEurRate : 1.0)
-                                    simulatedCash += valEUR
-                                    tradeCashImpacts[pos.ticker, default: 0] += valEUR
-                                }
-                                simulatedPositions.removeAll { $0.id == id }
+                VStack(alignment: .leading, spacing: 12) {
+                    Text("Simulation Tables").font(.title2).fontWeight(.bold).foregroundColor(.secondary)
+                    HStack(alignment: .top, spacing: 20) {
+                        VStack(alignment: .leading, spacing: 8) {
+                            HStack {
+                                Text("Current Portfolio").font(.headline).foregroundColor(.secondary)
+                                Spacer()
+                                Text(viewModel.currentTotalCapital.formatted(.currency(code: "EUR"))).font(.subheadline).foregroundColor(.primary).blur(radius: privacyMode ? 6 : 0)
                             }
-                        )
-                        .frame(height: dynamicTableHeight) // Hauteur dynamique
-                    }.frame(maxWidth: .infinity)
-                }.padding().background(Color(NSColor.controlBackgroundColor)).cornerRadius(12).shadow(color: Color.black.opacity(0.05), radius: 2, x: 0, y: 1)
+                            CurrentPortfolioTable(positions: viewModel.positions, totalCapital: viewModel.currentTotalCapital, privacyMode: $privacyMode)
+                                .frame(height: dynamicTableHeight) // Hauteur dynamique
+                        }.frame(maxWidth: .infinity)
+                        
+                        Divider()
+                        
+                        VStack(alignment: .leading, spacing: 8) {
+                            HStack {
+                                Text("Simulated Sandbox").font(.headline).foregroundColor(.blue)
+                                Spacer()
+                                Text(simulatedTotalCapital.formatted(.currency(code: "EUR"))).font(.subheadline).foregroundColor(.blue).blur(radius: privacyMode ? 6 : 0)
+                                
+                                Button(action: { showSimulatedCashSheet = true }) { Image(systemName: "eurosign.circle.fill").foregroundColor(.green).font(.title3) }.buttonStyle(.plain).help("Modify Simulated Cash")
+                                Button(action: { showAddSimulatedStock = true }) { Image(systemName: "plus.circle.fill").foregroundColor(.blue).font(.title3) }.buttonStyle(.plain).help("Add Simulated Stock")
+                                Button(action: resetSimulation) { Image(systemName: "arrow.counterclockwise.circle.fill").foregroundColor(.secondary).font(.title3) }.buttonStyle(.plain).help("Reset Sandbox")
+                            }
+                            SimulatedPortfolioTable(
+                                positions: $simulatedPositions,
+                                totalCapital: simulatedTotalCapital,
+                                privacyMode: $privacyMode,
+                                onEdit: { editingSimulatedPosition = $0 },
+                                onDelete: { id in
+                                    if let pos = simulatedPositions.first(where: { $0.id == id }) {
+                                        let valEUR = pos.quantity * pos.currentPrice * (pos.currency == "USD" ? pos.usdToEurRate : 1.0)
+                                        simulatedCash += valEUR
+                                        tradeCashImpacts[pos.ticker, default: 0] += valEUR
+                                    }
+                                    simulatedPositions.removeAll { $0.id == id }
+                                }
+                            )
+                            .frame(height: dynamicTableHeight) // Hauteur dynamique
+                        }.frame(maxWidth: .infinity)
+                    }.padding().background(Color(NSColor.controlBackgroundColor)).cornerRadius(12).shadow(color: Color.black.opacity(0.05), radius: 2, x: 0, y: 1)
+                }
                 
                 // 1. POIDS PAR POSITION
-                HStack(spacing: 24) {
-                    SimulationDonutChart(data: viewModel.allocationByPosition, title: "Current Weight by Position", zoomType: .currentPositions, palette: positionColors, privacyMode: $privacyMode, expandedChart: $chartToZoom, viewModel: viewModel)
-                    SimulationDonutChart(data: simulatedAllocationByPosition, title: "Simulated Weight by Position", zoomType: .simulatedPositions, palette: positionColors, privacyMode: $privacyMode, expandedChart: $chartToZoom, viewModel: viewModel)
+                VStack(alignment: .leading, spacing: 12) {
+                    Text("Weight by Position Analysis").font(.title2).fontWeight(.bold).foregroundColor(.secondary)
+                    HStack(spacing: 24) {
+                        SimulationDonutChart(data: viewModel.allocationByPosition, title: "Current Weight by Position", zoomType: .currentPositions, palette: positionColors, privacyMode: $privacyMode, expandedChart: $chartToZoom, viewModel: viewModel)
+                        SimulationDonutChart(data: simulatedAllocationByPosition, title: "Simulated Weight by Position", zoomType: .simulatedPositions, palette: positionColors, privacyMode: $privacyMode, expandedChart: $chartToZoom, viewModel: viewModel)
+                    }
                 }
                 
                 // 2. SECTEURS
-                HStack(spacing: 24) {
-                    SimulationDonutChart(data: viewModel.allocationBySector, title: "Current Sector Allocation", zoomType: .currentSectors, palette: sectorColors, privacyMode: $privacyMode, expandedChart: $chartToZoom, viewModel: viewModel)
-                    SimulationDonutChart(data: simulatedAllocationBySector, title: "Simulated Sector Allocation", zoomType: .simulatedSectors, palette: sectorColors, privacyMode: $privacyMode, expandedChart: $chartToZoom, viewModel: viewModel)
+                VStack(alignment: .leading, spacing: 12) {
+                    Text("Sector Allocation Analysis").font(.title2).fontWeight(.bold).foregroundColor(.secondary)
+                    HStack(spacing: 24) {
+                        SimulationDonutChart(data: viewModel.allocationBySector, title: "Current Sector Allocation", zoomType: .currentSectors, palette: sectorColors, privacyMode: $privacyMode, expandedChart: $chartToZoom, viewModel: viewModel)
+                        SimulationDonutChart(data: simulatedAllocationBySector, title: "Simulated Sector Allocation", zoomType: .simulatedSectors, palette: sectorColors, privacyMode: $privacyMode, expandedChart: $chartToZoom, viewModel: viewModel)
+                    }
                 }
                 
                 // 3. BAR CHARTS COMPARATIFS
-                HStack(spacing: 24) {
-                    SimulationBarChart(data: totalValueComparisonData, title: "Total Value Comparison", zoomType: .totalValueCompare, isEuro: true, colorCurrent: .blue, colorSimulated: .purple, privacyMode: $privacyMode, expandedChart: $chartToZoom)
-                    SimulationBarChart(data: yieldComparisonData, title: "Portfolio Yield Impact", zoomType: .yieldImpact, isEuro: false, colorCurrent: .orange, colorSimulated: .green, privacyMode: $privacyMode, expandedChart: $chartToZoom)
+                VStack(alignment: .leading, spacing: 12) {
+                    Text("Portfolio Value & Yield Impact").font(.title2).fontWeight(.bold).foregroundColor(.secondary)
+                    HStack(spacing: 24) {
+                        SimulationBarChart(data: totalValueComparisonData, title: "Total Value Comparison", zoomType: .totalValueCompare, isEuro: true, colorCurrent: .blue, colorSimulated: .purple, privacyMode: $privacyMode, expandedChart: $chartToZoom)
+                        SimulationBarChart(data: yieldComparisonData, title: "Portfolio Yield Impact", zoomType: .yieldImpact, isEuro: false, colorCurrent: .orange, colorSimulated: .green, privacyMode: $privacyMode, expandedChart: $chartToZoom)
+                    }
                 }
                 
                 // 4. CASH ALLOCATION ET DIVIDENDES SIMULÉS
-                HStack(spacing: 24) {
-                    SimulationDonutChart(data: cashAllocationData, title: "Simulated Cash Investments", zoomType: .cashAllocation, palette: marketCapColors, privacyMode: $privacyMode, expandedChart: $chartToZoom, viewModel: viewModel)
-                    SimulationDonutChart(data: simulatedDividendsByPosition, title: "Simulated Dividends by Position", zoomType: .simulatedDividends, palette: positionColors, privacyMode: $privacyMode, expandedChart: $chartToZoom, viewModel: viewModel)
+                VStack(alignment: .leading, spacing: 12) {
+                    Text("Simulated Cash & Dividends").font(.title2).fontWeight(.bold).foregroundColor(.secondary)
+                    HStack(spacing: 24) {
+                        SimulationDonutChart(data: cashAllocationData, title: "Simulated Cash Investments", zoomType: .cashAllocation, palette: marketCapColors, privacyMode: $privacyMode, expandedChart: $chartToZoom, viewModel: viewModel)
+                        SimulationDonutChart(data: simulatedDividendsByPosition, title: "Simulated Dividends by Position", zoomType: .simulatedDividends, palette: positionColors, privacyMode: $privacyMode, expandedChart: $chartToZoom, viewModel: viewModel)
+                    }
                 }
             }
             .padding()
@@ -334,6 +352,10 @@ struct SimulationView: View {
 // MARK: - DASHBOARD & DIFF SECTION
 // =========================================================================
 
+// =========================================================================
+// MARK: - DASHBOARD & DIFF SECTION
+// =========================================================================
+
 struct SimulationDashboardSection: View {
     @ObservedObject var viewModel: PortfolioViewModel
     let simulatedTotalCapital: Double
@@ -345,6 +367,7 @@ struct SimulationDashboardSection: View {
     var body: some View {
         VStack(spacing: 16) {
             HStack(spacing: 16) {
+                // Remplacement des couleurs des Cards Dashboard par .primary (noir par défaut)
                 DashboardCard(title: "Current Portfolio Value", value: viewModel.currentTotalCapital.formatted(.currency(code: "EUR")), titleIcon: nil, privacyMode: $privacyMode)
                 DashboardCard(title: "Simulated Portfolio Value", value: simulatedTotalCapital.formatted(.currency(code: "EUR")), titleIcon: nil, privacyMode: $privacyMode)
                 DashboardCard(title: "Current Cash", value: viewModel.availableCash.formatted(.currency(code: "EUR")), titleIcon: nil, privacyMode: $privacyMode)
@@ -360,13 +383,21 @@ struct SimulationDashboardSection: View {
     }
 }
 
+// Pour faire les valeurs en noir, je dois redéfinir `DashboardCard` ici pour enlever les couleurs s'il y a lieu,
+// mais je présume que c'est géré globalement (sinon il faut m'envoyer DashboardCard).
+
 struct SimulationDiffSection: View {
     let diffs: [SimulationDiff]
     @Binding var privacyMode: Bool
     
     var body: some View {
-        VStack(alignment: .leading, spacing: 12) {
-            Text("Sandbox Actions Log (Line by Line)").font(.headline).foregroundColor(.secondary)
+        VStack(alignment: .leading, spacing: 8) {
+            HStack {
+                Text("Sandbox Actions Log (Line by Line)").font(.headline).foregroundColor(.secondary)
+                Spacer()
+            }
+            .padding(.bottom, 4)
+            
             VStack(alignment: .leading, spacing: 8) {
                 ForEach(diffs) { diff in
                     HStack(spacing: 12) {
