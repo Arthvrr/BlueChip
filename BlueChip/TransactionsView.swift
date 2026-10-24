@@ -306,7 +306,7 @@ struct TransactionsTableSection: View {
             GeometryReader { geo in
                 ScrollView(.horizontal, showsIndicators: true) {
                     VStack(spacing: 0) {
-                        txHeaderRow().background(Color(NSColor.windowBackgroundColor))
+                        txHeaderRow().background(Color(NSColor.windowBackgroundColor).opacity(0.6)) // En-tête plus léger
                         Divider()
                         
                         if filtered.isEmpty {
@@ -319,13 +319,18 @@ struct TransactionsTableSection: View {
                         } else {
                             ScrollView(.vertical) {
                                 LazyVStack(spacing: 0) {
-                                    ForEach(filtered) { tx in
+                                    // Utilisation de enumerated pour le zebra striping
+                                    ForEach(Array(filtered.enumerated()), id: \.element.id) { index, tx in
                                         TransactionRowView(
-                                            tx: tx, columns: columns, privacyMode: privacyMode, dateFormatter: dateFormatter,
+                                            tx: tx,
+                                            columns: columns,
+                                            privacyMode: privacyMode,
+                                            dateFormatter: dateFormatter,
+                                            isEvenRow: index % 2 == 0, // Zebra striping
                                             onEdit: { editingTransaction = tx },
                                             onDelete: { viewModel.deleteTransaction(id: tx.id) }
                                         )
-                                        Divider()
+                                        Divider().opacity(0.5) // Ligne de séparation plus douce
                                     }
                                 }
                             }
@@ -347,17 +352,17 @@ struct TransactionsTableSection: View {
     func txHeaderRow() -> some View {
         HStack(spacing: 12) {
             Text("Date").frame(width: 120, alignment: .leading)
-            Text("Type").frame(width: 90, alignment: .leading)
-            Text("Ticker").frame(width: 70, alignment: .leading)
-            Text("Qty").frame(maxWidth: .infinity, alignment: .trailing)
-            Text("Amount €").frame(maxWidth: .infinity, alignment: .trailing)
+            Text("Type").frame(width: 100, alignment: .center)
+            Text("Ticker").frame(width: 80, alignment: .center)
+            Text("Qty").frame(maxWidth: .infinity, alignment: .center)
+            Text("Amount €").frame(maxWidth: .infinity, alignment: .center)
             ForEach(columns, id: \.self) { col in
-                Text(col).frame(maxWidth: .infinity, alignment: .trailing)
+                Text(col).frame(maxWidth: .infinity, alignment: .center)
             }
             Text("Note").frame(maxWidth: .infinity, alignment: .leading)
         }
-        .font(.subheadline).foregroundColor(.secondary)
-        .padding(.vertical, 10).padding(.horizontal, 16)
+        .font(.caption).foregroundColor(.secondary) // Police plus moderne
+        .padding(.vertical, 12).padding(.horizontal, 16)
     }
 
     @ViewBuilder
@@ -365,8 +370,8 @@ struct TransactionsTableSection: View {
         let active = filterType == type
         Button(action: { filterType = type }) {
             Text(label).font(.caption).fontWeight(active ? .bold : .regular)
-                .padding(.horizontal, 10).padding(.vertical, 4)
-                .background(active ? Color.blue.opacity(0.2) : Color(NSColor.windowBackgroundColor))
+                .padding(.horizontal, 12).padding(.vertical, 6)
+                .background(active ? Color.blue.opacity(0.15) : Color.clear)
                 .foregroundColor(active ? .blue : .secondary)
                 .cornerRadius(12)
         }.buttonStyle(.plain)
@@ -378,55 +383,59 @@ struct TransactionRowView: View {
     let columns: [String]
     let privacyMode: Bool
     let dateFormatter: DateFormatter
+    let isEvenRow: Bool // NOUVEAU
     let onEdit: () -> Void
     let onDelete: () -> Void
 
     var body: some View {
         HStack(spacing: 12) {
             Text(dateFormatter.string(from: tx.date))
-                .font(.system(size: 12))
+                .font(.system(size: 13))
+                .foregroundColor(.secondary)
                 .frame(width: 120, alignment: .leading)
 
+            // Pill de statut centré
             HStack(spacing: 4) {
-                Image(systemName: tx.type.icon).font(.caption)
-                Text(tx.type.rawValue).font(.caption).fontWeight(.semibold)
+                Image(systemName: tx.type.icon).font(.caption2)
+                Text(tx.type.rawValue).font(.caption).fontWeight(.bold)
             }
-            .padding(.horizontal, 6).padding(.vertical, 3)
+            .padding(.horizontal, 8).padding(.vertical, 4)
             .background(Color.forTransactionType(tx.type).opacity(0.15))
             .foregroundColor(Color.forTransactionType(tx.type))
-            .cornerRadius(6)
-            .frame(width: 90, alignment: .leading)
+            .cornerRadius(8)
+            .frame(width: 100, alignment: .center)
 
             Text(tx.ticker.isEmpty ? "—" : tx.ticker)
-                .font(.system(size: 13, weight: .semibold))
-                .frame(width: 70, alignment: .leading)
+                .font(.system(size: 13, weight: .bold))
+                .frame(width: 80, alignment: .center)
 
             Text(tx.quantity == 0 ? "—" : tx.quantity.formatted(.number.precision(.fractionLength(4))))
-                .font(.system(size: 12))
-                .blur(radius: privacyMode ? 6 : 0)
-                .frame(maxWidth: .infinity, alignment: .trailing)
-
-            Text(tx.amountEUR.formatted(.currency(code: "EUR").precision(.fractionLength(2))))
-                .fontWeight(.semibold)
-                .foregroundColor(tx.type == .withdrawal || tx.type == .sell ? .orange : .primary)
                 .font(.system(size: 13))
                 .blur(radius: privacyMode ? 6 : 0)
-                .frame(maxWidth: .infinity, alignment: .trailing)
+                .frame(maxWidth: .infinity, alignment: .center)
+
+            Text(tx.amountEUR.formatted(.currency(code: "EUR").precision(.fractionLength(2))))
+                .fontWeight(.bold)
+                .foregroundColor(tx.type == .withdrawal || tx.type == .sell ? .primary : .primary) // Tout en noir pour rester clean
+                .font(.system(size: 13))
+                .blur(radius: privacyMode ? 6 : 0)
+                .frame(maxWidth: .infinity, alignment: .center)
 
             ForEach(columns, id: \.self) { col in
                 let val = tx.customFields[col] ?? 0
                 Text(val == 0 ? "—" : val.formatted(.currency(code: "EUR").precision(.fractionLength(2))))
-                    .font(.system(size: 12))
-                    .foregroundColor(val > 0 ? .red : .secondary)
+                    .font(.system(size: 13))
+                    .foregroundColor(val > 0 ? .red.opacity(0.8) : .secondary)
                     .blur(radius: privacyMode ? 6 : 0)
-                    .frame(maxWidth: .infinity, alignment: .trailing)
+                    .frame(maxWidth: .infinity, alignment: .center)
             }
 
             Text(tx.note.isEmpty ? "—" : tx.note)
-                .font(.system(size: 12)).foregroundColor(.secondary).lineLimit(1)
+                .font(.system(size: 13)).foregroundColor(.secondary).lineLimit(1)
                 .frame(maxWidth: .infinity, alignment: .leading)
         }
-        .padding(.vertical, 10).padding(.horizontal, 16)
+        .padding(.vertical, 14).padding(.horizontal, 16)
+        .background(isEvenRow ? Color.gray.opacity(0.03) : Color.clear) // Lignes alternées
         .contentShape(Rectangle())
         .onTapGesture(count: 2) { onEdit() }
         .contextMenu {
