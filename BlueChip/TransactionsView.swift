@@ -2,7 +2,6 @@ import SwiftUI
 import Charts
 import SwiftData
 import Combine
-import Combine
 
 // =========================================================================
 // MARK: - ENUMS & HELPERS
@@ -89,7 +88,6 @@ struct TransactionsView: View {
         }
     }
 
-    // NOUVEAU : Calcul dynamique de la valeur courante pour le Goal
     var currentGoalValueForProgressBar: Double {
         switch viewModel.transactionGoalType {
         case .count:
@@ -108,9 +106,6 @@ struct TransactionsView: View {
             VStack(spacing: 24) {
                 TransactionsDashboardSection(tx: filteredGlobalTransactions, privacyMode: $privacyMode)
 
-                // -----------------------------------------------------------
-                // NOUVEAU : Utilisation du composant universel GoalProgressBar
-                // -----------------------------------------------------------
                 GoalProgressBar(
                     title: viewModel.transactionGoalType.rawValue,
                     currentValue: currentGoalValueForProgressBar,
@@ -180,26 +175,26 @@ struct TransactionsDashboardSection: View {
     var body: some View {
         VStack(spacing: 16) {
             HStack(spacing: 16) {
-                txCard("Total Deposited",    value: totalDeposited,  color: .green)
-                txCard("Total Withdrawn",    value: totalWithdrawn,  color: .red)
-                txCard("Net Cash Flow",      value: netCashFlow,     color: netCashFlow >= 0 ? .green : .red)
-                txCard("Total Invested",     value: totalBought,     color: .blue)
+                txCard("Total Deposited",    value: totalDeposited)
+                txCard("Total Withdrawn",    value: totalWithdrawn)
+                txCard("Net Cash Flow",      value: netCashFlow)
+                txCard("Total Invested",     value: totalBought)
             }
             HStack(spacing: 16) {
-                txCard("Total Sold",         value: totalSold,       color: .orange)
-                txCard("Net Invested",       value: netInvested,     color: netInvested >= 0 ? .blue : .orange)
-                txCard("Total Fees & Taxes", value: totalCustomFees, color: .red)
+                txCard("Total Sold",         value: totalSold)
+                txCard("Net Invested",       value: netInvested)
+                txCard("Total Fees & Taxes", value: totalCustomFees)
                 DashboardCard(title: "Transactions Found", value: "\(tx.count)", titleIcon: nil, privacyMode: $privacyMode)
             }
         }
     }
 
     @ViewBuilder
-    func txCard(_ title: String, value: Double, color: Color) -> some View {
+    func txCard(_ title: String, value: Double) -> some View {
         VStack(alignment: .leading, spacing: 4) {
             Text(title).font(.subheadline).foregroundColor(.secondary).lineLimit(1).minimumScaleFactor(0.8)
             Text(value.formatted(.currency(code: "EUR").precision(.fractionLength(2))))
-                .font(.title2).fontWeight(.bold).foregroundColor(color)
+                .font(.title2).fontWeight(.bold).foregroundColor(.primary) // MODIFIÉ: Valeur en noir (.primary)
                 .blur(radius: privacyMode ? 6 : 0)
         }
         .padding().frame(maxWidth: .infinity, alignment: .leading).frame(height: 110)
@@ -450,7 +445,6 @@ struct TransactionsYearlySummarySection: View {
     let tx: [Transaction]
     @Binding var privacyMode: Bool
 
-    // NOUVEAU : Récupère les années depuis le réglage de départ jusqu'à aujourd'hui
     var years: [Int] {
         let currentYear = Calendar.current.component(.year, from: Date())
         let startYear = viewModel.dividendStartYear
@@ -464,7 +458,7 @@ struct TransactionsYearlySummarySection: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 8) {
-            Text("Yearly Summary").font(.title2).fontWeight(.bold).foregroundColor(.secondary)
+            Text("Yearly Summary").font(.title2).fontWeight(.bold).foregroundColor(.secondary).padding(.bottom, 4)
             if years.isEmpty {
                 Text("No data for this period.").foregroundColor(.secondary).padding()
             } else {
@@ -475,7 +469,6 @@ struct TransactionsYearlySummarySection: View {
                                 .background(Color(NSColor.windowBackgroundColor))
                             Divider()
                             
-                            // NOUVEAU : On a retiré le ScrollView vertical interne pour laisser la vue s'étirer
                             VStack(spacing: 0) {
                                 ForEach(years, id: \.self) { year in
                                     YearlySummaryRowView(year: year, transactions: txForYear(year), columns: viewModel.transactionCustomColumns, privacyMode: privacyMode)
@@ -619,30 +612,48 @@ struct TransactionsChartsSection: View {
     @Binding var chartToZoom: TxChartZoomType?
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 12) {
-            Text("Transaction Analytics").font(.title2).fontWeight(.bold).foregroundColor(.secondary)
+        VStack(spacing: 24) {
             
-            HStack(spacing: 24) {
-                TxAnnualCountChart(viewModel: viewModel, tx: tx, privacyMode: $privacyMode, expandedChart: $chartToZoom)
-                TxTotalByTypeChart(viewModel: viewModel, tx: tx, privacyMode: $privacyMode, expandedChart: $chartToZoom)
+            VStack(alignment: .leading, spacing: 12) {
+                Text("Transaction Analytics").font(.title2).fontWeight(.bold).foregroundColor(.secondary)
+                HStack(spacing: 24) {
+                    TxAnnualCountChart(viewModel: viewModel, tx: tx, privacyMode: $privacyMode, expandedChart: $chartToZoom)
+                    TxTotalByTypeChart(viewModel: viewModel, tx: tx, privacyMode: $privacyMode, expandedChart: $chartToZoom)
+                }
             }
-            HStack(spacing: 24) {
-                TxBuysOverTimeChart(viewModel: viewModel, tx: tx, privacyMode: $privacyMode, expandedChart: $chartToZoom)
-                TxTaxBreakdownChart(viewModel: viewModel, tx: tx, privacyMode: $privacyMode, expandedChart: $chartToZoom)
+            
+            VStack(alignment: .leading, spacing: 12) {
+                Text("Trading History & Taxes").font(.title2).fontWeight(.bold).foregroundColor(.secondary)
+                HStack(spacing: 24) {
+                    TxBuysOverTimeChart(viewModel: viewModel, tx: tx, privacyMode: $privacyMode, expandedChart: $chartToZoom)
+                    TxTaxBreakdownChart(viewModel: viewModel, tx: tx, privacyMode: $privacyMode, expandedChart: $chartToZoom)
+                }
             }
-            HStack(spacing: 24) {
-                TxCapitalAllocationChart(viewModel: viewModel, tx: tx, privacyMode: $privacyMode, expandedChart: $chartToZoom)
-                TxHoldingPeriodChart(viewModel: viewModel, tx: tx, privacyMode: $privacyMode, expandedChart: $chartToZoom)
+            
+            VStack(alignment: .leading, spacing: 12) {
+                Text("Asset Breakdown & Holding Periods").font(.title2).fontWeight(.bold).foregroundColor(.secondary)
+                HStack(spacing: 24) {
+                    TxCapitalAllocationChart(viewModel: viewModel, tx: tx, privacyMode: $privacyMode, expandedChart: $chartToZoom)
+                    TxHoldingPeriodChart(viewModel: viewModel, tx: tx, privacyMode: $privacyMode, expandedChart: $chartToZoom)
+                }
             }
-            // --- NOUVELLES SECTIONS PRO ---
-            HStack(spacing: 24) {
-                TxTradeBalanceChart(viewModel: viewModel, tx: tx, privacyMode: $privacyMode, expandedChart: $chartToZoom)
-                TxCumulativeCapitalChart(viewModel: viewModel, tx: tx, privacyMode: $privacyMode, expandedChart: $chartToZoom)
+            
+            VStack(alignment: .leading, spacing: 12) {
+                Text("Capital Dynamics").font(.title2).fontWeight(.bold).foregroundColor(.secondary)
+                HStack(spacing: 24) {
+                    TxTradeBalanceChart(viewModel: viewModel, tx: tx, privacyMode: $privacyMode, expandedChart: $chartToZoom)
+                    TxCumulativeCapitalChart(viewModel: viewModel, tx: tx, privacyMode: $privacyMode, expandedChart: $chartToZoom)
+                }
             }
-            HStack(spacing: 24) {
-                TxTaxDragChart(viewModel: viewModel, tx: tx, privacyMode: $privacyMode, expandedChart: $chartToZoom)
-                TxActivityHeatmapChart(viewModel: viewModel, tx: tx, privacyMode: $privacyMode, expandedChart: $chartToZoom)
+            
+            VStack(alignment: .leading, spacing: 12) {
+                Text("Efficiency & Activity").font(.title2).fontWeight(.bold).foregroundColor(.secondary)
+                HStack(spacing: 24) {
+                    TxTaxDragChart(viewModel: viewModel, tx: tx, privacyMode: $privacyMode, expandedChart: $chartToZoom)
+                    TxActivityHeatmapChart(viewModel: viewModel, tx: tx, privacyMode: $privacyMode, expandedChart: $chartToZoom)
+                }
             }
+            
         }
     }
 }
@@ -736,7 +747,6 @@ struct TxAnnualCountChart: View {
                         
                         if let h = hoveredYear {
                             if let xPosition = proxy.position(forX: h) {
-                                // NOUVEAU : Format compact et aligné comme dans "Summary by Type"
                                 VStack(alignment: .leading, spacing: 4) {
                                     Text(h).font(.caption.bold())
                                     Divider()
@@ -750,7 +760,7 @@ struct TxAnnualCountChart: View {
                                         }
                                     }
                                 }
-                                .frame(width: 100) // NOUVEAU : Largeur fixée pour éviter que l'infobulle ne s'étire !
+                                .frame(width: 100)
                                 .padding(8).background(Color(NSColor.windowBackgroundColor).opacity(0.95)).cornerRadius(8).shadow(radius: 4)
                                 .overlay(RoundedRectangle(cornerRadius: 8).stroke(Color.gray.opacity(0.2), lineWidth: 1))
                                 .position(x: max(60, min(geometry.size.width - 60, xPosition)), y: 60)
@@ -762,7 +772,7 @@ struct TxAnnualCountChart: View {
                 .chartYAxis { AxisMarks(position: .leading) { v in AxisGridLine(); AxisTick(); AxisValueLabel { if let i = v.as(Int.self) { Text("\(i)").font(.system(size: 10)) } } } }
                 .chartXAxis { AxisMarks { v in AxisValueLabel { if let s = v.as(String.self) { Text(s).font(.caption) } } } }
             }
-            BlueChipWatermark()
+            HStack { Text("Shows the frequency of different transaction events annually").font(.caption2).foregroundColor(.secondary); Spacer(); BlueChipWatermark() }
         }
         .padding().frame(minHeight: isExpanded ? 500 : 360, maxHeight: isExpanded ? .infinity : 360).background(Color(NSColor.controlBackgroundColor)).cornerRadius(12).shadow(color: Color.black.opacity(0.05), radius: 2, x: 0, y: 1)
     }
@@ -903,7 +913,7 @@ struct TxTotalByTypeChart: View {
                 }
                 .chartXAxis { AxisMarks { v in AxisValueLabel { if let s = v.as(String.self) { Text(s).font(.caption) } } } }
             }
-            BlueChipWatermark()
+            HStack { Text("Compares the monetary volume against the number of transactions").font(.caption2).foregroundColor(.secondary); Spacer(); BlueChipWatermark() }
         }
         .padding().frame(minHeight: isExpanded ? 500 : 360, maxHeight: isExpanded ? .infinity : 360).background(Color(NSColor.controlBackgroundColor)).cornerRadius(12).shadow(color: Color.black.opacity(0.05), radius: 2, x: 0, y: 1)
     }
@@ -1078,7 +1088,7 @@ struct TxBuysOverTimeChart: View {
                     }
                 }
             }
-            BlueChipWatermark()
+            HStack { Text("Shows the historical scale of each buy order with its long-term trend").font(.caption2).foregroundColor(.secondary); Spacer(); BlueChipWatermark() }
         }
         .padding().frame(minHeight: isExpanded ? 500 : 360, maxHeight: isExpanded ? .infinity : 360).background(Color(NSColor.controlBackgroundColor)).cornerRadius(12).shadow(color: Color.black.opacity(0.05), radius: 2, x: 0, y: 1)
     }
@@ -1186,7 +1196,7 @@ struct TxTaxBreakdownChart: View {
                 }
                 .animation(.easeInOut(duration: 0.2), value: selectedAngleValue)
             }
-            BlueChipWatermark()
+            HStack { Text("Distributes the total overhead costs linked to custom tax columns").font(.caption2).foregroundColor(.secondary); Spacer(); BlueChipWatermark() }
         }
         .padding().frame(minHeight: isExpanded ? 500 : 360, maxHeight: isExpanded ? .infinity : 360).background(Color(NSColor.controlBackgroundColor)).cornerRadius(12).shadow(color: Color.black.opacity(0.05), radius: 2, x: 0, y: 1)
     }
@@ -1212,14 +1222,12 @@ struct TxCapitalAllocationChart: View {
     var slices: [CapitalSlice] {
         var dict: [String: Double] = [:]
         
-        // 1. On somme tous les achats + les frais associés
         let buys = tx.filter { $0.type == .buy }
         for b in buys {
             let totalTaxes = b.customFields.values.reduce(0, +)
             dict[b.ticker, default: 0] += (b.amountEUR + totalTaxes)
         }
         
-        // 2. Séparation Current vs Sold
         var result: [CapitalSlice] = []
         var oldStocksTotal: Double = 0
         let currentTickers = Set(viewModel.positions.map { $0.ticker })
@@ -1232,7 +1240,6 @@ struct TxCapitalAllocationChart: View {
             }
         }
         
-        // 3. Tri et ajout de la ligne "Old Stocks"
         result.sort { $0.amount > $1.amount }
         if oldStocksTotal > 0 {
             result.append(CapitalSlice(ticker: "Sold Stocks", amount: oldStocksTotal))
@@ -1307,7 +1314,7 @@ struct TxCapitalAllocationChart: View {
                 }
                 .animation(.easeInOut(duration: 0.2), value: selectedAngleValue)
             }
-            BlueChipWatermark()
+            HStack { Text("Breaks down where the total invested volume has been distributed").font(.caption2).foregroundColor(.secondary); Spacer(); BlueChipWatermark() }
         }
         .padding().frame(minHeight: isExpanded ? 500 : 360, maxHeight: isExpanded ? .infinity : 360).background(Color(NSColor.controlBackgroundColor)).cornerRadius(12).shadow(color: Color.black.opacity(0.05), radius: 2, x: 0, y: 1)
     }
@@ -1336,24 +1343,20 @@ struct TxHoldingPeriodChart: View {
         let currentTickers = Set(viewModel.positions.map { $0.ticker })
         let now = Date()
         
-        // On regroupe les transactions par ticker
         let groupedTx = Dictionary(grouping: tx.filter { $0.type == .buy || $0.type == .sell }, by: { $0.ticker })
         
         for (ticker, transactions) in groupedTx {
-            // Trouve le premier achat (le plus vieux)
             guard let firstBuy = transactions.filter({ $0.type == .buy }).map({ $0.date }).min() else { continue }
             
             let isCurrent = currentTickers.contains(ticker)
             var endDate = now
             
-            // Si l'action est vendue (n'est plus en portefeuille), on trouve la date de la dernière vente
             if !isCurrent {
                 if let lastSell = transactions.filter({ $0.type == .sell }).map({ $0.date }).max() {
                     endDate = lastSell
                 }
             }
             
-            // Calcul des jours d'écart
             let components = Calendar.current.dateComponents([.day], from: firstBuy, to: endDate)
             let daysHeld = components.day ?? 0
             
@@ -1362,19 +1365,34 @@ struct TxHoldingPeriodChart: View {
             }
         }
         
-        // Tri décroissant
         return items.sorted { $0.days > $1.days }
+    }
+    
+    // Calcul de la moyenne des jours de détention
+    var averageDays: Double {
+        guard !data.isEmpty else { return 0 }
+        let totalDays = data.reduce(0) { $0 + $1.days }
+        return Double(totalDays) / Double(data.count)
+    }
+    
+    // Propriété calculée pour les éléments de la légende
+    var legendItems: [String] {
+        var items = data.map { $0.ticker }
+        if !data.isEmpty {
+            items.insert("Average", at: 0)
+        }
+        return items
     }
     
     @State private var hiddenTickers: Set<String> = []
     @State private var hoveredTicker: String? = nil
 
-    func color(for item: HoldingItem) -> Color {
-        if item.isCurrent {
-            return viewModel.color(for: item.ticker)
-        } else {
-            return .gray.opacity(0.5)
+    func color(for ticker: String) -> Color {
+        if ticker == "Average" { return .gray.opacity(0.8) }
+        if let item = data.first(where: { $0.ticker == ticker }) {
+            return item.isCurrent ? viewModel.color(for: item.ticker) : .gray.opacity(0.5)
         }
+        return .gray
     }
 
     var body: some View {
@@ -1387,26 +1405,72 @@ struct TxHoldingPeriodChart: View {
                 if !isExpanded { Button(action: { expandedChart = .holdingPeriod }) { Image(systemName: "plus.magnifyingglass").foregroundColor(.secondary) }.buttonStyle(.plain) }
             }.padding(.bottom, 4)
             
-            InteractiveLegendView(items: data.map { $0.ticker }, colorMap: { ticker in
-                if let item = data.first(where: { $0.ticker == ticker }) { return color(for: item) }
-                return .gray
-            }, hiddenItems: $hiddenTickers).padding(.bottom, 8)
+            InteractiveLegendView(items: legendItems, colorMap: { color(for: $0) }, hiddenItems: $hiddenTickers)
+                .padding(.bottom, 8)
 
-            if filteredData.isEmpty {
+            if filteredData.isEmpty && data.isEmpty {
                 emptyState("No buy transactions recorded.")
             } else {
-                Chart(filteredData) { item in
-                    BarMark(
-                        x: .value("Ticker", item.ticker),
-                        y: .value("Days Held", item.days)
-                    )
-                    .foregroundStyle(color(for: item))
-                    .cornerRadius(4)
-                    .annotation(position: .top) {
-                        if hoveredTicker == item.ticker {
-                            Text("\(item.days)d")
-                                .font(.system(size: 9, weight: .bold)).foregroundColor(.secondary)
-                                .blur(radius: privacyMode ? 6 : 0)
+                Chart {
+                    ForEach(filteredData) { item in
+                        BarMark(
+                            x: .value("Ticker", item.ticker),
+                            y: .value("Days Held", item.days)
+                        )
+                        .foregroundStyle(color(for: item.ticker))
+                        .cornerRadius(4)
+                        
+                        // Ligne verticale grise au survol
+                        if let hTicker = hoveredTicker, item.ticker == hTicker {
+                            RuleMark(x: .value("Ticker", hTicker))
+                                .foregroundStyle(Color.secondary.opacity(0.3))
+                                .zIndex(-1)
+                        }
+                    }
+                    
+                    // MODIFIÉ : La ligne de moyenne est placée APRÈS les barres pour être au premier plan
+                    if !hiddenTickers.contains("Average") && !data.isEmpty {
+                        RuleMark(y: .value("Average Days", averageDays))
+                            .foregroundStyle(Color.primary.opacity(0.7)) // Plus contrasté
+                            .lineStyle(StrokeStyle(lineWidth: 1.5, dash: [4, 4]))
+                            .zIndex(10) // Force l'affichage au-dessus des barres
+                            .annotation(position: .top, alignment: .leading) {
+                                Text("Avg: \(Int(averageDays))d")
+                                    .font(.caption2.bold())
+                                    .foregroundColor(.primary)
+                                    .padding(.horizontal, 4).padding(.vertical, 2)
+                                    .background(Color(NSColor.windowBackgroundColor).opacity(0.8))
+                                    .cornerRadius(4)
+                                    .blur(radius: privacyMode ? 6 : 0)
+                            }
+                    }
+                }
+                .chartOverlay { proxy in
+                    GeometryReader { geometry in
+                        Rectangle().fill(.clear).contentShape(Rectangle())
+                            .onContinuousHover { phase in
+                                switch phase {
+                                case .active(let location):
+                                    if let ticker: String = proxy.value(atX: location.x) { hoveredTicker = ticker }
+                                case .ended:
+                                    hoveredTicker = nil
+                                }
+                            }
+                        
+                        if let hTicker = hoveredTicker, let item = filteredData.first(where: { $0.ticker == hTicker }) {
+                            if let xPosition = proxy.position(forX: hTicker) {
+                                VStack(alignment: .center, spacing: 2) {
+                                    Text(item.ticker).font(.caption.bold())
+                                    Text("\(item.days) days")
+                                        .font(.caption2)
+                                        .blur(radius: privacyMode ? 6 : 0)
+                                }
+                                .padding(6)
+                                .background(Color(NSColor.windowBackgroundColor).opacity(0.95))
+                                .cornerRadius(6)
+                                .shadow(radius: 4)
+                                .position(x: max(40, min(geometry.size.width - 40, xPosition)), y: 35)
+                            }
                         }
                     }
                 }
@@ -1414,15 +1478,11 @@ struct TxHoldingPeriodChart: View {
                 .chartXSelection(value: $hoveredTicker)
                 .chartYAxis { AxisMarks(position: .leading) { v in AxisGridLine(); AxisTick(); AxisValueLabel { if let d = v.as(Int.self) { Text("\(d)") } } } }
             }
-            BlueChipWatermark()
+            HStack { Text("Measures the duration from the first buy to the last sell (or today)").font(.caption2).foregroundColor(.secondary); Spacer(); BlueChipWatermark() }
         }
         .padding().frame(minHeight: isExpanded ? 500 : 360, maxHeight: isExpanded ? .infinity : 360).background(Color(NSColor.controlBackgroundColor)).cornerRadius(12).shadow(color: Color.black.opacity(0.05), radius: 2, x: 0, y: 1)
     }
 }
-
-// =========================================================================
-// MARK: - CHART 7 : Trade Balance (Diverging Bar Chart)
-// =========================================================================
 
 // =========================================================================
 // MARK: - CHART 7 : Trade Balance (Diverging Bar Chart)
@@ -1461,10 +1521,10 @@ struct TxTradeBalanceChart: View {
     }
 
     @State private var hoveredYear: String? = nil
-    @State private var hiddenTypes: Set<String> = [] // NOUVEAU : Gère la légende interactive
+    @State private var hiddenTypes: Set<String> = []
 
     var body: some View {
-        let filteredData = data.filter { !hiddenTypes.contains($0.type) } // Filtre appliqué
+        let filteredData = data.filter { !hiddenTypes.contains($0.type) }
         
         VStack(alignment: .leading, spacing: 8) {
             HStack {
@@ -1473,7 +1533,6 @@ struct TxTradeBalanceChart: View {
                 if !isExpanded { Button(action: { expandedChart = .tradeBalance }) { Image(systemName: "plus.magnifyingglass").foregroundColor(.secondary) }.buttonStyle(.plain) }
             }.padding(.bottom, 4)
             
-            // NOUVEAU : On passe $hiddenTypes à la légende !
             InteractiveLegendView(items: ["Buy", "Sell"], colorMap: { $0 == "Buy" ? .blue : .orange }, hiddenItems: $hiddenTypes).padding(.bottom, 8)
 
             if filteredData.isEmpty { emptyState("No trading activity found.") } else {
@@ -1512,7 +1571,6 @@ struct TxTradeBalanceChart: View {
                                 }
                             }
                             .frame(width: 140).padding(8).background(Color(NSColor.windowBackgroundColor).opacity(0.95)).cornerRadius(8).shadow(radius: 4).overlay(RoundedRectangle(cornerRadius: 8).stroke(Color.gray.opacity(0.2), lineWidth: 1))
-                            // NOUVEAU : Position absolue fixe (y: 50) pour ne pas décaler le graphe
                             .position(x: max(70, min(geometry.size.width - 70, xPosition)), y: 50)
                         }
                     }
@@ -1523,10 +1581,6 @@ struct TxTradeBalanceChart: View {
         }.padding().frame(minHeight: isExpanded ? 500 : 360, maxHeight: isExpanded ? .infinity : 360).background(Color(NSColor.controlBackgroundColor)).cornerRadius(12).shadow(color: Color.black.opacity(0.05), radius: 2, x: 0, y: 1)
     }
 }
-
-// =========================================================================
-// MARK: - CHART 8 : Cumulative Capital Injected (Area Chart)
-// =========================================================================
 
 // =========================================================================
 // MARK: - CHART 8 : Cumulative Capital Injected (Area Chart)
@@ -1603,7 +1657,6 @@ struct TxCumulativeCapitalChart: View {
                 }
                 .chartOverlay { proxy in
                     GeometryReader { geometry in
-                        // NOUVEAU : Info-bulle dessinée par-dessus à une hauteur sûre (y: 50)
                         if let item = hoveredItem, let xPosition = proxy.position(forX: item.date) {
                             VStack(alignment: .leading, spacing: 2) {
                                 Text(item.date.formatted(date: .abbreviated, time: .omitted)).font(.caption.bold())
@@ -1622,10 +1675,6 @@ struct TxCumulativeCapitalChart: View {
         }.padding().frame(minHeight: isExpanded ? 500 : 360, maxHeight: isExpanded ? .infinity : 360).background(Color(NSColor.controlBackgroundColor)).cornerRadius(12).shadow(color: Color.black.opacity(0.05), radius: 2, x: 0, y: 1)
     }
 }
-
-// =========================================================================
-// MARK: - CHART 9 : Tax Drag Index (Line Chart %)
-// =========================================================================
 
 // =========================================================================
 // MARK: - CHART 9 : Tax Drag Index (Line Chart %)
@@ -1667,7 +1716,26 @@ struct TxTaxDragChart: View {
         return result
     }
 
+    // NOUVEAU : Calcul de la moyenne
+    var averageDrag: Double {
+        guard !data.isEmpty else { return 0 }
+        let total = data.reduce(0) { $0 + $1.percent }
+        return total / Double(data.count)
+    }
+
     @State private var hoveredYear: String? = nil
+    @State private var hiddenSeries: Set<String> = [] // Gère les éléments cachés
+
+    // NOUVEAU : Définition des éléments de la légende
+    var legendItems: [String] {
+        var items = ["Tax Drag"]
+        if !data.isEmpty { items.append("Average") }
+        return items
+    }
+
+    func color(for item: String) -> Color {
+        return item == "Average" ? .gray.opacity(0.8) : .red
+    }
 
     var body: some View {
         VStack(alignment: .leading, spacing: 8) {
@@ -1675,26 +1743,57 @@ struct TxTaxDragChart: View {
                 if !isExpanded { Text("Tax Drag Index (Fees / Volume)").font(.headline).foregroundColor(.secondary) }
                 Spacer()
                 if !isExpanded { Button(action: { expandedChart = .taxDrag }) { Image(systemName: "plus.magnifyingglass").foregroundColor(.secondary) }.buttonStyle(.plain) }
-            }.padding(.bottom, 8)
+            }.padding(.bottom, 4)
+
+            // NOUVEAU : Légende interactive
+            InteractiveLegendView(items: legendItems, colorMap: { color(for: $0) }, hiddenItems: $hiddenSeries)
+                .padding(.bottom, 8)
 
             if data.isEmpty { emptyState("No trading volume or fees found.") } else {
-                Chart(data) { item in
-                    LineMark(x: .value("Year", item.year), y: .value("Drag", item.percent))
-                        .foregroundStyle(Color.red).lineStyle(StrokeStyle(lineWidth: 2)).interpolationMethod(.monotone)
-                        .symbol { Circle().fill(Color.red).frame(width: 8, height: 8) }
+                Chart {
+                    // Ligne principale : Tax Drag
+                    if !hiddenSeries.contains("Tax Drag") {
+                        ForEach(data) { item in
+                            LineMark(x: .value("Year", item.year), y: .value("Drag", item.percent))
+                                .foregroundStyle(Color.red)
+                                .lineStyle(StrokeStyle(lineWidth: 2))
+                                .interpolationMethod(.monotone)
+                                .symbol { Circle().fill(Color.red).frame(width: 8, height: 8) }
+                        }
+                    }
                     
-                    if let h = hoveredYear, h == item.year {
-                        // NOUVEAU : On ne met PLUS de .annotation ici pour ne pas décaler le graphe !
-                        RuleMark(x: .value("Year", h)).foregroundStyle(Color.secondary.opacity(0.3))
+                    // Ligne de moyenne
+                    if !hiddenSeries.contains("Average") && !data.isEmpty {
+                        RuleMark(y: .value("Average", averageDrag))
+                            .foregroundStyle(Color.primary.opacity(0.7))
+                            .lineStyle(StrokeStyle(lineWidth: 1.5, dash: [4, 4]))
+                            .zIndex(10) // Maintient la ligne au premier plan
+                            .annotation(position: .top, alignment: .leading) {
+                                Text("Avg: \(averageDrag.formatted(.percent.precision(.fractionLength(2))))")
+                                    .font(.caption2.bold())
+                                    .foregroundColor(.primary)
+                                    .padding(.horizontal, 4).padding(.vertical, 2)
+                                    .background(Color(NSColor.windowBackgroundColor).opacity(0.8))
+                                    .cornerRadius(4)
+                                    .blur(radius: privacyMode ? 6 : 0)
+                            }
+                    }
+                    
+                    // Curseur de survol (RuleMark vertical)
+                    if let h = hoveredYear {
+                        RuleMark(x: .value("Year", h))
+                            .foregroundStyle(Color.secondary.opacity(0.3))
+                            .zIndex(-1)
                     }
                 }
                 .chartOverlay { proxy in
                     GeometryReader { geometry in
-                        // NOUVEAU : Tooltip géré ici en absolu
                         if let h = hoveredYear, let item = data.first(where: { $0.year == h }), let xPosition = proxy.position(forX: h) {
                             VStack(spacing: 2) {
                                 Text(h).font(.caption.bold())
-                                Text(item.percent.formatted(.percent.precision(.fractionLength(2)))).font(.caption2.bold()).foregroundColor(.red)
+                                if !hiddenSeries.contains("Tax Drag") {
+                                    Text(item.percent.formatted(.percent.precision(.fractionLength(2)))).font(.caption2.bold()).foregroundColor(.red)
+                                }
                                 Text("Cost: \(item.totalFees.formatted(.currency(code: "EUR").precision(.fractionLength(0))))").font(.system(size: 8)).foregroundColor(.secondary).blur(radius: privacyMode ? 6 : 0)
                             }
                             .padding(6).background(Color(NSColor.windowBackgroundColor).opacity(0.95)).cornerRadius(6).shadow(radius: 3)
@@ -1734,7 +1833,6 @@ struct TxActivityHeatmapChart: View {
         let cal = Calendar.current
         var dict: [String: [String: Int]] = [:]
         
-        // Initialisation de toutes les années existantes avec 0 pour chaque mois
         let years = Array(Set(tx.map { String(cal.component(.year, from: $0.date)) })).sorted(by: >)
         for y in years {
             dict[y] = [:]
@@ -1780,7 +1878,7 @@ struct TxActivityHeatmapChart: View {
                 }
                 .chartLegend(.hidden)
                 .chartXScale(domain: allMonths)
-                .chartYScale(domain: Array(Set(data.map { $0.year })).sorted(by: >)) // Années décroissantes
+                .chartYScale(domain: Array(Set(data.map { $0.year })).sorted(by: >))
                 .chartOverlay { proxy in
                     GeometryReader { geometry in
                         Rectangle().fill(.clear).contentShape(Rectangle()).onContinuousHover { phase in
@@ -1834,10 +1932,10 @@ struct TransactionsFullScreenChartView: View {
         case .taxBreakdown: return "Fees & Taxes Breakdown"
         case .capitalAllocation: return "Deployed Capital Allocation"
         case .holdingPeriod: return "Days Held per Asset"
-        case .tradeBalance: return "Trade Balance (Buys vs Sells)"          // <-- AJOUT
-        case .cumulativeCapital: return "Cumulative Capital Injected"       // <-- AJOUT
-        case .taxDrag: return "Tax Drag Index (Fees / Volume)"              // <-- AJOUT
-        case .activityHeatmap: return "Activity Heatmap"                    // <-- AJOUT
+        case .tradeBalance: return "Trade Balance (Buys vs Sells)"
+        case .cumulativeCapital: return "Cumulative Capital Injected"
+        case .taxDrag: return "Tax Drag Index (Fees / Volume)"
+        case .activityHeatmap: return "Activity Heatmap"
         }
     }
 
@@ -1856,10 +1954,10 @@ struct TransactionsFullScreenChartView: View {
             case .taxBreakdown: TxTaxBreakdownChart(viewModel: viewModel, tx: tx, privacyMode: $privacyMode, isExpanded: true, expandedChart: .constant(nil))
             case .capitalAllocation: TxCapitalAllocationChart(viewModel: viewModel, tx: tx, privacyMode: $privacyMode, isExpanded: true, expandedChart: .constant(nil))
             case .holdingPeriod: TxHoldingPeriodChart(viewModel: viewModel, tx: tx, privacyMode: $privacyMode, isExpanded: true, expandedChart: .constant(nil))
-            case .tradeBalance: TxTradeBalanceChart(viewModel: viewModel, tx: tx, privacyMode: $privacyMode, isExpanded: true, expandedChart: .constant(nil))           // <-- AJOUT
-            case .cumulativeCapital: TxCumulativeCapitalChart(viewModel: viewModel, tx: tx, privacyMode: $privacyMode, isExpanded: true, expandedChart: .constant(nil)) // <-- AJOUT
-            case .taxDrag: TxTaxDragChart(viewModel: viewModel, tx: tx, privacyMode: $privacyMode, isExpanded: true, expandedChart: .constant(nil))                     // <-- AJOUT
-            case .activityHeatmap: TxActivityHeatmapChart(viewModel: viewModel, tx: tx, privacyMode: $privacyMode, isExpanded: true, expandedChart: .constant(nil))     // <-- AJOUT
+            case .tradeBalance: TxTradeBalanceChart(viewModel: viewModel, tx: tx, privacyMode: $privacyMode, isExpanded: true, expandedChart: .constant(nil))
+            case .cumulativeCapital: TxCumulativeCapitalChart(viewModel: viewModel, tx: tx, privacyMode: $privacyMode, isExpanded: true, expandedChart: .constant(nil))
+            case .taxDrag: TxTaxDragChart(viewModel: viewModel, tx: tx, privacyMode: $privacyMode, isExpanded: true, expandedChart: .constant(nil))
+            case .activityHeatmap: TxActivityHeatmapChart(viewModel: viewModel, tx: tx, privacyMode: $privacyMode, isExpanded: true, expandedChart: .constant(nil))
             }
             
         }.padding(30).frame(minWidth: 900, minHeight: 700)
@@ -2026,7 +2124,6 @@ struct EditTransactionGoalView: View {
 
     var body: some View {
         VStack(spacing: 0) {
-            // Header
             HStack {
                 Text("Set Transaction Goal").font(.title2).fontWeight(.bold)
                 Spacer()
@@ -2038,7 +2135,6 @@ struct EditTransactionGoalView: View {
             
             Divider()
             
-            // Content
             VStack(alignment: .leading, spacing: 16) {
                 GroupBox {
                     VStack(spacing: 16) {
@@ -2071,7 +2167,6 @@ struct EditTransactionGoalView: View {
             Spacer()
             Divider()
             
-            // Footer
             HStack {
                 Button("Cancel") { dismiss() }
                     .keyboardShortcut(.cancelAction)
@@ -2085,7 +2180,7 @@ struct EditTransactionGoalView: View {
                 .buttonStyle(.borderedProminent)
             }.padding()
         }
-        .frame(width: 440, height: 280) // Taille unifiée
+        .frame(width: 440, height: 280)
     }
 }
 
