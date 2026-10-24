@@ -5,7 +5,7 @@ import LocalAuthentication
 
 struct ContentView: View {
     @Environment(\.modelContext) private var context
-    @StateObject private var viewModel = PortfolioViewModel()
+    @ObservedObject var viewModel: PortfolioViewModel
     
     @State private var selectedTab: AppTab = .composition
     @State private var showAddSheet = false
@@ -17,10 +17,7 @@ struct ContentView: View {
     @AppStorage("appTheme") private var appTheme: AppTheme = .system
     @AppStorage("forcePrivacyOnStartup") private var forcePrivacyOnStartup: Bool = false
     @AppStorage("requireAuthOnStartup") private var requireAuthOnStartup: Bool = false
-    
-    // État de verrouillage (True = l'utilisateur peut voir l'app)
-    @State private var isUnlocked: Bool = false
-    
+        
     @State private var showAddTransaction = false
     @State private var showAddEvent = false
     @State private var showCheatSheet = false
@@ -35,7 +32,7 @@ struct ContentView: View {
     var body: some View {
         Group {
             // SI L'APP EST VERROUILLÉE
-            if requireAuthOnStartup && !isUnlocked {
+            if requireAuthOnStartup && !viewModel.isUnlocked {
                 VStack(spacing: 24) {
                     Image(systemName: "lock.shield.fill")
                         .font(.system(size: 80))
@@ -81,11 +78,11 @@ struct ContentView: View {
         if context.canEvaluatePolicy(.deviceOwnerAuthentication, error: &error) {
             context.evaluatePolicy(.deviceOwnerAuthentication, localizedReason: "Unlock BlueChip to access your financial data.") { success, _ in
                 DispatchQueue.main.async {
-                    if success { self.isUnlocked = true }
+                    if success { viewModel.isUnlocked = true }
                 }
             }
         } else {
-            self.isUnlocked = true
+            viewModel.isUnlocked = true
         }
     }
     
@@ -280,7 +277,7 @@ struct ContentView: View {
     private func lockApp() {
         // Force l'activation de la sécurité et verrouille immédiatement
         requireAuthOnStartup = true
-        isUnlocked = false
+        viewModel.isUnlocked = false
     }
     
     private func cycleToNextTab() {

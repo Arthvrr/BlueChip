@@ -5,7 +5,9 @@ import CoreSpotlight
 @main
 struct BlueChipApp: App {
     
-    // 1. CRÉATION DU CONTENEUR PARTAGÉ
+    // 1. CRÉATION DU CONTENEUR PARTAGÉ (L'UNIQUE CERVEAU 🧠)
+    @StateObject private var sharedViewModel = PortfolioViewModel()
+    
     static let sharedModelContainer: ModelContainer = {
         let schema = Schema([
             AppSettings.self,
@@ -29,12 +31,12 @@ struct BlueChipApp: App {
         }
     }()
     
-    // 2. VIEWMODEL SPÉCIFIQUE POUR LE MENU
-    @StateObject private var menuViewModel = PortfolioViewModel()
+    // SUPPRIMÉ : Le menuViewModel séparé qui causait la désynchronisation
     
     var body: some Scene {
         WindowGroup {
-            ContentView()
+            // On passe notre unique cerveau à la vue principale
+            ContentView(viewModel: sharedViewModel)
                 .onAppear {
                     NotificationManager.shared.requestAuthorization()
                 }
@@ -167,10 +169,13 @@ struct BlueChipApp: App {
         
         // 4. BARRE DES MENUS
         MenuBarExtra("BlueChip", image: "MenuBarIcon") {
-            MenuBarDashboardView(viewModel: menuViewModel)
+            // On passe EXACTEMENT le même cerveau à la barre des menus
+            MenuBarDashboardView(viewModel: sharedViewModel)
                 .onAppear {
+                    // Si l'app est lancée en tâche de fond (fenêtre fermée), on s'assure
+                    // que les données sont bien récupérées par l'unique ViewModel
                     let context = BlueChipApp.sharedModelContainer.mainContext
-                    menuViewModel.fetchData(context: context)
+                    sharedViewModel.fetchData(context: context)
                 }
         }
         .menuBarExtraStyle(.window)

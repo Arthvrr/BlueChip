@@ -81,7 +81,7 @@ class PortfolioViewModel: ObservableObject {
     @Published var dividendTaxRate: Double = 15.0 { didSet { settings?.dividendTaxRate = dividendTaxRate; updateDividendsViewData() } }
     @Published var userTimeZoneIdentifier: String = TimeZone.current.identifier { didSet { settings?.userTimeZoneIdentifier = userTimeZoneIdentifier } }
     
-    @Published var isAuthenticated: Bool = false
+    @Published var isUnlocked: Bool = false
     
     private let yahooService = YahooFinanceService()
     

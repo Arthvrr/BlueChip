@@ -8,6 +8,7 @@ struct MenuBarDashboardView: View {
     @AppStorage("privacyMode") private var privacyMode: Bool = false
     
     // --- VARIABLES CALCULÉES ---
+    // (Ces variables ne seront calculées que si l'app est déverrouillée)
     let currentMonthName: String = {
         let f = DateFormatter()
         f.dateFormat = "MMMM"
@@ -45,7 +46,6 @@ struct MenuBarDashboardView: View {
         viewModel.watchlistItems.sorted { $0.ticker < $1.ticker }
     }
     
-    // --- FORMATEUR HEURE LOCALE ---
     var localTimeFormatter: DateFormatter {
         let f = DateFormatter()
         if let offset = Int(viewModel.userTimeZoneIdentifier) {
@@ -57,7 +57,6 @@ struct MenuBarDashboardView: View {
         return f
     }
     
-    // --- CALCULATEUR VÉRIDIQUE MARCHÉ US ---
     var isMarketOpen: Bool {
         guard let nyTimeZone = TimeZone(identifier: "America/New_York") else { return false }
         var cal = Calendar.current
@@ -82,12 +81,59 @@ struct MenuBarDashboardView: View {
         return totalMinutes >= openMinutes && totalMinutes < closeMinutes
     }
 
+    // =====================================================================
+    // MARK: - BODY PRINCIPAL (SÉCURISE LE ROUTAGE)
+    // =====================================================================
     var body: some View {
-        VStack(spacing: 0) {
+        Group {
+            // MODIFIÉ : Aligné sur la même variable
+            if viewModel.isUnlocked {
+                unlockedDashboard
+            } else {
+                lockedDashboard
+            }
+        }
+        .animation(.easeInOut(duration: 0.2), value: viewModel.isUnlocked)
+    }
+    
+    // =====================================================================
+    // MARK: - ÉTAT VERROUILLÉ (LOCKED)
+    // =====================================================================
+    @ViewBuilder
+    var lockedDashboard: some View {
+        VStack(spacing: 16) {
+            Image(systemName: "lock.shield.fill")
+                .font(.system(size: 46))
+                .foregroundColor(.blue)
             
-            // =====================================================================
-            // MARK: - HEADER
-            // =====================================================================
+            Text("BlueChip is Locked")
+                .font(.headline)
+            
+            Text("Please unlock the main application to view your portfolio and market data.")
+                .font(.caption)
+                .foregroundColor(.secondary)
+                .multilineTextAlignment(.center)
+                .padding(.horizontal, 20)
+            
+            Button(action: openMainApp) {
+                Text("Unlock BlueChip")
+                    .fontWeight(.semibold)
+            }
+            .buttonStyle(.borderedProminent)
+            .padding(.top, 8)
+        }
+        // Taille fixe pour éviter que le menu de macOS ne plante en essayant de deviner la taille
+        .frame(width: 320, height: 260)
+        .background(Color(NSColor.windowBackgroundColor))
+    }
+    
+    // =====================================================================
+    // MARK: - ÉTAT DÉVERROUILLÉ (UNLOCKED)
+    // =====================================================================
+    @ViewBuilder
+    var unlockedDashboard: some View {
+        VStack(spacing: 0) {
+            // --- HEADER ---
             HStack(alignment: .center) {
                 VStack(alignment: .leading, spacing: 2) {
                     Text("Total Portfolio").font(.caption).foregroundColor(.secondary)
@@ -95,14 +141,12 @@ struct MenuBarDashboardView: View {
                         .font(.headline)
                         .fontWeight(.bold)
                     
-                    // --- ROI GLOBAL (Corrigé pour correspondre au dashboard Composition) ---
                     let roiValue = viewModel.currentTotalCapital - viewModel.manuallyInvested
                     let roiPercent = viewModel.manuallyInvested > 0 ? (roiValue / viewModel.manuallyInvested) : 0
                     let isPositive = roiValue >= 0
                     let sign = isPositive ? "+" : ""
                     let color = isPositive ? Color.green : Color.red
                     
-                    // On ne retire plus le HStack en mode privé, on remplace juste le texte pour garder la hauteur
                     HStack(spacing: 4) {
                         Text(privacyMode ? "****" : "\(sign)\(roiValue.formatted(.currency(code: "EUR")))")
                         Text(privacyMode ? "(***%)" : "(\(sign)\(roiPercent.formatted(.percent.precision(.fractionLength(1)))))")
@@ -125,19 +169,14 @@ struct MenuBarDashboardView: View {
                         .foregroundColor(.secondary)
                 }.padding(.trailing, 8)
                 
-                Button(action: {
-                    // Pas besoin d'animation ici pour éviter un effet de saut étrange du texte masqué
-                    privacyMode.toggle()
-                }) {
+                Button(action: { privacyMode.toggle() }) {
                     Image(systemName: privacyMode ? "eye.slash" : "eye")
                 }
                 .buttonStyle(.plain)
                 .help(privacyMode ? "Show Values" : "Hide Values")
                 .padding(.trailing, 4)
                 
-                Button(action: {
-                    Task { await viewModel.refreshPrices() }
-                }) {
+                Button(action: { Task { await viewModel.refreshPrices() } }) {
                     Image(systemName: "arrow.clockwise")
                         .rotationEffect(Angle(degrees: viewModel.isLoading ? 360 : 0))
                         .animation(viewModel.isLoading ? Animation.linear(duration: 1).repeatForever(autoreverses: false) : .default, value: viewModel.isLoading)
@@ -151,68 +190,49 @@ struct MenuBarDashboardView: View {
             
             Divider()
             
-            // =====================================================================
-            // MARK: - CONTENU SCROLLABLE
-            // =====================================================================
+            // --- CONTENU SCROLLABLE ---
             ScrollView(.vertical, showsIndicators: false) {
                 VStack(spacing: 16) {
                     
-                    // --- ALERTE ÉVÉNEMENT DU JOUR ---
                     let todayEvents = thisMonthEvents.filter { Calendar.current.isDateInToday($0.date) }
                     if !todayEvents.isEmpty {
                         VStack(spacing: 6) {
                             ForEach(todayEvents) { event in
                                 HStack {
-                                    Image(systemName: "exclamationmark.triangle.fill")
-                                        .foregroundColor(.red)
+                                    Image(systemName: "exclamationmark.triangle.fill").foregroundColor(.red)
                                     VStack(alignment: .leading, spacing: 2) {
                                         Text("TODAY: \(event.ticker)").font(.caption).fontWeight(.bold)
                                         HStack(spacing: 4) {
                                             Text(event.type.rawValue)
-                                            if event.hasTime {
-                                                Text("at \(localTimeFormatter.string(from: event.date))")
-                                                    .fontWeight(.bold)
-                                            }
-                                        }
-                                        .font(.caption2).opacity(0.8)
+                                            if event.hasTime { Text("at \(localTimeFormatter.string(from: event.date))").fontWeight(.bold) }
+                                        }.font(.caption2).opacity(0.8)
                                     }
                                     Spacer()
                                 }
-                                .padding(8)
-                                .background(Color.red.opacity(0.15))
-                                .cornerRadius(6)
-                                .overlay(RoundedRectangle(cornerRadius: 6).stroke(Color.red.opacity(0.4), lineWidth: 1))
+                                .padding(8).background(Color.red.opacity(0.15)).cornerRadius(6).overlay(RoundedRectangle(cornerRadius: 6).stroke(Color.red.opacity(0.4), lineWidth: 1))
                             }
                         }
                     }
                     
-                    // --- SECTION 1 : POSITIONS & TARGETS ---
+                    // SECTION 1 : POSITIONS & TARGETS
                     VStack(alignment: .leading, spacing: 8) {
                         Text("Holdings & Targets").font(.subheadline).fontWeight(.bold).foregroundColor(.secondary)
-                        
                         VStack(spacing: 6) {
                             ForEach(sortedPositions) { pos in
                                 HStack {
                                     Text(pos.ticker).font(.system(.body, design: .monospaced)).fontWeight(.bold)
                                     Spacer()
                                     VStack(alignment: .trailing) {
-                                        Text(privacyMode ? "****" : pos.currentPrice.formatted(.currency(code: pos.currency.isEmpty ? "USD" : pos.currency)))
-                                            .font(.subheadline)
-                                        
+                                        Text(privacyMode ? "****" : pos.currentPrice.formatted(.currency(code: pos.currency.isEmpty ? "USD" : pos.currency))).font(.subheadline)
                                         HStack(spacing: 4) {
                                             Text("Target: \(privacyMode ? "****" : (pos.targetPrice?.formatted() ?? "-"))")
-                                            
                                             if let target = pos.targetPrice, target > 0 {
                                                 let gap = ((pos.currentPrice - target) / target) * 100
                                                 let gapColor = gap <= 0 ? Color.green : Color.red
                                                 let sign = gap > 0 ? "+" : ""
-                                                // Remplacement fixe pour éviter le saut
-                                                Text(privacyMode ? "(***%)" : "(\(sign)\(gap.formatted(.number.precision(.fractionLength(1))))%)")
-                                                    .foregroundColor(privacyMode ? .secondary : gapColor)
+                                                Text(privacyMode ? "(***%)" : "(\(sign)\(gap.formatted(.number.precision(.fractionLength(1))))%)").foregroundColor(privacyMode ? .secondary : gapColor)
                                             }
-                                        }
-                                        .font(.caption2)
-                                        .foregroundColor(.secondary)
+                                        }.font(.caption2).foregroundColor(.secondary)
                                     }
                                 }
                                 Divider().opacity(0.5)
@@ -220,35 +240,28 @@ struct MenuBarDashboardView: View {
                         }
                     }
                     
-                    // --- SECTION 1.5 : WATCHLIST ---
+                    // SECTION 1.5 : WATCHLIST
                     if !sortedWatchlist.isEmpty {
                         VStack(alignment: .leading, spacing: 8) {
                             Text("Watchlist").font(.subheadline).fontWeight(.bold).foregroundColor(.secondary)
-                            
                             VStack(spacing: 6) {
                                 ForEach(sortedWatchlist) { item in
                                     HStack {
                                         Text(item.ticker).font(.system(.body, design: .monospaced)).fontWeight(.bold)
                                         Spacer()
                                         VStack(alignment: .trailing) {
-                                            Text(privacyMode ? "****" : item.currentPrice.formatted(.currency(code: item.currency.isEmpty ? "USD" : item.currency)))
-                                                .font(.subheadline)
-                                            
+                                            Text(privacyMode ? "****" : item.currentPrice.formatted(.currency(code: item.currency.isEmpty ? "USD" : item.currency))).font(.subheadline)
                                             HStack(spacing: 4) {
                                                 let targetText = item.targetPrice > 0 ? item.targetPrice.formatted() : "-"
                                                 Text("Target: \(privacyMode ? "****" : targetText)")
-                                                
                                                 if item.targetPrice > 0 {
                                                     let target = item.targetPrice
                                                     let gap = ((item.currentPrice - target) / target) * 100
                                                     let gapColor = gap <= 0 ? Color.green : Color.red
                                                     let sign = gap > 0 ? "+" : ""
-                                                    Text(privacyMode ? "(***%)" : "(\(sign)\(gap.formatted(.number.precision(.fractionLength(1))))%)")
-                                                        .foregroundColor(privacyMode ? .secondary : gapColor)
+                                                    Text(privacyMode ? "(***%)" : "(\(sign)\(gap.formatted(.number.precision(.fractionLength(1))))%)").foregroundColor(privacyMode ? .secondary : gapColor)
                                                 }
-                                            }
-                                            .font(.caption2)
-                                            .foregroundColor(.secondary)
+                                            }.font(.caption2).foregroundColor(.secondary)
                                         }
                                     }
                                     Divider().opacity(0.5)
@@ -257,14 +270,13 @@ struct MenuBarDashboardView: View {
                         }
                     }
                     
-                    // --- SECTION 2 : DIVIDENDES ---
+                    // SECTION 2 : DIVIDENDES
                     VStack(alignment: .leading, spacing: 8) {
                         HStack {
                             Text("Dividends (\(currentMonthName))").font(.subheadline).fontWeight(.bold).foregroundColor(.secondary)
                             Spacer()
                             Text(privacyMode ? "€ ****" : totalDividendsThisMonth.formatted(.currency(code: "EUR"))).font(.caption).fontWeight(.bold).foregroundColor(privacyMode ? .secondary : .green)
                         }
-                        
                         if thisMonthDividends.isEmpty {
                             Text("No dividends expected this month.").font(.caption).foregroundColor(.secondary).italic()
                         } else {
@@ -280,10 +292,9 @@ struct MenuBarDashboardView: View {
                         }
                     }
                     
-                    // --- SECTION 3 : ÉVÉNEMENTS ---
+                    // SECTION 3 : ÉVÉNEMENTS
                     VStack(alignment: .leading, spacing: 8) {
                         Text("Events (\(currentMonthName))").font(.subheadline).fontWeight(.bold).foregroundColor(.secondary)
-                        
                         if thisMonthEvents.isEmpty {
                             Text("No upcoming events.").font(.caption).foregroundColor(.secondary).italic()
                         } else {
@@ -291,16 +302,9 @@ struct MenuBarDashboardView: View {
                                 ForEach(thisMonthEvents) { event in
                                     let isPast = event.date < Calendar.current.startOfDay(for: Date())
                                     HStack {
-                                        Circle()
-                                            .fill(isPast ? Color.gray : event.type.color)
-                                            .frame(width: 6, height: 6)
-                                        
-                                        if isPast {
-                                            Text(event.ticker).font(.caption).fontWeight(.bold).strikethrough().foregroundColor(.secondary)
-                                        } else {
-                                            Text(event.ticker).font(.caption).fontWeight(.bold)
-                                        }
-                                        
+                                        Circle().fill(isPast ? Color.gray : event.type.color).frame(width: 6, height: 6)
+                                        if isPast { Text(event.ticker).font(.caption).fontWeight(.bold).strikethrough().foregroundColor(.secondary) }
+                                        else { Text(event.ticker).font(.caption).fontWeight(.bold) }
                                         Text(event.type.rawValue).font(.caption2).foregroundColor(isPast ? .secondary.opacity(0.5) : .secondary).lineLimit(1)
                                         Spacer()
                                         Text(event.date, format: .dateTime.day().month()).font(.caption2).foregroundColor(isPast ? .secondary.opacity(0.5) : .secondary)
@@ -309,23 +313,14 @@ struct MenuBarDashboardView: View {
                             }
                         }
                     }
-                    
                 }
                 .padding(12)
             }
             
             Divider()
             
-            // =====================================================================
-            // MARK: - FOOTER PROPRE & CENTRÉ
-            // =====================================================================
-            Button(action: {
-                dismiss()
-                NSApp.activate(ignoringOtherApps: true)
-                if NSApp.windows.isEmpty {
-                    NSApp.sendAction(Selector(("showWindow:")), to: nil, from: nil)
-                }
-            }) {
+            // --- FOOTER PROPRE & CENTRÉ ---
+            Button(action: openMainApp) {
                 HStack {
                     Spacer()
                     Text("Open BlueChip Full App")
@@ -339,13 +334,19 @@ struct MenuBarDashboardView: View {
             .buttonStyle(.plain)
             .background(Color(NSColor.controlBackgroundColor).opacity(0.5))
             .onHover { hovering in
-                if hovering {
-                    NSCursor.pointingHand.push()
-                } else {
-                    NSCursor.pop()
-                }
+                if hovering { NSCursor.pointingHand.push() } else { NSCursor.pop() }
             }
         }
+        // Taille fixe en mode déverrouillé
         .frame(width: 320, height: 480)
+    }
+    
+    // Fonction d'ouverture de l'app principale
+    private func openMainApp() {
+        dismiss()
+        NSApp.activate(ignoringOtherApps: true)
+        if NSApp.windows.isEmpty {
+            NSApp.sendAction(Selector(("showWindow:")), to: nil, from: nil)
+        }
     }
 }
