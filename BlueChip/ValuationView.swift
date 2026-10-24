@@ -436,25 +436,64 @@ struct ValuationChartsSection: View {
     @Binding var chartToZoom: ValuationChartZoomType?
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 16) {
-            Text("Valuation Visual Analytics").font(.title2).fontWeight(.bold).foregroundColor(.secondary)
+        VStack(spacing: 24) {
             
-            HStack(spacing: 20) {
-                ValuationPriceComparisonChart(viewModel: viewModel, marginOfSafety: marginOfSafety, privacyMode: $privacyMode, expandedChart: $chartToZoom)
-                ValuationPEBulletChart(viewModel: viewModel, privacyMode: $privacyMode, expandedChart: $chartToZoom)
+            VStack(alignment: .leading, spacing: 12) {
+                Text("Valuation Visual Analytics").font(.title2).fontWeight(.bold).foregroundColor(.secondary)
+                HStack(alignment: .top, spacing: 20) {
+                    VStack(alignment: .leading) {
+                        //HStack { Text("Price vs Analyst Consensus").font(.headline).foregroundColor(.secondary); Spacer() }
+                        ValuationPriceComparisonChart(viewModel: viewModel, marginOfSafety: marginOfSafety, privacyMode: $privacyMode, expandedChart: $chartToZoom)
+                    }
+                    VStack(alignment: .leading) {
+                        //HStack { Text("Historical PE Valuation Gauge").font(.headline).foregroundColor(.secondary); Spacer() }
+                        ValuationPEBulletChart(viewModel: viewModel, privacyMode: $privacyMode, expandedChart: $chartToZoom)
+                    }
+                }
             }
-            HStack(spacing: 20) {
-                ValuationYieldsChart(viewModel: viewModel, privacyMode: $privacyMode, expandedChart: $chartToZoom)
-                ValuationCashMatrixChart(viewModel: viewModel, privacyMode: $privacyMode, expandedChart: $chartToZoom)
+            
+            VStack(alignment: .leading, spacing: 12) {
+                Text("Earnings & Cash Flow").font(.title2).fontWeight(.bold).foregroundColor(.secondary)
+                HStack(alignment: .top, spacing: 20) {
+                    VStack(alignment: .leading) {
+                        //HStack { Text("Yield Barometer (Earnings vs Cash)").font(.headline).foregroundColor(.secondary); Spacer() }
+                        ValuationYieldsChart(viewModel: viewModel, privacyMode: $privacyMode, expandedChart: $chartToZoom)
+                    }
+                    VStack(alignment: .leading) {
+                        //HStack { Text("Quality Matrix (Cash vs Accounting)").font(.headline).foregroundColor(.secondary); Spacer() }
+                        ValuationCashMatrixChart(viewModel: viewModel, privacyMode: $privacyMode, expandedChart: $chartToZoom)
+                    }
+                }
             }
-            HStack(spacing: 20) {
-                ValuationPEGScatterChart(viewModel: viewModel, privacyMode: $privacyMode, expandedChart: $chartToZoom)
-                ValuationDiscountHeatmap(viewModel: viewModel, marginOfSafety: marginOfSafety, privacyMode: $privacyMode, expandedChart: $chartToZoom)
+            
+            VStack(alignment: .leading, spacing: 12) {
+                Text("Growth & Discount Metrics").font(.title2).fontWeight(.bold).foregroundColor(.secondary)
+                HStack(alignment: .top, spacing: 20) {
+                    VStack(alignment: .leading) {
+                        //HStack { Text("PEG Ratio Matrix (Price vs Growth)").font(.headline).foregroundColor(.secondary); Spacer() }
+                        ValuationPEGScatterChart(viewModel: viewModel, privacyMode: $privacyMode, expandedChart: $chartToZoom)
+                    }
+                    VStack(alignment: .leading) {
+                        //HStack { Text("Portfolio Discount Heatmap").font(.headline).foregroundColor(.secondary); Spacer() }
+                        ValuationDiscountHeatmap(viewModel: viewModel, marginOfSafety: marginOfSafety, privacyMode: $privacyMode, expandedChart: $chartToZoom)
+                    }
+                }
             }
-            HStack(spacing: 20) {
-                ValuationTargetPriceLineChart(viewModel: viewModel, privacyMode: $privacyMode, expandedChart: $chartToZoom)
-                ValuationDistributionDonutChart(viewModel: viewModel, marginOfSafety: marginOfSafety, privacyMode: $privacyMode, expandedChart: $chartToZoom)
+            
+            VStack(alignment: .leading, spacing: 12) {
+                Text("Market Trends & Sentiment").font(.title2).fontWeight(.bold).foregroundColor(.secondary)
+                HStack(alignment: .top, spacing: 20) {
+                    VStack(alignment: .leading) {
+                        //HStack { Text("Current vs Target Price").font(.headline).foregroundColor(.secondary); Spacer() }
+                        ValuationTargetPriceLineChart(viewModel: viewModel, privacyMode: $privacyMode, expandedChart: $chartToZoom)
+                    }
+                    VStack(alignment: .leading) {
+                        //HStack { Text("Valuation Range Distribution").font(.headline).foregroundColor(.secondary); Spacer() }
+                        ValuationDistributionDonutChart(viewModel: viewModel, marginOfSafety: marginOfSafety, privacyMode: $privacyMode, expandedChart: $chartToZoom)
+                    }
+                }
             }
+            
         }
     }
 }
@@ -691,6 +730,8 @@ struct ValuationYieldsChart: View {
 
 // --- CHART 4: CASH VS ACCOUNTING MATRIX ---
 
+// --- CHART 4: CASH VS ACCOUNTING MATRIX ---
+
 struct ValuationCashMatrixChart: View {
     @ObservedObject var viewModel: PortfolioViewModel
     @Binding var privacyMode: Bool
@@ -698,6 +739,9 @@ struct ValuationCashMatrixChart: View {
     @Binding var expandedChart: ValuationChartZoomType?
     
     @State private var hoveredYield: Double? = nil
+    
+    // NOUVEAU: Set pour cacher les tickers
+    @State private var hiddenTickers: Set<String> = []
     
     var validPositions: [Position] { viewModel.positions.filter { $0.earningsYield > 0 && $0.fcfYield > 0 } }
     
@@ -713,14 +757,27 @@ struct ValuationCashMatrixChart: View {
     }
 
     var body: some View {
+        let filteredPositions = validPositions.filter { !hiddenTickers.contains($0.ticker) }
+        
         VStack(alignment: .leading, spacing: 8) {
             HStack {
-                if !isExpanded { Text("Quality Matrix (Cash vs Accounting)").font(.headline).foregroundColor(.secondary) }
                 Spacer()
                 if !isExpanded { Button(action: { expandedChart = .cashMatrix }) { Image(systemName: "plus.magnifyingglass").foregroundColor(.secondary) }.buttonStyle(.plain) }
             }.padding(.bottom, 4)
             
-            if validPositions.isEmpty {
+            // NOUVEAU : Légende interactive pour les Tickers
+            if !validPositions.isEmpty {
+                InteractiveLegendView(
+                    items: validPositions.map { $0.ticker }.sorted(),
+                    colorMap: { ticker in
+                        guard let pos = validPositions.first(where: { $0.ticker == ticker }) else { return .gray }
+                        return pos.fcfYield > pos.earningsYield ? .green : .orange
+                    },
+                    hiddenItems: $hiddenTickers
+                ).padding(.bottom, 8)
+            }
+            
+            if filteredPositions.isEmpty {
                 Spacer(); Text("No yield data").foregroundColor(.secondary).frame(maxWidth: .infinity, alignment: .center); Spacer()
             } else {
                 Chart {
@@ -729,8 +786,8 @@ struct ValuationCashMatrixChart: View {
                     LineMark(x: .value("E", maxVal), y: .value("F", maxVal)).foregroundStyle(Color.green).lineStyle(StrokeStyle(lineWidth: 1.5, dash: [5]))
                         .annotation(position: .bottom, alignment: .trailing) { Text("FCF = Earnings").font(.caption2).foregroundColor(.green) }
                     
-                    // Scatter Points
-                    ForEach(validPositions) { pos in
+                    // Scatter Points filtrés
+                    ForEach(filteredPositions) { pos in
                         PointMark(
                             x: .value("Earnings Yield", pos.earningsYield),
                             y: .value("FCF Yield", pos.fcfYield)
@@ -754,6 +811,7 @@ struct ValuationCashMatrixChart: View {
                 .chartXAxis { AxisMarks { value in AxisGridLine(); AxisTick(); if let v = value.as(Double.self) { AxisValueLabel(v.formatted(.percent.precision(.fractionLength(0)))) } } }
                 .chartYAxis { AxisMarks { value in AxisGridLine(); AxisTick(); if let v = value.as(Double.self) { AxisValueLabel(v.formatted(.percent.precision(.fractionLength(0)))) } } }
                 .chartXSelection(value: $hoveredYield)
+                .chartLegend(.hidden)
             }
             
             HStack { Text("Above green line = Generates more cash than paper profit").font(.caption2).foregroundColor(.secondary); Spacer(); BlueChipWatermark() }
@@ -771,6 +829,9 @@ struct ValuationPEGScatterChart: View {
     
     @State private var hoveredGrowth: Double? = nil
     
+    // NOUVEAU: Set pour cacher les tickers
+    @State private var hiddenTickers: Set<String> = []
+    
     var validPositions: [Position] { viewModel.positions.filter { $0.valCurrentPE > 0 && $0.valPeg > 0 } }
     
     var maxVal: Double {
@@ -785,14 +846,27 @@ struct ValuationPEGScatterChart: View {
     }
 
     var body: some View {
+        let filteredPositions = validPositions.filter { !hiddenTickers.contains($0.ticker) }
+        
         VStack(alignment: .leading, spacing: 8) {
             HStack {
-                if !isExpanded { Text("PEG Ratio Matrix (Price vs Growth)").font(.headline).foregroundColor(.secondary) }
                 Spacer()
                 if !isExpanded { Button(action: { expandedChart = .pegScatter }) { Image(systemName: "plus.magnifyingglass").foregroundColor(.secondary) }.buttonStyle(.plain) }
             }.padding(.bottom, 4)
             
-            if validPositions.isEmpty {
+            // NOUVEAU : Légende interactive pour les Tickers
+            if !validPositions.isEmpty {
+                InteractiveLegendView(
+                    items: validPositions.map { $0.ticker }.sorted(),
+                    colorMap: { ticker in
+                        guard let pos = validPositions.first(where: { $0.ticker == ticker }) else { return .gray }
+                        return pos.valPeg <= 1.0 ? .green : (pos.valPeg > 2.0 ? .red : .blue)
+                    },
+                    hiddenItems: $hiddenTickers
+                ).padding(.bottom, 8)
+            }
+            
+            if filteredPositions.isEmpty {
                 Spacer(); Text("No PEG data").foregroundColor(.secondary).frame(maxWidth: .infinity, alignment: .center); Spacer()
             } else {
                 Chart {
@@ -801,8 +875,8 @@ struct ValuationPEGScatterChart: View {
                     LineMark(x: .value("Growth", maxVal), y: .value("PE", maxVal)).foregroundStyle(Color.green).lineStyle(StrokeStyle(lineWidth: 1.5, dash: [5]))
                         .annotation(position: .bottom, alignment: .trailing) { Text("PEG = 1.0").font(.caption2).foregroundColor(.green) }
                     
-                    // Scatter Points
-                    ForEach(validPositions) { pos in
+                    // Scatter Points filtrés
+                    ForEach(filteredPositions) { pos in
                         PointMark(
                             x: .value("Expected Growth", pos.impliedGrowth),
                             y: .value("Current PE", pos.valCurrentPE)
@@ -825,6 +899,7 @@ struct ValuationPEGScatterChart: View {
                 .chartXAxis { AxisMarks { value in AxisGridLine(); AxisTick(); if let v = value.as(Double.self) { AxisValueLabel("\(v.formatted(.number.precision(.fractionLength(0))))%") } } }
                 .chartYAxis { AxisMarks { value in AxisGridLine(); AxisTick(); if let v = value.as(Double.self) { AxisValueLabel("\(v.formatted(.number.precision(.fractionLength(0))))x") } } }
                 .chartXSelection(value: $hoveredGrowth)
+                .chartLegend(.hidden)
             }
             
             HStack { Text("Below the green line = Undervalued (PEG < 1)").font(.caption2).foregroundColor(.secondary); Spacer(); BlueChipWatermark() }
