@@ -277,15 +277,6 @@ struct WatchListControlsSection: View {
                         TextField("Search ticker, note…", text: $searchText).textFieldStyle(.plain).frame(width: 150)
                     }.padding(6).background(Color(NSColor.windowBackgroundColor)).cornerRadius(8)
                     
-                    Button(action: onRefresh) {
-                        HStack(spacing: 4) {
-                            Image(systemName: isRefreshing ? "arrow.triangle.2.circlepath" : "arrow.clockwise")
-                                .rotationEffect(.degrees(isRefreshing ? 360 : 0))
-                                .animation(isRefreshing ? .linear(duration: 1).repeatForever(autoreverses: false) : .default, value: isRefreshing)
-                            Text("Fetch Prices")
-                        }
-                    }.buttonStyle(.bordered).disabled(isRefreshing)
-                    
                     Button(action: onAdd) { Label("Add Stock", systemImage: "plus") }.buttonStyle(.borderedProminent)
                 }
             }
@@ -437,16 +428,40 @@ struct WatchListChartsSection: View {
     @Binding var chartToZoom: WatchListChartZoomType?
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 16) {
-            Text("Watchlist Visual Analytics").font(.title2).fontWeight(.bold).foregroundColor(.secondary)
+        VStack(spacing: 24) {
             
-            HStack(spacing: 20) {
-                WatchListPriceComparisonChart(items: items, marginOfSafety: marginOfSafety, privacyMode: $privacyMode, expandedChart: $chartToZoom)
-                WatchListPEComparisonChart(items: items, privacyMode: $privacyMode, expandedChart: $chartToZoom)
+            // Rangée 1
+            VStack(alignment: .leading, spacing: 12) {
+                Text("Valuation & Market Targets").font(.title2).fontWeight(.bold).foregroundColor(.secondary)
+                
+                HStack(spacing: 24) {
+                    VStack(alignment: .leading) {
+                        //HStack { Text("Valuation & Target Prices Comparison").font(.headline).foregroundColor(.secondary); Spacer() }
+                        WatchListPriceComparisonChart(items: items, marginOfSafety: marginOfSafety, privacyMode: $privacyMode, expandedChart: $chartToZoom)
+                    }
+                    
+                    VStack(alignment: .leading) {
+                        //HStack { Text("PE Valuation (Current vs Fwd vs 10Y)").font(.headline).foregroundColor(.secondary); Spacer() }
+                        WatchListPEComparisonChart(items: items, privacyMode: $privacyMode, expandedChart: $chartToZoom)
+                    }
+                }
             }
-            HStack(spacing: 20) {
-                WatchListPEGChart(items: items, privacyMode: $privacyMode, expandedChart: $chartToZoom)
-                WatchListUpsideChart(items: items, marginOfSafety: marginOfSafety, privacyMode: $privacyMode, expandedChart: $chartToZoom)
+            
+            // Rangée 2
+            VStack(alignment: .leading, spacing: 12) {
+                Text("Growth & Upside Potential").font(.title2).fontWeight(.bold).foregroundColor(.secondary)
+                
+                HStack(spacing: 24) {
+                    VStack(alignment: .leading) {
+                        //HStack { Text("PEG Ratio (PEG < 1.0 = Undervalued)").font(.headline).foregroundColor(.secondary); Spacer() }
+                        WatchListPEGChart(items: items, privacyMode: $privacyMode, expandedChart: $chartToZoom)
+                    }
+                    
+                    VStack(alignment: .leading) {
+                        //HStack { Text("Potential Upside % (Target vs Fair Price)").font(.headline).foregroundColor(.secondary); Spacer() }
+                        WatchListUpsideChart(items: items, marginOfSafety: marginOfSafety, privacyMode: $privacyMode, expandedChart: $chartToZoom)
+                    }
+                }
             }
         }
     }
@@ -749,14 +764,28 @@ struct WatchlistQualityLabSection: View {
                 .padding(.bottom, 8)
                 
                 if let idx = selectedItemIndex {
-                    VStack(spacing: 24) {
+                    VStack(spacing: 32) {
+                        
                         WatchlistLabForm(viewModel: viewModel, itemIndex: idx)
                         
-                        WatchlistLabComparison(viewModel: viewModel, itemIndex: idx)
+                        VStack(alignment: .leading, spacing: 12) {
+                            Text("Fundamental Strengths & Weaknesses").font(.title2).fontWeight(.bold).foregroundColor(.secondary)
+                            WatchlistLabComparison(viewModel: viewModel, itemIndex: idx)
+                        }
                         
-                        HStack(alignment: .top, spacing: 24) {
-                            WatchlistLabScoreChart(viewModel: viewModel, itemIndex: idx, privacyMode: $privacyMode, expandedChart: $chartToZoom)
-                            WatchlistLabRadarChart(viewModel: viewModel, itemIndex: idx, privacyMode: $privacyMode, expandedChart: $chartToZoom)
+                        VStack(alignment: .leading, spacing: 12) {
+                            Text("Quality Scoring & Radar Profiles").font(.title2).fontWeight(.bold).foregroundColor(.secondary)
+                            
+                            HStack(alignment: .top, spacing: 24) {
+                                VStack(alignment: .leading) {
+                                    //HStack { Text("Analyzed Stock vs Portfolio Avg").font(.headline).foregroundColor(.secondary); Spacer() }
+                                    WatchlistLabScoreChart(viewModel: viewModel, itemIndex: idx, privacyMode: $privacyMode, expandedChart: $chartToZoom)
+                                }
+                                VStack(alignment: .leading) {
+                                    //HStack { Text("Stock Radar Profiles").font(.headline).foregroundColor(.secondary); Spacer() }
+                                    WatchlistLabRadarChart(viewModel: viewModel, itemIndex: idx, privacyMode: $privacyMode, expandedChart: $chartToZoom)
+                                }
+                            }
                         }
                     }
                 } else {
@@ -921,7 +950,6 @@ struct WatchlistLabComparison: View {
                 let stockVal = stock.fundamentalValues?[crit.id.uuidString] ?? 0.0
                 let avgVal = getWeightedAverage(for: crit)
                 
-                // Si aucune donnée n'est encodée, on ignore
                 if stockVal == 0.0 && avgVal == 0.0 { return nil }
                 
                 let isBetter = crit.isHigherBetter ? (stockVal >= avgVal) : (stockVal <= avgVal)
@@ -938,18 +966,18 @@ struct WatchlistLabComparison: View {
             HStack(alignment: .top, spacing: 20) {
                 // COLONNE + (Strengths)
                 VStack(alignment: .leading, spacing: 12) {
-                    Text("Strengths (+)").font(.headline).foregroundColor(.green)
+                    Text("Strengths (+)").font(.headline).foregroundColor(.green) // <-- Remis à headline
                     ForEach(strengths.indices, id: \.self) { i in
                         HStack(alignment: .top) {
-                            Image(systemName: "plus.circle.fill").foregroundColor(.green).padding(.top, 3) // <-- Léger padding
+                            Image(systemName: "plus.circle.fill").foregroundColor(.green).padding(.top, 3)
                             if let mdText = try? AttributedString(markdown: strengths[i].text) {
-                                Text(mdText).font(.subheadline).foregroundColor(.secondary) // <-- subheadline
+                                Text(mdText).font(.body).foregroundColor(.secondary)
                             } else {
-                                Text(strengths[i].text).font(.subheadline).foregroundColor(.secondary) // <-- subheadline
+                                Text(strengths[i].text).font(.body).foregroundColor(.secondary)
                             }
                         }
                     }
-                    if strengths.isEmpty { Text("No strengths found vs portfolio.").font(.subheadline).foregroundColor(.secondary.opacity(0.5)).italic() }
+                    if strengths.isEmpty { Text("No strengths found vs portfolio.").font(.body).foregroundColor(.secondary.opacity(0.5)).italic() }
                 }
                 .frame(maxWidth: .infinity, alignment: .top)
                 
@@ -957,18 +985,18 @@ struct WatchlistLabComparison: View {
                 
                 // COLONNE - (Weaknesses)
                 VStack(alignment: .leading, spacing: 12) {
-                    Text("Weaknesses (-)").font(.headline).foregroundColor(.red)
+                    Text("Weaknesses (-)").font(.headline).foregroundColor(.red) // <-- Remis à headline
                     ForEach(weaknesses.indices, id: \.self) { i in
                         HStack(alignment: .top) {
-                            Image(systemName: "minus.circle.fill").foregroundColor(.red).padding(.top, 3) // <-- Léger padding
+                            Image(systemName: "minus.circle.fill").foregroundColor(.red).padding(.top, 3)
                             if let mdText = try? AttributedString(markdown: weaknesses[i].text) {
-                                Text(mdText).font(.subheadline).foregroundColor(.secondary) // <-- subheadline
+                                Text(mdText).font(.body).foregroundColor(.secondary)
                             } else {
-                                Text(weaknesses[i].text).font(.subheadline).foregroundColor(.secondary) // <-- subheadline
+                                Text(weaknesses[i].text).font(.body).foregroundColor(.secondary)
                             }
                         }
                     }
-                    if weaknesses.isEmpty { Text("No weaknesses found vs portfolio.").font(.subheadline).foregroundColor(.secondary.opacity(0.5)).italic() }
+                    if weaknesses.isEmpty { Text("No weaknesses found vs portfolio.").font(.body).foregroundColor(.secondary.opacity(0.5)).italic() }
                 }
                 .frame(maxWidth: .infinity, alignment: .top)
             }
