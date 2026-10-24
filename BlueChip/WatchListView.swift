@@ -907,7 +907,7 @@ struct WatchlistLabForm: View {
                                 
                             }
                         }
-                        .padding(.vertical, 24) // 3. Aération verticale augmentée
+                        .padding(.vertical, 36) // 3. Aération verticale augmentée
                         
                     }
                 }
