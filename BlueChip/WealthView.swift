@@ -29,13 +29,12 @@ struct WealthView: View {
     @State private var showGoalSheet: Bool = false
     @State private var chartToZoom: WealthChartZoomType? = nil
     
-    // NOUVEAU : Calcul dynamique de la valeur courante pour le Goal
     var currentGoalValueForProgressBar: Double {
         switch viewModel.wealthGoalType {
         case .netWorth: return viewModel.trueNetWorth
         case .totalAssets: return viewModel.totalAssets
         case .passiveIncome: return viewModel.fireMonthlyIncome
-        case .debtAssetsRatio: return viewModel.debtToAssetRatio * 100 // <-- CORRECTION ICI
+        case .debtAssetsRatio: return viewModel.debtToAssetRatio * 100
         }
     }
     
@@ -52,26 +51,34 @@ struct WealthView: View {
                         DashboardCard(title: "Total Assets", value: viewModel.totalAssets.formatted(.currency(code: "EUR")), privacyMode: $privacyMode)
                         DashboardCard(title: "Total Liabilities", value: viewModel.totalLiabilities.formatted(.currency(code: "EUR")), privacyMode: $privacyMode)
                         
-                        // Net P/L (Assets)
+                        // Net P/L (Assets) - Modifié en noir (.primary)
                         VStack(alignment: .leading, spacing: 6) {
                             Text("Net P/L (Assets)").font(.subheadline).foregroundColor(.secondary).lineLimit(1)
                             Text(viewModel.totalWealthVariationEUR.formatted(.currency(code: "EUR").sign(strategy: .always())))
                                 .font(.title2).fontWeight(.bold)
-                                .foregroundColor(viewModel.totalWealthVariationEUR >= 0 ? .green : .red)
+                                .foregroundColor(.primary)
                                 .blur(radius: isPrivate ? 8 : 0)
                         }.padding().frame(maxWidth: .infinity, alignment: .leading).frame(height: 110).background(Color(NSColor.controlBackgroundColor)).cornerRadius(10).shadow(color: Color.black.opacity(0.05), radius: 2, x: 0, y: 1)
                     }
                     
                     HStack(spacing: 16) {
                         DashboardCard(title: "Wealth Goal", value: viewModel.wealthGoalTarget.formatted(.currency(code: "EUR")), privacyMode: $privacyMode)
-                        DashboardCard(title: "Overall Assets ROI", value: viewModel.totalWealthVariationPercent.formatted(.percent.precision(.fractionLength(2)).sign(strategy: .always())), privacyMode: $privacyMode)
                         
-                        // Debt-to-Asset Ratio
+                        // Overall Assets ROI - Modifié en noir (.primary)
+                        VStack(alignment: .leading, spacing: 6) {
+                            Text("Overall Assets ROI").font(.subheadline).foregroundColor(.secondary).lineLimit(1)
+                            Text(viewModel.totalWealthVariationPercent.formatted(.percent.precision(.fractionLength(2)).sign(strategy: .always())))
+                                .font(.title2).fontWeight(.bold)
+                                .foregroundColor(.primary)
+                                .blur(radius: isPrivate ? 8 : 0)
+                        }.padding().frame(maxWidth: .infinity, alignment: .leading).frame(height: 110).background(Color(NSColor.controlBackgroundColor)).cornerRadius(10).shadow(color: Color.black.opacity(0.05), radius: 2, x: 0, y: 1)
+                        
+                        // Debt-to-Asset Ratio - Modifié en noir (.primary)
                         VStack(alignment: .leading, spacing: 6) {
                             Text("Debt-to-Asset Ratio").font(.subheadline).foregroundColor(.secondary).lineLimit(1)
                             Text(viewModel.debtToAssetRatio.formatted(.percent.precision(.fractionLength(1))))
                                 .font(.title2).fontWeight(.bold)
-                                .foregroundColor(viewModel.debtToAssetRatio > 0.4 ? .red : (viewModel.debtToAssetRatio > 0.2 ? .orange : .green))
+                                .foregroundColor(.primary)
                                 .blur(radius: isPrivate ? 8 : 0)
                         }.padding().frame(maxWidth: .infinity, alignment: .leading).frame(height: 110).background(Color(NSColor.controlBackgroundColor)).cornerRadius(10).shadow(color: Color.black.opacity(0.05), radius: 2, x: 0, y: 1)
                         
@@ -79,18 +86,13 @@ struct WealthView: View {
                     }
                 }
                 
-                // -----------------------------------------------------------
-                // 2. NOUVEAU : Utilisation du composant universel GoalProgressBar
-                // -----------------------------------------------------------
                 GoalProgressBar(
                     title: viewModel.wealthGoalType.rawValue,
                     currentValue: currentGoalValueForProgressBar,
                     targetValue: viewModel.wealthGoalTarget,
                     privacyMode: $privacyMode,
-                    isPercentage: viewModel.wealthGoalType == .debtAssetsRatio // <-- MODIFICATION ICI
+                    isPercentage: viewModel.wealthGoalType == .debtAssetsRatio
                 )
-                .contentShape(Rectangle())
-                .onTapGesture(count: 2) { showGoalSheet = true }
                 .contentShape(Rectangle())
                 .onTapGesture(count: 2) { showGoalSheet = true }
                 
@@ -128,10 +130,20 @@ struct WealthView: View {
                     WealthAddLiabilitySection(viewModel: viewModel)
                 }
                 
-                // 5. CHARTS (DONUT & BARS for Assets)
-                HStack(spacing: 24) {
-                    WealthAllocationChart(viewModel: viewModel, privacyMode: $privacyMode, expandedChart: $chartToZoom)
-                    WealthROIChart(viewModel: viewModel, privacyMode: $privacyMode, expandedChart: $chartToZoom)
+                // 5. CHARTS (DONUT & BARS for Assets) - Ajout des sous-titres enveloppants
+                VStack(alignment: .leading, spacing: 12) {
+                    Text("Assets Breakdown & Performance").font(.title2).fontWeight(.bold).foregroundColor(.secondary)
+                    HStack(alignment: .top, spacing: 24) {
+                        VStack(alignment: .leading) {
+                            HStack { Text("Assets Allocation").font(.headline).foregroundColor(.secondary); Spacer() }
+                            WealthAllocationChart(viewModel: viewModel, privacyMode: $privacyMode, expandedChart: $chartToZoom)
+                        }
+                        
+                        VStack(alignment: .leading) {
+                            HStack { Text("Return on Investment by Asset").font(.headline).foregroundColor(.secondary); Spacer() }
+                            WealthROIChart(viewModel: viewModel, privacyMode: $privacyMode, expandedChart: $chartToZoom)
+                        }
+                    }
                 }
                 
                 // 6. FIRE SIMULATOR
@@ -140,7 +152,6 @@ struct WealthView: View {
             .padding()
         }
         .background(Color(NSColor.windowBackgroundColor))
-        // MODIFIÉ : On appelle notre nouveau formulaire complet
         .sheet(isPresented: $showGoalSheet) {
             EditWealthGoalView(viewModel: viewModel)
         }
@@ -469,10 +480,6 @@ struct WealthFIRESimulatorSection: View {
 // MARK: - CHARTS (DONUT & BARS)
 // =========================================================================
 
-// =========================================================================
-// MARK: - CHARTS (DONUT & BARS)
-// =========================================================================
-
 struct WealthAllocationChart: View {
     @ObservedObject var viewModel: PortfolioViewModel
     @Binding var privacyMode: Bool
@@ -507,7 +514,6 @@ struct WealthAllocationChart: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 16) {
             HStack {
-                if !isExpanded { Text("Assets Allocation").font(.headline).foregroundColor(.secondary) }
                 Spacer()
                 if !isExpanded { Button(action: { expandedChart = .allocation }) { Image(systemName: "plus.magnifyingglass").foregroundColor(.secondary) }.buttonStyle(.plain) }
             }
@@ -549,10 +555,10 @@ struct WealthAllocationChart: View {
             }
             
             Spacer()
-            BlueChipWatermark()
+            // AJOUT: Description + Filigrane
+            HStack { Text("Breaks down total net worth into distinct asset classes").font(.caption2).foregroundColor(.secondary); Spacer(); BlueChipWatermark() }
         }
         .padding()
-        // C'est cette ligne qui garantit une hauteur parfaite de 360px comme partout ailleurs !
         .frame(minHeight: 360, maxHeight: isExpanded ? .infinity : 360)
         .background(Color(NSColor.controlBackgroundColor))
         .cornerRadius(12)
@@ -583,7 +589,6 @@ struct WealthROIChart: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 16) {
             HStack {
-                if !isExpanded { Text("Return on Investment by Asset").font(.headline).foregroundColor(.secondary) }
                 Spacer()
                 if !isExpanded { Button(action: { expandedChart = .roi }) { Image(systemName: "plus.magnifyingglass").foregroundColor(.secondary) }.buttonStyle(.plain) }
             }
@@ -614,10 +619,10 @@ struct WealthROIChart: View {
             }
             
             Spacer()
+            // AJOUT: Description + Filigrane
             HStack { Text("Unrealized performance by asset class").font(.caption2).foregroundColor(.secondary); Spacer(); BlueChipWatermark() }
         }
         .padding()
-        // Idem ici : on force la base à 360px pour un alignement parfait avec le Donut
         .frame(minHeight: 360, maxHeight: isExpanded ? .infinity : 360)
         .background(Color(NSColor.controlBackgroundColor))
         .cornerRadius(12)
@@ -751,4 +756,3 @@ struct EditWealthLiabilitySheet: View {
         }
     }
 }
-
