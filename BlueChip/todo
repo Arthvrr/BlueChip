@@ -8,6 +8,8 @@ ajouter mini description à chaque graphe de l'appli
 
 barre de progression goal page fundamentals
 
+about BlueChip retravailler
+
 PLUS TARD :
 
 page Renforcement (voir quelles actions renforcer, avec delta pru - prix actuel, score de qualité, valorisation)
@@ -19,3 +21,5 @@ si recherche de graphe ouvre graphe en mode zoom, si recherche event ouvre event
 widgets (calendrier, montant total, dividendes par mois)
 
 ajouter clic sur chaque case du header du dashboard (avec petite explication de ce que c'est en anglais + valeur en grand)
+
+section hard refresh data of 1 stocks

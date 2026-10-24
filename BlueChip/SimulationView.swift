@@ -1,5 +1,5 @@
 import SwiftUI
-import SwiftData // <-- NOUVEAU
+import SwiftData
 import Charts
 
 // =========================================================================
@@ -60,6 +60,19 @@ struct SimulationView: View {
     @State private var showAddSimulatedStock: Bool = false
     @State private var showSimulatedCashSheet: Bool = false
     @State private var editingSimulatedPosition: Position? = nil
+
+    // NOUVEAU : Hauteur Dynamique des Tableaux
+    var dynamicTableHeight: CGFloat {
+        let rowHeight: CGFloat = 36
+        let headerHeight: CGFloat = 40
+        let baseHeight: CGFloat = 100
+        
+        let maxCount = max(viewModel.positions.count, simulatedPositions.count)
+        if maxCount == 0 { return baseHeight }
+        
+        let calculated = CGFloat(maxCount) * rowHeight + headerHeight + 20
+        return min(max(calculated, 150), 400) // On limite à 400px pour éviter un tableau géant
+    }
 
     // MARK: - CALCULS SIMULATION
     var simulatedTotalValue: Double {
@@ -153,7 +166,7 @@ struct SimulationView: View {
                     let text = abs(qtyDiff) > 0.001 ? (qtyDiff > 0 ? "Added \(qtyDiff.formatted()) shares of \(ticker)\(impactStr)" : "Sold \((-qtyDiff).formatted()) shares of \(ticker)\(impactStr)") : "Modified \(ticker) (Avg Cost or Sector)"
                     
                     diffs.append(SimulationDiff(text: text, type: qtyDiff > 0 ? .add : (qtyDiff < 0 ? .remove : .modify), onUndo: {
-                        // NOUVEAU FIX : Clonage de realPos pour réinitialiser le Sandbox sans toucher la DB
+                        // Clonage de realPos pour réinitialiser le Sandbox sans toucher la DB
                         if let idx = simulatedPositions.firstIndex(where: { $0.ticker == ticker }) {
                             simulatedPositions[idx] = clonePosition(realPos)
                         }
@@ -178,7 +191,7 @@ struct SimulationView: View {
                 let impact = tradeCashImpacts[ticker] ?? 0.0
                 let impactStr = impact != 0 ? " (\(impact > 0 ? "+" : "")\(impact.formatted(.currency(code: "EUR"))))" : ""
                 diffs.append(SimulationDiff(text: "Liquidated position: \(ticker)\(impactStr)", type: .remove, onUndo: {
-                    // NOUVEAU FIX : Clone ajouté au lieu de la vraie référence
+                    // Clone ajouté au lieu de la vraie référence
                     simulatedPositions.append(clonePosition(realPos))
                     simulatedCash -= impact
                     tradeCashImpacts[ticker] = 0.0
@@ -213,6 +226,7 @@ struct SimulationView: View {
                             Text(viewModel.currentTotalCapital.formatted(.currency(code: "EUR"))).font(.headline).foregroundColor(.secondary).blur(radius: privacyMode ? 6 : 0)
                         }
                         CurrentPortfolioTable(positions: viewModel.positions, totalCapital: viewModel.currentTotalCapital, privacyMode: $privacyMode)
+                            .frame(height: dynamicTableHeight) // Hauteur dynamique
                     }.frame(maxWidth: .infinity)
                     
                     Divider()
@@ -233,7 +247,6 @@ struct SimulationView: View {
                             privacyMode: $privacyMode,
                             onEdit: { editingSimulatedPosition = $0 },
                             onDelete: { id in
-                                // Gère aussi la suppression directe via menu contextuel
                                 if let pos = simulatedPositions.first(where: { $0.id == id }) {
                                     let valEUR = pos.quantity * pos.currentPrice * (pos.currency == "USD" ? pos.usdToEurRate : 1.0)
                                     simulatedCash += valEUR
@@ -242,6 +255,7 @@ struct SimulationView: View {
                                 simulatedPositions.removeAll { $0.id == id }
                             }
                         )
+                        .frame(height: dynamicTableHeight) // Hauteur dynamique
                     }.frame(maxWidth: .infinity)
                 }.padding().background(Color(NSColor.controlBackgroundColor)).cornerRadius(12).shadow(color: Color.black.opacity(0.05), radius: 2, x: 0, y: 1)
                 
@@ -251,13 +265,13 @@ struct SimulationView: View {
                     SimulationDonutChart(data: simulatedAllocationByPosition, title: "Simulated Weight by Position", zoomType: .simulatedPositions, palette: positionColors, privacyMode: $privacyMode, expandedChart: $chartToZoom, viewModel: viewModel)
                 }
                 
-                // 2. SECTEURS RESTAURÉS
+                // 2. SECTEURS
                 HStack(spacing: 24) {
                     SimulationDonutChart(data: viewModel.allocationBySector, title: "Current Sector Allocation", zoomType: .currentSectors, palette: sectorColors, privacyMode: $privacyMode, expandedChart: $chartToZoom, viewModel: viewModel)
                     SimulationDonutChart(data: simulatedAllocationBySector, title: "Simulated Sector Allocation", zoomType: .simulatedSectors, palette: sectorColors, privacyMode: $privacyMode, expandedChart: $chartToZoom, viewModel: viewModel)
                 }
                 
-                // 3. BAR CHARTS (COULEURS CORRIGÉES)
+                // 3. BAR CHARTS COMPARATIFS
                 HStack(spacing: 24) {
                     SimulationBarChart(data: totalValueComparisonData, title: "Total Value Comparison", zoomType: .totalValueCompare, isEuro: true, colorCurrent: .blue, colorSimulated: .purple, privacyMode: $privacyMode, expandedChart: $chartToZoom)
                     SimulationBarChart(data: yieldComparisonData, title: "Portfolio Yield Impact", zoomType: .yieldImpact, isEuro: false, colorCurrent: .orange, colorSimulated: .green, privacyMode: $privacyMode, expandedChart: $chartToZoom)
@@ -298,7 +312,6 @@ struct SimulationView: View {
         }
     }
     
-    // NOUVEAU FIX VITAL SWIFTDATA : Clonage en profondeur pour ne pas corrompre la Database
     private func clonePosition(_ p: Position) -> Position {
         Position(
             id: p.id, ticker: p.ticker, quantity: p.quantity, averageCost: p.averageCost,
@@ -310,7 +323,6 @@ struct SimulationView: View {
     }
 
     private func resetSimulation() {
-        // NOUVEAU FIX : Utilisation du clonage
         simulatedPositions = viewModel.positions.map { clonePosition($0) }
         simulatedCash = viewModel.availableCash
         manualCashOffset = 0.0
@@ -398,7 +410,7 @@ struct CurrentPortfolioTable: View {
                 let weight = totalCapital > 0 ? (pos.currentValueEUR / totalCapital) : 0
                 Text(weight.formatted(.percent.precision(.fractionLength(1)))).foregroundColor(.blue).blur(radius: privacyMode ? 6 : 0)
             }
-        }.frame(height: 300)
+        }
     }
 }
 
@@ -452,7 +464,7 @@ struct SimulatedPortfolioTable: View {
                         Button(role: .destructive) { onDelete(pos.id) } label: { Label("Delete", systemImage: "trash") }
                     }
             }
-        }.frame(height: 300)
+        }
     }
 }
 
@@ -469,13 +481,11 @@ struct SimulationDonutChart: View {
     var isExpanded: Bool = false
     @Binding var expandedChart: SimulationChartZoomType?
     
-    // NOUVEAU : Le viewModel pour récupérer les couleurs universelles
     var viewModel: PortfolioViewModel? = nil
     
     @State private var selectedAngleValue: Double? = nil
     @State private var hiddenItems: Set<String> = []
     
-    // NOUVEAU : Tri alphabétique avec le Cash forcé à la fin
     var sortedData: [ChartDataItem] {
         data.sorted { a, b in
             if a.name == "Cash" || a.name == "Remaining Cash" { return false }
@@ -486,24 +496,19 @@ struct SimulationDonutChart: View {
     
     var filteredData: [ChartDataItem] { sortedData.filter { !hiddenItems.contains($0.name) } }
     
-    // NOUVEAU : Logique de couleur synchronisée avec gris pour les simulations
+    // NOUVEAU FIX : Utilisation exacte de la même méthode que sur la page Composition
     func color(for name: String) -> Color {
         if name == "Cash" || name == "Remaining Cash" {
-            return .teal // Couleur unique pour le Cash
+            return Color(red: 0.76, green: 0.84, blue: 0.18)
         }
         
-        // Nettoie l'étiquette "(Invested)" pour retrouver le Ticker pur
         let cleanName = name.replacingOccurrences(of: " (Invested)", with: "")
         
         if let vm = viewModel {
-            // 1. Si l'action existe dans le vrai portefeuille : on prend sa couleur officielle
             if vm.positions.contains(where: { $0.ticker == cleanName }) {
                 return vm.color(for: cleanName)
             }
-            
-            // 2. Si c'est un Ticker purement simulé (absent du vrai portefeuille)
             if zoomType == .simulatedPositions || zoomType == .simulatedDividends || zoomType == .cashAllocation {
-                // On utilise des nuances de gris pour bien montrer que c'est fictif (et les différencier entre elles)
                 let neutralColors: [Color] = [.gray, .secondary, .gray.opacity(0.7), .gray.opacity(0.4)]
                 if let idx = sortedData.firstIndex(where: { $0.name == name }) {
                     return neutralColors[idx % neutralColors.count]
@@ -512,7 +517,6 @@ struct SimulationDonutChart: View {
             }
         }
         
-        // 3. Fallback normal pour le reste (Secteurs, etc.)
         if let idx = sortedData.firstIndex(where: { $0.name == name }) {
             return palette[idx % palette.count]
         }
@@ -543,10 +547,28 @@ struct SimulationDonutChart: View {
                     }
                 }.animation(.easeInOut(duration: 0.2), value: selectedAngleValue)
             }
-            BlueChipWatermark()
+            // NOUVEAU : Description contextuelle pour les Donuts
+            HStack {
+                Text(getDescription(for: zoomType))
+                    .font(.caption2).foregroundColor(.secondary)
+                Spacer()
+                BlueChipWatermark()
+            }
         }.padding().frame(minHeight: 360, maxHeight: isExpanded ? .infinity : 360).background(Color(NSColor.controlBackgroundColor)).cornerRadius(12).shadow(color: Color.black.opacity(0.05), radius: 2, x: 0, y: 1)
     }
+    
     func findItem(for value: Double) -> ChartDataItem { var cum = 0.0; for item in filteredData { cum += item.value; if value <= cum { return item } }; return filteredData.last! }
+    
+    // Fournit une description personnalisée selon le type de graphe
+    private func getDescription(for type: SimulationChartZoomType) -> String {
+        switch type {
+        case .currentPositions, .simulatedPositions: return "Shows the distribution of your assets by position"
+        case .currentSectors, .simulatedSectors: return "Shows the distribution of your assets by sector"
+        case .cashAllocation: return "Visualizes how simulated cash is deployed"
+        case .simulatedDividends: return "Simulated proportion of dividends by position"
+        default: return ""
+        }
+    }
 }
 
 
@@ -586,7 +608,13 @@ struct SimulationBarChart: View {
                 }
             }
             Spacer()
-            BlueChipWatermark()
+            // NOUVEAU : Description contextuelle pour les Bar Charts
+            HStack {
+                Text(zoomType == .totalValueCompare ? "Compares total portfolio valuation" : "Compares the overall dividend yield")
+                    .font(.caption2).foregroundColor(.secondary)
+                Spacer()
+                BlueChipWatermark()
+            }
         }.padding().frame(minHeight: 360, maxHeight: isExpanded ? .infinity : 360).background(Color(NSColor.controlBackgroundColor)).cornerRadius(12).shadow(color: Color.black.opacity(0.05), radius: 2, x: 0, y: 1)
     }
 }
