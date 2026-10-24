@@ -383,7 +383,7 @@ struct BenchmarkDashboardSection: View {
                     Text("Portfolio Return \(String(currentYear))").font(.subheadline).foregroundColor(.secondary).lineLimit(1)
                     Text(portfolioCurrentYear.formatted(.number.precision(.fractionLength(2)).sign(strategy: .always())) + "%")
                         .font(.title2).fontWeight(.bold)
-                        .foregroundColor(portfolioCurrentYear >= 0 ? .green : .red)
+                        .foregroundColor(.primary) // <-- Modifié en noir
                         .blur(radius: privacyMode ? 6 : 0)
                 }
                 .padding().frame(maxWidth: .infinity, alignment: .leading).frame(height: 110)
@@ -394,7 +394,7 @@ struct BenchmarkDashboardSection: View {
                     Text("Portfolio Avg. Return").font(.subheadline).foregroundColor(.secondary).lineLimit(1)
                     Text(portfolioAvgReturn.formatted(.number.precision(.fractionLength(2)).sign(strategy: .always())) + "%")
                         .font(.title2).fontWeight(.bold)
-                        .foregroundColor(portfolioAvgReturn >= 0 ? .green : .red)
+                        .foregroundColor(.primary) // <-- Modifié en noir
                         .blur(radius: privacyMode ? 6 : 0)
                 }
                 .padding().frame(maxWidth: .infinity, alignment: .leading).frame(height: 110)
@@ -421,7 +421,7 @@ struct BenchmarkDashboardSection: View {
                     Text("vs Best Index (Avg.)").font(.subheadline).foregroundColor(.secondary).lineLimit(1)
                     Text(portfolioVsBest.formatted(.number.precision(.fractionLength(2)).sign(strategy: .always())) + "%")
                         .font(.title2).fontWeight(.bold)
-                        .foregroundColor(portfolioVsBest >= 0 ? .green : .red)
+                        .foregroundColor(.primary) // <-- Modifié en noir
                         .blur(radius: privacyMode ? 6 : 0)
                     Text(portfolioVsBest >= 0 ? "Ahead" : "Behind")
                         .font(.caption).padding(.horizontal, 6).padding(.vertical, 2)
@@ -441,7 +441,7 @@ struct BenchmarkDashboardSection: View {
                     Text("Portfolio 10k€ Simulation").font(.subheadline).foregroundColor(.secondary).lineLimit(1)
                     Text(portfolio10k.formatted(.currency(code: "EUR").precision(.fractionLength(0))))
                         .font(.title2).fontWeight(.bold)
-                        .foregroundColor(portfolio10k >= 10000 ? .green : .red)
+                        .foregroundColor(.primary) // <-- Modifié en noir
                         .blur(radius: privacyMode ? 6 : 0)
                 }
                 .padding().frame(maxWidth: .infinity, alignment: .leading).frame(height: 110)
@@ -453,7 +453,7 @@ struct BenchmarkDashboardSection: View {
                     if let best = bestIndex {
                         Text(best10k.formatted(.currency(code: "EUR").precision(.fractionLength(0))))
                             .font(.title2).fontWeight(.bold)
-                            .foregroundColor(best10k >= 10000 ? .green : .red)
+                            .foregroundColor(.primary) // <-- Modifié en noir
                             .blur(radius: privacyMode ? 6 : 0)
                         Text(best.name).font(.caption).foregroundColor(.secondary)
                     } else {
@@ -504,21 +504,18 @@ struct BenchmarkTableSection: View {
 
             VStack(spacing: 0) {
                 HStack(spacing: 12) {
-                    Text("Year").fontWeight(.bold)
+                    Text("Year").fontWeight(.bold).foregroundColor(.primary)
                         .frame(width: 60, alignment: .leading)
 
                     HStack(spacing: 4) {
-                        Circle().fill(Color.blue).frame(width: 8, height: 8)
-                        Text("Portfolio").fontWeight(.bold)
+                        Text("Portfolio").fontWeight(.bold).foregroundColor(.primary)
                     }
                     .frame(maxWidth: .infinity, alignment: .center)
 
                     ForEach(viewModel.benchmarkIndices.indices, id: \.self) { idx in
                         let index = viewModel.benchmarkIndices[idx]
                         HStack(spacing: 4) {
-                            Circle().fill(benchmarkColors[idx % benchmarkColors.count]).frame(width: 8, height: 8)
-                            
-                            Text(index.name).fontWeight(.bold).lineLimit(1)
+                            Text(index.name).fontWeight(.bold).lineLimit(1).foregroundColor(.primary)
                                 .contentShape(Rectangle())
                                 .onTapGesture(count: 2) {
                                     onEditIndex(index)
@@ -526,21 +523,21 @@ struct BenchmarkTableSection: View {
                             
                             if !index.referenceLink.isEmpty, let url = URL(string: index.referenceLink) {
                                 Link(destination: url) {
-                                    Image(systemName: "safari").foregroundColor(.blue).font(.system(size: 10))
+                                    Image(systemName: "safari").foregroundColor(.primary).font(.system(size: 10))
                                 }.help("View index performance")
                                 
                                 Button(action: {
                                     NSPasteboard.general.clearContents()
                                     NSPasteboard.general.setString(url.absoluteString, forType: .string)
                                 }) {
-                                    Image(systemName: "doc.on.clipboard").foregroundColor(.blue).font(.system(size: 10))
+                                    Image(systemName: "doc.on.clipboard").foregroundColor(.primary).font(.system(size: 10))
                                 }.buttonStyle(.plain).help("Copy configured link")
                             }
                         }
                         .frame(maxWidth: .infinity, alignment: .center)
                     }
                 }
-                .font(.subheadline).foregroundColor(.secondary)
+                .font(.subheadline)
                 .padding(.vertical, 12).padding(.horizontal, 16)
                 .background(Color(NSColor.windowBackgroundColor))
                 
@@ -650,10 +647,7 @@ struct BenchmarkReturnCell: View {
             } else {
                 if let val = currentValue {
                     Text(val.formatted(.number.precision(.fractionLength(2)).sign(strategy: .always())) + "%")
-                        .fontWeight(.bold)
-                        .padding(.horizontal, 8).padding(.vertical, 2)
-                        .foregroundColor(color)
-                        .cornerRadius(4)
+                        .foregroundColor(.primary) // <-- NOUVEAU: Noir et non-gras (system font)
                         .font(.system(size: 13))
                         .blur(radius: privacyMode ? 6 : 0)
                         .onTapGesture { startEdit() }
@@ -708,16 +702,13 @@ struct BenchmarkAverageRowView: View {
 
             ForEach(viewModel.benchmarkIndices.indices, id: \.self) { idx in
                 let avg = viewModel.benchmarkIndices[idx].averageReturn(years: years)
-                let idxColor = benchmarkColors[idx % benchmarkColors.count]
                 
                 Text(avg.formatted(.number.precision(.fractionLength(2)).sign(strategy: .always())) + "%")
-                    .fontWeight(.bold)
-                    // MODIFIÉ : On applique toujours la couleur de l'indice, même si c'est négatif
-                    .foregroundColor(idxColor)
+                    .foregroundColor(.primary) // <-- NOUVEAU: Noir et non-gras
+                    .font(.system(size: 13))
                     .blur(radius: privacyMode ? 6 : 0)
                     .frame(maxWidth: .infinity, alignment: .center)
             }
-
         }
         .background(Color(NSColor.controlBackgroundColor).opacity(0.5))
     }
@@ -735,9 +726,15 @@ struct BenchmarkChartsSection: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
             Text("Performance Analytics").font(.title2).fontWeight(.bold).foregroundColor(.secondary)
-            HStack(spacing: 24) {
-                BenchmarkAnnualBarsChart(viewModel: viewModel, privacyMode: $privacyMode, expandedChart: $chartToZoom)
-                BenchmarkGrowth10kChart(viewModel: viewModel, privacyMode: $privacyMode, expandedChart: $chartToZoom)
+            HStack(alignment: .top, spacing: 24) {
+                VStack(alignment: .leading) {
+                    HStack { Text("Annual Return (%)").font(.headline).foregroundColor(.secondary); Spacer() }
+                    BenchmarkAnnualBarsChart(viewModel: viewModel, privacyMode: $privacyMode, expandedChart: $chartToZoom)
+                }
+                VStack(alignment: .leading) {
+                    HStack { Text("€10,000 Simulated Growth").font(.headline).foregroundColor(.secondary); Spacer() }
+                    BenchmarkGrowth10kChart(viewModel: viewModel, privacyMode: $privacyMode, expandedChart: $chartToZoom)
+                }
             }
         }
     }
@@ -900,7 +897,7 @@ struct BenchmarkAnnualBarsChart: View {
                     }
                 }
             }
-            BlueChipWatermark()
+            HStack { Text("Compares annual portfolio returns vs major indices").font(.caption2).foregroundColor(.secondary); Spacer(); BlueChipWatermark() }.padding(.top, 4)
         }
         .padding()
         .frame(minHeight: isExpanded ? 500 : 320, maxHeight: isExpanded ? .infinity : 320)
@@ -1075,7 +1072,7 @@ struct BenchmarkGrowth10kChart: View {
                     }
                 }
             }
-            BlueChipWatermark()
+            HStack { Text("Simulates €10,000 invested across the portfolio and indices").font(.caption2).foregroundColor(.secondary); Spacer(); BlueChipWatermark() }.padding(.top, 4)
         }
         .padding()
         .frame(minHeight: isExpanded ? 500 : 320, maxHeight: isExpanded ? .infinity : 320)
