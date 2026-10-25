@@ -3,9 +3,10 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>BlueChip | Institutional-Grade macOS Portfolio Manager</title>
+    <title>BlueChip - MacOs Stocks Portfolio Manager</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800;900&display=swap" rel="stylesheet">
+    <link rel="icon" type="image/x-icon" href="app icon/icon-without-bg.ico">
     <script>
         tailwind.config = {
             darkMode: 'class',
@@ -90,6 +91,7 @@
                     <a href="#features" class="hover:text-blue-600 dark:hover:text-white transition-colors">Core Engine</a>
                     <a href="#modules" class="hover:text-blue-600 dark:hover:text-white transition-colors">13 Modules</a>
                     <a href="#pricing" class="hover:text-blue-600 dark:hover:text-white transition-colors">Pricing</a>
+                    <a href="#founder" class="hover:text-blue-600 dark:hover:text-white transition-colors">The Founder</a>
                 </div>
                 <div class="flex items-center gap-4">
                     <!-- Theme Toggle Button -->
@@ -154,15 +156,9 @@
                     <div class="bg-slate-50 dark:bg-[#020617] w-full aspect-[16/10] relative overflow-hidden">
                         <div class="absolute inset-0 opacity-10 bg-[url('data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHdpZHRoPSI0MCIgaGVpZ2h0PSI0MCI+CjxyZWN0IHdpZHRoPSI0MCIgaGVpZ2h0PSI0MCIgZmlsbD0iI2ZmZiIgZmlsbC1vcGFjaXR5PSIwLjEiLz4KPC9zdmc+')] z-0"></div>
                         
+                        <!-- Slider Container dynamically populated by JS -->
                         <div id="mockup-slider" class="flex w-full h-full transition-transform duration-700 ease-[cubic-bezier(0.25,1,0.5,1)] relative z-10">
-                            <img src="pics/1.png" alt="BlueChip Screenshot 1" class="w-full h-full object-cover shrink-0">
-                            <img src="pics/2.png" alt="BlueChip Screenshot 2" class="w-full h-full object-cover shrink-0">
-                            <img src="pics/3.png" alt="BlueChip Screenshot 3" class="w-full h-full object-cover shrink-0">
-                            <img src="pics/4.png" alt="BlueChip Screenshot 4" class="w-full h-full object-cover shrink-0">
-                            <img src="pics/5.png" alt="BlueChip Screenshot 5" class="w-full h-full object-cover shrink-0">
-                            <img src="pics/6.png" alt="BlueChip Screenshot 6" class="w-full h-full object-cover shrink-0">
-                            <img src="pics/7.jpeg" alt="BlueChip Screenshot 7" class="w-full h-full object-cover shrink-0">
-                            <img src="pics/8.png" alt="BlueChip Screenshot 8" class="w-full h-full object-cover shrink-0">
+                            <!-- Images injected here -->
                         </div>
 
                         <button id="slider-prev" class="absolute left-4 top-1/2 -translate-y-1/2 w-10 h-10 rounded-full bg-white/20 dark:bg-black/40 backdrop-blur-md border border-white/20 text-slate-800 dark:text-white flex items-center justify-center opacity-0 group-hover:opacity-100 transition-all duration-300 z-20 hover:bg-white/40 dark:hover:bg-black/60 focus:outline-none shadow-lg">
@@ -172,15 +168,8 @@
                             <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" d="M9 5l7 7-7 7"></path></svg>
                         </button>
 
-                        <div class="absolute bottom-4 left-1/2 -translate-x-1/2 flex gap-2 z-20 bg-black/20 dark:bg-black/40 backdrop-blur-md px-3 py-2 rounded-full border border-white/10 shadow-xl">
-                            <button class="slider-dot w-2 h-2 rounded-full bg-white transition-all duration-300"></button>
-                            <button class="slider-dot w-2 h-2 rounded-full bg-white/40 hover:bg-white/75 transition-all duration-300"></button>
-                            <button class="slider-dot w-2 h-2 rounded-full bg-white/40 hover:bg-white/75 transition-all duration-300"></button>
-                            <button class="slider-dot w-2 h-2 rounded-full bg-white/40 hover:bg-white/75 transition-all duration-300"></button>
-                            <button class="slider-dot w-2 h-2 rounded-full bg-white/40 hover:bg-white/75 transition-all duration-300"></button>
-                            <button class="slider-dot w-2 h-2 rounded-full bg-white/40 hover:bg-white/75 transition-all duration-300"></button>
-                            <button class="slider-dot w-2 h-2 rounded-full bg-white/40 hover:bg-white/75 transition-all duration-300"></button>
-                            <button class="slider-dot w-2 h-2 rounded-full bg-white/40 hover:bg-white/75 transition-all duration-300"></button>
+                        <div id="slider-dots-container" class="absolute bottom-4 left-1/2 -translate-x-1/2 flex gap-2 z-20 bg-black/20 dark:bg-black/40 backdrop-blur-md px-3 py-2 rounded-full border border-white/10 shadow-xl">
+                            <!-- Dots injected here -->
                         </div>
                     </div>
                 </div>
@@ -224,7 +213,7 @@
     </div>
 
     <!-- Manifesto Quote -->
-    <section class="py-20 bg-white dark:bg-slate-900 border-y border-slate-200 dark:border-white/5 relative z-10">
+    <section class="py-20 bg-white dark:bg-slate-900 border-y border-slate-200 dark:border-white/5 relative z-10 transition-colors duration-300">
         <div class="max-w-4xl mx-auto px-4 text-center">
             <svg class="w-12 h-12 mx-auto text-blue-500/30 mb-8" fill="currentColor" viewBox="0 0 24 24"><path d="M14.017 21v-7.391c0-5.704 3.731-9.57 8.983-10.609l.995 2.151c-2.432.917-3.995 3.638-3.995 5.849h4v10h-9.983zm-14.017 0v-7.391c0-5.704 3.748-9.57 9-10.609l.996 2.151c-2.433.917-3.996 3.638-3.996 5.849h3.983v10h-9.983z"/></svg>
             <h2 class="text-3xl md:text-5xl font-serif italic font-medium text-slate-800 dark:text-slate-200 leading-tight">
@@ -234,7 +223,7 @@
     </section>
 
     <!-- Manifesto Section -->
-    <section id="manifesto" class="py-24 bg-slate-50 dark:bg-slate-950 relative z-10">
+    <section id="manifesto" class="py-24 bg-slate-50 dark:bg-slate-950 relative z-10 transition-colors duration-300">
         <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
             <div class="text-center mb-20">
                 <h2 class="text-blue-600 dark:text-blue-500 font-bold tracking-widest uppercase text-sm">Our Philosophy</h2>
@@ -280,7 +269,7 @@
     </section>
 
     <!-- Core Engine Section -->
-    <section id="features" class="py-24 bg-white dark:bg-slate-900 border-t border-slate-200 dark:border-white/5 relative z-10">
+    <section id="features" class="py-24 bg-white dark:bg-slate-900 border-t border-slate-200 dark:border-white/5 relative z-10 transition-colors duration-300">
         <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
             <div class="text-center mb-16">
                 <h2 class="text-blue-600 dark:text-blue-500 font-bold tracking-widest uppercase text-sm">The Core Engine</h2>
@@ -623,6 +612,215 @@
         </div>
     </section>
 
+    <!-- Intrinsic Companion App Section -->
+    <section class="py-24 bg-slate-100 dark:bg-slate-900/40 border-t border-slate-200 dark:border-white/5 relative z-10 transition-colors duration-300 overflow-hidden">
+        <!-- Ambient Background Glow -->
+        <div class="absolute right-0 top-1/2 -translate-y-1/2 w-[500px] h-[500px] bg-blue-500/10 dark:bg-blue-600/10 blur-[100px] rounded-full pointer-events-none"></div>
+        
+        <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 relative z-10">
+            <div class="flex flex-col lg:flex-row items-center gap-12 lg:gap-20">
+                
+                <!-- Text Content -->
+                <div class="lg:w-1/2 flex flex-col items-start text-left">
+                    <div class="inline-flex items-center gap-2 px-3 py-1 rounded-md bg-white dark:bg-slate-800 border border-slate-200 dark:border-white/10 text-slate-700 dark:text-slate-300 text-xs font-bold tracking-wider uppercase mb-6 shadow-sm">
+                        <svg class="w-4 h-4 text-blue-500" fill="currentColor" viewBox="0 0 24 24"><path d="M12 2L2 7l10 5 10-5-10-5zM2 17l10 5 10-5M2 12l10 5 10-5"/></svg>
+                        The Perfect Companion
+                    </div>
+                    
+                    <!-- Title with Icon -->
+                    <div class="flex items-center gap-5 mb-4">
+                        <img src="pics/Intrinsic/icon.png" alt="Intrinsic Icon" class="w-14 h-14 rounded-2xl shadow-lg border border-slate-200 dark:border-white/10 bg-slate-900" onerror="this.src='https://placehold.co/100x100/000000/ffffff?text=IN'">
+                        <h2 class="text-4xl md:text-5xl font-extrabold tracking-tight text-slate-900 dark:text-white">
+                            Intrinsic.
+                        </h2>
+                    </div>
+                    
+                    <h3 class="text-2xl font-bold text-slate-800 dark:text-slate-200 mb-4">Invest with institutional precision.</h3>
+                    
+                    <p class="text-lg text-slate-600 dark:text-slate-400 mb-8 font-light leading-relaxed">
+                        While BlueChip manages your overall wealth and portfolio allocations, <strong>Intrinsic</strong> is your dedicated stock valuation engine. Stop guessing and turn complex financial data into clear buy signals using a fully automated Discounted Cash Flow (DCF) model.
+                    </p>
+                    
+                    <ul class="space-y-4 mb-10">
+                        <li class="flex items-start gap-3 text-slate-700 dark:text-slate-300">
+                            <svg class="w-5 h-5 text-blue-500 shrink-0 mt-0.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"></path></svg>
+                            <span class="text-sm"><strong>Automated DCF & Reverse DCF:</strong> Instant fair value and margin of safety calculations.</span>
+                        </li>
+                        <li class="flex items-start gap-3 text-slate-700 dark:text-slate-300">
+                            <svg class="w-5 h-5 text-blue-500 shrink-0 mt-0.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"></path></svg>
+                            <span class="text-sm"><strong>Probabilistic Modeling:</strong> Run 1,000 Monte Carlo simulations in seconds.</span>
+                        </li>
+                        <li class="flex items-start gap-3 text-slate-700 dark:text-slate-300">
+                            <svg class="w-5 h-5 text-blue-500 shrink-0 mt-0.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"></path></svg>
+                            <span class="text-sm"><strong>AI Equity Analyst:</strong> Powered by Gemini Flash to synthesize your research.</span>
+                        </li>
+                    </ul>
+                    
+                    <a href="https://arthvrr.github.io/Intrinsic/" target="_blank" class="inline-flex items-center gap-2 px-8 py-4 rounded-xl bg-slate-900 dark:bg-white text-white dark:text-slate-900 font-bold transition-all hover:scale-105 shadow-lg hover:shadow-xl">
+                        Discover Intrinsic
+                        <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M14 5l7 7m0 0l-7 7m7-7H3"></path></svg>
+                    </a>
+                </div>
+
+                <!-- Dual Mode Carousel Mockup -->
+                <div class="lg:w-1/2 relative group mt-10 lg:mt-0">
+                    <div class="absolute -inset-1 bg-gradient-to-br from-slate-300 to-slate-400 dark:from-slate-700 dark:to-slate-800 rounded-2xl blur opacity-40 group-hover:opacity-60 transition-opacity duration-500"></div>
+                    <div class="relative rounded-2xl overflow-hidden shadow-2xl border border-slate-300 dark:border-white/10 bg-white dark:bg-[#020617]">
+                        <!-- Fake macOS Header -->
+                        <div class="h-8 bg-slate-100 dark:bg-slate-900 border-b border-slate-200 dark:border-white/10 flex items-center px-4 gap-2 z-20 relative">
+                            <div class="w-2.5 h-2.5 rounded-full bg-[#ff5f56]"></div>
+                            <div class="w-2.5 h-2.5 rounded-full bg-[#ffbd2e]"></div>
+                            <div class="w-2.5 h-2.5 rounded-full bg-[#27c93f]"></div>
+                            <div class="ml-2 text-[10px] text-slate-500 font-medium">Intrinsic - Pro Valuation Terminal</div>
+                        </div>
+                        
+                        <div class="bg-slate-50 dark:bg-[#020617] w-full aspect-[16/10] relative overflow-hidden">
+                            <!-- Slider Container -->
+                            <div id="intrinsic-slider" class="flex w-full h-full transition-transform duration-700 ease-[cubic-bezier(0.25,1,0.5,1)] relative z-10">
+                                
+                                <!-- Slide 1 -->
+                                <div class="w-full h-full shrink-0 relative">
+                                    <img src="pics/Intrinsic/light/1.png" alt="Intrinsic Light 1" class="w-full h-full object-cover dark:hidden">
+                                    <img src="pics/Intrinsic/dark/1.png" alt="Intrinsic Dark 1" class="w-full h-full object-cover hidden dark:block">
+                                </div>
+                                <!-- Slide 2 -->
+                                <div class="w-full h-full shrink-0 relative">
+                                    <img src="pics/Intrinsic/light/2.png" alt="Intrinsic Light 2" class="w-full h-full object-cover dark:hidden">
+                                    <img src="pics/Intrinsic/dark/2.png" alt="Intrinsic Dark 2" class="w-full h-full object-cover hidden dark:block">
+                                </div>
+                                <!-- Slide 3 -->
+                                <div class="w-full h-full shrink-0 relative">
+                                    <img src="pics/Intrinsic/light/3.png" alt="Intrinsic Light 3" class="w-full h-full object-cover dark:hidden">
+                                    <img src="pics/Intrinsic/dark/3.png" alt="Intrinsic Dark 3" class="w-full h-full object-cover hidden dark:block">
+                                </div>
+                                <!-- Slide 4 -->
+                                <div class="w-full h-full shrink-0 relative">
+                                    <img src="pics/Intrinsic/light/4.png" alt="Intrinsic Light 4" class="w-full h-full object-cover dark:hidden">
+                                    <img src="pics/Intrinsic/dark/4.png" alt="Intrinsic Dark 4" class="w-full h-full object-cover hidden dark:block">
+                                </div>
+                                <!-- Slide 5 -->
+                                <div class="w-full h-full shrink-0 relative">
+                                    <img src="pics/Intrinsic/light/5.png" alt="Intrinsic Light 5" class="w-full h-full object-cover dark:hidden">
+                                    <img src="pics/Intrinsic/dark/5.png" alt="Intrinsic Dark 5" class="w-full h-full object-cover hidden dark:block">
+                                </div>
+
+                            </div>
+
+                            <!-- Controls -->
+                            <button id="intrinsic-prev" class="absolute left-4 top-1/2 -translate-y-1/2 w-10 h-10 rounded-full bg-white/20 dark:bg-black/40 backdrop-blur-md border border-white/20 text-slate-800 dark:text-white flex items-center justify-center opacity-0 group-hover:opacity-100 transition-all duration-300 z-20 hover:bg-white/40 dark:hover:bg-black/60 focus:outline-none shadow-lg">
+                                <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" d="M15 19l-7-7 7-7"></path></svg>
+                            </button>
+                            <button id="intrinsic-next" class="absolute right-4 top-1/2 -translate-y-1/2 w-10 h-10 rounded-full bg-white/20 dark:bg-black/40 backdrop-blur-md border border-white/20 text-slate-800 dark:text-white flex items-center justify-center opacity-0 group-hover:opacity-100 transition-all duration-300 z-20 hover:bg-white/40 dark:hover:bg-black/60 focus:outline-none shadow-lg">
+                                <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" d="M9 5l7 7-7 7"></path></svg>
+                            </button>
+
+                            <div id="intrinsic-dots" class="absolute bottom-4 left-1/2 -translate-x-1/2 flex gap-2 z-20 bg-black/20 dark:bg-black/40 backdrop-blur-md px-3 py-2 rounded-full border border-white/10 shadow-xl">
+                                <!-- Dots generated by JS -->
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Inline Script for Intrinsic Carousel -->
+        <script>
+            document.addEventListener('DOMContentLoaded', () => {
+                const slider = document.getElementById('intrinsic-slider');
+                const prevBtn = document.getElementById('intrinsic-prev');
+                const nextBtn = document.getElementById('intrinsic-next');
+                const dotsContainer = document.getElementById('intrinsic-dots');
+                const totalSlides = 5;
+                let currentSlide = 0;
+                let slideInterval;
+
+                // Create Dots
+                for (let i = 0; i < totalSlides; i++) {
+                    const dot = document.createElement('button');
+                    dot.className = i === 0 
+                        ? 'intrinsic-dot w-4 h-2 rounded-full bg-white transition-all duration-300' 
+                        : 'intrinsic-dot w-2 h-2 rounded-full bg-white/40 hover:bg-white/75 transition-all duration-300';
+                    dotsContainer.appendChild(dot);
+                }
+                const dots = document.querySelectorAll('.intrinsic-dot');
+
+                function updateSlider() {
+                    slider.style.transform = `translateX(-${currentSlide * 100}%)`;
+                    dots.forEach((dot, index) => {
+                        if (index === currentSlide) {
+                            dot.classList.remove('bg-white/40', 'w-2');
+                            dot.classList.add('bg-white', 'w-4');
+                        } else {
+                            dot.classList.remove('bg-white', 'w-4');
+                            dot.classList.add('bg-white/40', 'w-2');
+                        }
+                    });
+                }
+
+                function nextSlide() { currentSlide = (currentSlide + 1) % totalSlides; updateSlider(); }
+                function prevSlide() { currentSlide = (currentSlide - 1 + totalSlides) % totalSlides; updateSlider(); }
+                function startInterval() { slideInterval = setInterval(nextSlide, 5000); }
+                function resetInterval() { clearInterval(slideInterval); startInterval(); }
+
+                nextBtn.addEventListener('click', () => { nextSlide(); resetInterval(); });
+                prevBtn.addEventListener('click', () => { prevSlide(); resetInterval(); });
+                dots.forEach((dot, index) => {
+                    dot.addEventListener('click', () => { currentSlide = index; updateSlider(); resetInterval(); });
+                });
+
+                startInterval();
+            });
+        </script>
+    </section>
+
+    <!-- Founder Section -->
+    <section id="founder" class="py-24 bg-white dark:bg-slate-950 border-t border-slate-200 dark:border-white/5 relative z-10 transition-colors duration-300 overflow-hidden">
+        <!-- Ambient Glow -->
+        <div class="absolute left-0 top-1/2 -translate-y-1/2 w-[400px] h-[400px] bg-blue-500/10 dark:bg-blue-600/5 blur-[100px] rounded-full pointer-events-none"></div>
+
+        <div class="max-w-5xl mx-auto px-4 sm:px-6 lg:px-8 relative z-10">
+            <div class="bg-slate-50 dark:bg-slate-900/80 rounded-3xl p-8 md:p-12 border border-slate-200 dark:border-white/10 shadow-xl relative overflow-hidden group hover:shadow-2xl transition-shadow duration-300">
+                <!-- Decorative background element -->
+                <div class="absolute top-0 right-0 w-64 h-64 bg-gradient-to-br from-blue-500/10 to-purple-500/10 rounded-full blur-[40px] group-hover:scale-110 transition-transform duration-700"></div>
+
+                <div class="flex flex-col md:flex-row gap-10 items-center md:items-start relative z-10">
+                    <!-- Avatar Profile -->
+                    <div class="shrink-0 flex flex-col items-center">
+                        <img src="https://github.com/arthvrr.png" alt="Arthur Louette" class="w-32 h-32 rounded-full border-4 border-white dark:border-slate-800 shadow-lg object-cover bg-slate-200 dark:bg-slate-800" onerror="this.src='https://placehold.co/200x200/3b82f6/ffffff?text=AL'">
+                        <div class="mt-5 text-center">
+                            <h4 class="text-lg font-bold text-slate-900 dark:text-white">Arthur Louette</h4>
+                            <p class="text-sm text-blue-600 dark:text-blue-400 font-medium mt-1">Founder & Developer</p>
+                        </div>
+                    </div>
+
+                    <!-- Story Text -->
+                    <div class="flex-1 text-center md:text-left">
+                        <div class="inline-flex items-center gap-2 px-3 py-1 rounded-md bg-blue-100 dark:bg-blue-500/20 border border-blue-200 dark:border-blue-500/30 text-blue-700 dark:text-blue-400 text-xs font-bold tracking-wider uppercase mb-5">
+                            <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 20l4-16m4 4l4 4-4 4M6 16l-4-4 4-4"></path></svg>
+                            The Story
+                        </div>
+                        
+                        <h3 class="text-2xl md:text-3xl font-extrabold text-slate-900 dark:text-white mb-6 leading-tight">
+                            Bridging Computer Science and Quality Investing.
+                        </h3>
+                        
+                        <div class="space-y-4 text-slate-600 dark:text-slate-400 font-light leading-relaxed">
+                            <p>
+                                I executed my first stock market trade in 2022 at the age of 18. Since that moment, equity investing has become a profound daily passion. As a university student specializing in Computer Science and Artificial Intelligence, I realized I had the perfect opportunity to merge my two obsessions: writing clean code and analyzing the stock market.
+                            </p>
+                            <p>
+                                I am a staunch advocate of highly concentrated <strong>Quality Investing</strong>—seeking to position myself exclusively in the greatest, most durable companies on the planet at a fair price. However, I grew frustrated with the lack of native, elegant, and subscription-free tools available for my favorite operating system, macOS.
+                            </p>
+                            <p>
+                                I built <strong>BlueChip</strong> to solve my own problem. I wanted to share the exact, uncompromising tool I use every single day to meticulously track my portfolio, filter out the market noise, and relentlessly pursue the highest possible performance.
+                            </p>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </section>
+
     <!-- Footer -->
     <footer class="bg-slate-100 dark:bg-slate-950 border-t border-slate-200 dark:border-white/5 py-12 relative z-10 transition-colors duration-300">
         <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 flex flex-col md:flex-row justify-between items-center gap-6">
@@ -676,54 +874,83 @@
 
     <!-- Scripts -->
     <script>
-        // --- Theme Toggle Logic ---
-        const themeToggleBtn = document.getElementById('theme-toggle');
-        const darkIcon = document.getElementById('theme-toggle-dark-icon');
-        const lightIcon = document.getElementById('theme-toggle-light-icon');
-
-        if (localStorage.getItem('color-theme') === 'light' || (!('color-theme' in localStorage) && !window.matchMedia('(prefers-color-scheme: dark)').matches)) {
-            document.documentElement.classList.remove('dark');
-            darkIcon.classList.remove('hidden'); 
-        } else {
-            document.documentElement.classList.add('dark');
-            lightIcon.classList.remove('hidden'); 
-        }
-
-        themeToggleBtn.addEventListener('click', function() {
-            darkIcon.classList.toggle('hidden');
-            lightIcon.classList.toggle('hidden');
-
-            if (document.documentElement.classList.contains('dark')) {
-                document.documentElement.classList.remove('dark');
-                localStorage.setItem('color-theme', 'light');
-            } else {
-                document.documentElement.classList.add('dark');
-                localStorage.setItem('color-theme', 'dark');
-            }
-        });
-
-        // --- Carousel Logic ---
         document.addEventListener('DOMContentLoaded', () => {
+            // --- Theme Toggle Logic ---
+            const themeToggleBtn = document.getElementById('theme-toggle');
+            const darkIcon = document.getElementById('theme-toggle-dark-icon');
+            const lightIcon = document.getElementById('theme-toggle-light-icon');
+            
+            // Carousel Elements
             const slider = document.getElementById('mockup-slider');
+            const dotsContainer = document.getElementById('slider-dots-container');
             const prevBtn = document.getElementById('slider-prev');
             const nextBtn = document.getElementById('slider-next');
-            const dots = document.querySelectorAll('.slider-dot');
-            const totalSlides = 8;
+            
+            // Image files as listed in your directory
+            const slideNames = ['1.png', '2.png', '3.png', '4.png', '5.png', '6.png', '7.png', '8.png', '9.jpeg', '10.png'];
+            const totalSlides = slideNames.length;
             let currentSlide = 0;
             let slideInterval;
 
+            // Determine Initial Theme
+            let isDarkInitial = false;
+            if (localStorage.getItem('color-theme') === 'light' || (!('color-theme' in localStorage) && !window.matchMedia('(prefers-color-scheme: dark)').matches)) {
+                document.documentElement.classList.remove('dark');
+                darkIcon.classList.remove('hidden'); 
+                isDarkInitial = false;
+            } else {
+                document.documentElement.classList.add('dark');
+                lightIcon.classList.remove('hidden'); 
+                isDarkInitial = true;
+            }
+
+            // --- Initialize Carousel ---
+            function initCarousel() {
+                slider.innerHTML = '';
+                dotsContainer.innerHTML = '';
+                
+                const folder = isDarkInitial ? 'dark' : 'light';
+                
+                slideNames.forEach((name, index) => {
+                    // Create Slide Image
+                    const img = document.createElement('img');
+                    img.src = `pics/${folder}/${name}`;
+                    img.alt = `BlueChip Screenshot ${index + 1}`;
+                    img.className = 'w-full h-full object-cover shrink-0 slide-image';
+                    img.dataset.name = name; // Store filename for easy swapping later
+                    slider.appendChild(img);
+                    
+                    // Create Navigation Dot
+                    const dot = document.createElement('button');
+                    dot.className = index === 0 
+                        ? 'slider-dot w-4 h-2 rounded-full bg-white transition-all duration-300' 
+                        : 'slider-dot w-2 h-2 rounded-full bg-white/40 hover:bg-white/75 transition-all duration-300';
+                    dotsContainer.appendChild(dot);
+                });
+            }
+            initCarousel();
+            const dots = document.querySelectorAll('.slider-dot');
+
+            // --- Carousel Functions ---
             function updateSlider() {
                 slider.style.transform = `translateX(-${currentSlide * 100}%)`;
                 dots.forEach((dot, index) => {
                     if (index === currentSlide) {
-                        dot.classList.remove('bg-white/40');
-                        dot.classList.add('bg-white');
-                        dot.classList.replace('w-2', 'w-4');
+                        dot.classList.remove('bg-white/40', 'w-2');
+                        dot.classList.add('bg-white', 'w-4');
                     } else {
-                        dot.classList.remove('bg-white');
-                        dot.classList.add('bg-white/40');
-                        dot.classList.replace('w-4', 'w-2');
+                        dot.classList.remove('bg-white', 'w-4');
+                        dot.classList.add('bg-white/40', 'w-2');
                     }
+                });
+            }
+
+            function updateSliderTheme(isDark) {
+                const folder = isDark ? 'dark' : 'light';
+                const images = slider.querySelectorAll('.slide-image');
+                images.forEach(img => {
+                    const name = img.dataset.name;
+                    img.src = `pics/${folder}/${name}`;
                 });
             }
 
@@ -738,8 +965,28 @@
                 dot.addEventListener('click', () => { currentSlide = index; updateSlider(); resetInterval(); });
             });
 
-            updateSlider();
+            // Start Auto-swipe
             startInterval();
+
+            // --- Theme Toggle Listener ---
+            themeToggleBtn.addEventListener('click', function() {
+                darkIcon.classList.toggle('hidden');
+                lightIcon.classList.toggle('hidden');
+
+                let isDarkNow = false;
+                if (document.documentElement.classList.contains('dark')) {
+                    document.documentElement.classList.remove('dark');
+                    localStorage.setItem('color-theme', 'light');
+                    isDarkNow = false;
+                } else {
+                    document.documentElement.classList.add('dark');
+                    localStorage.setItem('color-theme', 'dark');
+                    isDarkNow = true;
+                }
+                
+                // Swap the folder path for all carousel images
+                updateSliderTheme(isDarkNow);
+            });
         });
 
         // --- Modal & Module Data Logic ---
@@ -1258,7 +1505,8 @@
         const modalHeader = document.getElementById('modal-header');
         const modalBody = document.getElementById('modal-body');
 
-        function openModule(moduleId) {
+        // Expose openModule globally so inline onclick attributes work
+        window.openModule = function(moduleId) {
             const data = moduleData[moduleId];
             if (!data) return;
 
