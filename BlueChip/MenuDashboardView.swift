@@ -6,6 +6,8 @@ struct MenuBarDashboardView: View {
     
     @AppStorage("privacyMode") private var privacyMode: Bool = false
     
+    @AppStorage("requireAuthOnStartup") private var requireAuthOnStartup: Bool = false
+    
     // --- VARIABLES CALCULÉES ---
     let currentMonthName: String = {
         let f = DateFormatter()
@@ -19,15 +21,19 @@ struct MenuBarDashboardView: View {
         }.sorted { $0.date < $1.date }
     }
     
+    // NOUVEAU : Application de la taxe globale pour avoir le montant NET attendu
+    var taxMultiplier: Double {
+        max(0.0, 1.0 - (viewModel.dividendTaxRate / 100.0))
+    }
+    
     var thisMonthDividends: [(ticker: String, amountEUR: Double)] {
         let currentMonthIndex = Calendar.current.component(.month, from: Date())
         var payouts: [(ticker: String, amountEUR: Double)] = []
         for pos in viewModel.positions {
             if pos.dividendMonths.contains(currentMonthIndex) {
-                let paymentsPerYear = max(1.0, Double(pos.dividendMonths.count))
-                // totalDividendEUR est techniquement déjà converti dans la preferredCurrency dans le ViewModel via usdToEurRate
-                let singlePaymentEUR = pos.totalDividendEUR / paymentsPerYear
-                payouts.append((pos.ticker, singlePaymentEUR))
+                let grossAmountEUR = pos.totalDividendEUR / Double(max(1, pos.dividendMonths.count))
+                let expectedNetAmountEUR = grossAmountEUR * taxMultiplier
+                payouts.append((pos.ticker, expectedNetAmountEUR))
             }
         }
         return payouts.sorted { $0.amountEUR > $1.amountEUR }
@@ -85,10 +91,11 @@ struct MenuBarDashboardView: View {
     // =====================================================================
     var body: some View {
         Group {
-            if viewModel.isUnlocked {
-                unlockedDashboard
-            } else {
+            // REMPLACE LA CONDITION ICI :
+            if requireAuthOnStartup && !viewModel.isUnlocked {
                 lockedDashboard
+            } else {
+                unlockedDashboard
             }
         }
         .animation(.easeInOut(duration: 0.2), value: viewModel.isUnlocked)

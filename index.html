@@ -1,0 +1,711 @@
+<!DOCTYPE html>
+<html lang="en" class="dark scroll-smooth">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>BlueChip | Institutional-Grade macOS Portfolio Manager</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800;900&display=swap" rel="stylesheet">
+    <script>
+        tailwind.config = {
+            darkMode: 'class',
+            theme: {
+                extend: {
+                    fontFamily: {
+                        sans: ['Inter', 'sans-serif'],
+                    },
+                    colors: {
+                        slate: {
+                            850: '#151e2e',
+                            900: '#0f172a',
+                            950: '#020617',
+                        }
+                    },
+                    animation: {
+                        'float': 'float 6s ease-in-out infinite',
+                        'spin-slow': 'spin 20s linear infinite',
+                    },
+                    keyframes: {
+                        float: {
+                            '0%, 100%': { transform: 'translateY(0)' },
+                            '50%': { transform: 'translateY(-10px)' },
+                        }
+                    }
+                }
+            }
+        }
+    </script>
+    <style>
+        .text-gradient {
+            background: linear-gradient(135deg, #3b82f6 0%, #a855f7 100%);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            background-clip: text;
+        }
+        .bento-card {
+            transition: transform 0.3s ease, box-shadow 0.3s ease, border-color 0.3s ease;
+        }
+        .bento-card:hover {
+            transform: translateY(-4px);
+        }
+    </style>
+</head>
+<body class="antialiased bg-slate-50 dark:bg-slate-950 text-slate-900 dark:text-slate-50 selection:bg-blue-500 selection:text-white transition-colors duration-300">
+
+    <!-- Ambient Background Glows (Fixed for Dark/Light Mode) -->
+    <div class="fixed top-0 left-0 w-full h-full overflow-hidden pointer-events-none z-[-1]">
+        <div class="absolute top-[-10%] left-[-10%] w-[500px] h-[500px] bg-blue-500/20 dark:bg-blue-600/10 blur-[120px] rounded-full"></div>
+        <div class="absolute bottom-[-10%] right-[-10%] w-[500px] h-[500px] bg-purple-500/20 dark:bg-purple-600/10 blur-[120px] rounded-full"></div>
+    </div>
+
+    <!-- Navigation -->
+    <nav class="fixed w-full z-50 bg-white/80 dark:bg-slate-950/80 backdrop-blur-lg border-b border-slate-200 dark:border-white/10 transition-colors duration-300">
+        <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+            <div class="flex justify-between items-center h-16">
+                <div class="flex items-center gap-3">
+                    <img src="app icon/icon-without-bg.png" alt="BlueChip Logo" class="w-9 h-9 drop-shadow-lg" onerror="this.src='https://placehold.co/100x100/transparent/3b82f6?text=BC'">
+                    <span class="font-bold text-xl tracking-tight text-slate-900 dark:text-white">BlueChip</span>
+                </div>
+                <div class="hidden md:flex items-center space-x-8 text-sm font-medium text-slate-600 dark:text-slate-300">
+                    <a href="#manifesto" class="hover:text-blue-600 dark:hover:text-white transition-colors">Manifesto</a>
+                    <a href="#features" class="hover:text-blue-600 dark:hover:text-white transition-colors">Core Engine</a>
+                    <a href="#modules" class="hover:text-blue-600 dark:hover:text-white transition-colors">13 Modules</a>
+                    <a href="#pricing" class="hover:text-blue-600 dark:hover:text-white transition-colors">Pricing</a>
+                </div>
+                <div class="flex items-center gap-4">
+                    <!-- Theme Toggle Button -->
+                    <button id="theme-toggle" type="button" class="text-slate-500 dark:text-slate-400 hover:bg-slate-200 dark:hover:bg-slate-800 rounded-lg text-sm p-2.5 transition-colors focus:outline-none">
+                        <!-- Dark Icon (Moon) -->
+                        <svg id="theme-toggle-dark-icon" class="hidden w-5 h-5" fill="currentColor" viewBox="0 0 20 20" xmlns="http://www.w3.org/2000/svg">
+                            <path d="M17.293 13.293A8 8 0 016.707 2.707a8.001 8.001 0 1010.586 10.586z"></path>
+                        </svg>
+                        <!-- Light Icon (Sun) -->
+                        <svg id="theme-toggle-light-icon" class="hidden w-5 h-5" fill="currentColor" viewBox="0 0 20 20" xmlns="http://www.w3.org/2000/svg">
+                            <path d="M10 2a1 1 0 011 1v1a1 1 0 11-2 0V3a1 1 0 011-1zm4 8a4 4 0 11-8 0 4 4 0 018 0zm-.464 4.95l.707.707a1 1 0 001.414-1.414l-.707-.707a1 1 0 00-1.414 1.414zm2.12-10.607a1 1 0 010 1.414l-.706.707a1 1 0 11-1.414-1.414l.707-.707a1 1 0 011.414 0zM17 11a1 1 0 100-2h-1a1 1 0 100 2h1zm-7 4a1 1 0 011 1v1a1 1 0 11-2 0v-1a1 1 0 011-1zM5.05 6.464A1 1 0 106.465 5.05l-.708-.707a1 1 0 00-1.414 1.414l.707.707zm1.414 8.486l-.707.707a1 1 0 01-1.414-1.414l.707-.707a1 1 0 011.414 1.414zM4 11a1 1 0 100-2H3a1 1 0 000 2h1z" fill-rule="evenodd" clip-rule="evenodd"></path>
+                        </svg>
+                    </button>
+                    
+                    <a href="https://github.com/arthvrr/BlueChip" target="_blank" class="hidden sm:inline-flex items-center justify-center px-5 py-2 text-sm font-medium rounded-full text-white bg-blue-600 hover:bg-blue-700 transition-all shadow-lg">
+                        Download Beta
+                    </a>
+                </div>
+            </div>
+        </div>
+    </nav>
+
+    <!-- Hero Section -->
+    <section class="relative pt-32 pb-20 lg:pt-48 lg:pb-32 bg-transparent z-10">
+        <div class="relative max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 text-center">
+            <div class="inline-flex items-center gap-2 px-4 py-1.5 rounded-full bg-white dark:bg-slate-900 border border-slate-200 dark:border-white/10 text-blue-600 dark:text-blue-400 text-xs font-semibold tracking-wide uppercase mb-8 shadow-sm">
+                <span class="relative flex h-2 w-2">
+                  <span class="animate-ping absolute inline-flex h-full w-full rounded-full bg-blue-500 opacity-75"></span>
+                  <span class="relative inline-flex rounded-full h-2 w-2 bg-blue-600"></span>
+                </span>
+                Native macOS Application
+            </div>
+            
+            <h1 class="text-5xl md:text-7xl font-extrabold tracking-tight mb-6 leading-tight text-slate-900 dark:text-white">
+                Master your wealth. <br>
+                <span class="text-gradient">Filter the noise.</span>
+            </h1>
+            
+            <p class="mt-6 max-w-3xl mx-auto text-xl text-slate-600 dark:text-slate-400 leading-relaxed font-light">
+                BlueChip is an institutional-grade portfolio management terminal designed exclusively for the Mac ecosystem. <strong class="text-slate-900 dark:text-slate-200 font-semibold">Zero monthly subscriptions. Zero cloud data harvesting.</strong> Just cutting-edge quantitative analytics for the intentional investor.
+            </p>
+            
+            <div class="mt-12 flex flex-col sm:flex-row justify-center gap-4">
+                <a href="https://github.com/arthvrr/BlueChip" class="px-8 py-4 rounded-full bg-blue-600 text-white font-semibold hover:bg-blue-700 transition-colors shadow-[0_0_30px_rgba(59,130,246,0.4)] flex items-center justify-center gap-3">
+                    <svg class="w-5 h-5" fill="currentColor" viewBox="0 0 24 24"><path d="M12 0C5.374 0 0 5.373 0 12c0 5.302 3.438 9.8 8.207 11.387.6.113.793-.261.793-.577v-2.234c-3.338.726-4.033-1.416-4.033-1.416-.546-1.387-1.333-1.756-1.333-1.756-1.089-.745.083-.729.083-.729 1.205.084 1.839 1.237 1.839 1.237 1.07 1.834 2.807 1.304 3.492.997.107-.775.418-1.305.762-1.604-2.665-.305-5.467-1.334-5.467-5.931 0-1.311.469-2.381 1.236-3.221-.124-.303-.535-1.524.117-3.176 0 0 1.008-.322 3.301 1.23A11.509 11.509 0 0112 5.803c1.02.005 2.047.138 3.006.404 2.291-1.552 3.297-1.23 3.297-1.23.653 1.653.242 2.874.118 3.176.77.84 1.235 1.911 1.235 3.221 0 4.609-2.807 5.624-5.479 5.921.43.372.823 1.102.823 2.222v3.293c0 .319.192.694.801.576C20.566 21.797 24 17.3 24 12c0-6.627-5.373-12-12-12z"/></svg>
+                    Download v1.0.0 (GitHub)
+                </a>
+                <a href="#manifesto" class="px-8 py-4 rounded-full bg-white dark:bg-slate-900 text-slate-900 dark:text-white font-semibold hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors border border-slate-200 dark:border-white/10 flex items-center justify-center">
+                    Read the Manifesto
+                </a>
+            </div>
+
+            <!-- Interface Mockup (Carousel) -->
+            <div class="mt-24 relative mx-auto w-full max-w-5xl animate-float group">
+                <div class="absolute -inset-1 bg-gradient-to-r from-blue-600 to-purple-600 rounded-xl blur opacity-30 dark:opacity-40"></div>
+                <div class="relative rounded-xl overflow-hidden shadow-2xl border border-slate-300 dark:border-white/10 bg-white dark:bg-slate-950">
+                    <!-- Fake macOS Window Header -->
+                    <div class="h-10 bg-slate-100 dark:bg-slate-900 border-b border-slate-200 dark:border-white/10 flex items-center px-4 gap-2 z-20 relative">
+                        <div class="w-3 h-3 rounded-full bg-[#ff5f56] border border-[#e0443e]"></div>
+                        <div class="w-3 h-3 rounded-full bg-[#ffbd2e] border border-[#dea123]"></div>
+                        <div class="w-3 h-3 rounded-full bg-[#27c93f] border border-[#1aab29]"></div>
+                        <div class="ml-4 text-xs text-slate-500 font-medium">BlueChip - Portfolio Command Center</div>
+                    </div>
+                    
+                    <!-- Carousel Container -->
+                    <div class="bg-slate-50 dark:bg-[#020617] w-full aspect-[16/10] relative overflow-hidden">
+                        
+                        <!-- Fallback background just in case -->
+                        <div class="absolute inset-0 opacity-10 bg-[url('data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHdpZHRoPSI0MCIgaGVpZ2h0PSI0MCI+CjxyZWN0IHdpZHRoPSI0MCIgaGVpZ2h0PSI0MCIgZmlsbD0iI2ZmZiIgZmlsbC1vcGFjaXR5PSIwLjEiLz4KPC9zdmc+')] z-0"></div>
+                        
+                        <!-- Slides Track -->
+                        <div id="mockup-slider" class="flex w-full h-full transition-transform duration-700 ease-[cubic-bezier(0.25,1,0.5,1)] relative z-10">
+                            <img src="pics/1.png" alt="BlueChip Screenshot 1" class="w-full h-full object-cover shrink-0">
+                            <img src="pics/2.png" alt="BlueChip Screenshot 2" class="w-full h-full object-cover shrink-0">
+                            <img src="pics/3.png" alt="BlueChip Screenshot 3" class="w-full h-full object-cover shrink-0">
+                            <img src="pics/4.png" alt="BlueChip Screenshot 4" class="w-full h-full object-cover shrink-0">
+                            <img src="pics/5.png" alt="BlueChip Screenshot 5" class="w-full h-full object-cover shrink-0">
+                            <img src="pics/6.png" alt="BlueChip Screenshot 6" class="w-full h-full object-cover shrink-0">
+                            <img src="pics/7.jpeg" alt="BlueChip Screenshot 7" class="w-full h-full object-cover shrink-0">
+                        </div>
+
+                        <!-- Navigation Arrows (Appear on hover) -->
+                        <button id="slider-prev" class="absolute left-4 top-1/2 -translate-y-1/2 w-10 h-10 rounded-full bg-white/20 dark:bg-black/40 backdrop-blur-md border border-white/20 text-slate-800 dark:text-white flex items-center justify-center opacity-0 group-hover:opacity-100 transition-all duration-300 z-20 hover:bg-white/40 dark:hover:bg-black/60 focus:outline-none shadow-lg">
+                            <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" d="M15 19l-7-7 7-7"></path></svg>
+                        </button>
+                        <button id="slider-next" class="absolute right-4 top-1/2 -translate-y-1/2 w-10 h-10 rounded-full bg-white/20 dark:bg-black/40 backdrop-blur-md border border-white/20 text-slate-800 dark:text-white flex items-center justify-center opacity-0 group-hover:opacity-100 transition-all duration-300 z-20 hover:bg-white/40 dark:hover:bg-black/60 focus:outline-none shadow-lg">
+                            <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" d="M9 5l7 7-7 7"></path></svg>
+                        </button>
+
+                        <!-- Indicators -->
+                        <div class="absolute bottom-4 left-1/2 -translate-x-1/2 flex gap-2 z-20 bg-black/20 dark:bg-black/40 backdrop-blur-md px-3 py-2 rounded-full border border-white/10 shadow-xl">
+                            <button class="slider-dot w-2 h-2 rounded-full bg-white transition-all duration-300"></button>
+                            <button class="slider-dot w-2 h-2 rounded-full bg-white/40 hover:bg-white/75 transition-all duration-300"></button>
+                            <button class="slider-dot w-2 h-2 rounded-full bg-white/40 hover:bg-white/75 transition-all duration-300"></button>
+                            <button class="slider-dot w-2 h-2 rounded-full bg-white/40 hover:bg-white/75 transition-all duration-300"></button>
+                            <button class="slider-dot w-2 h-2 rounded-full bg-white/40 hover:bg-white/75 transition-all duration-300"></button>
+                            <button class="slider-dot w-2 h-2 rounded-full bg-white/40 hover:bg-white/75 transition-all duration-300"></button>
+                            <button class="slider-dot w-2 h-2 rounded-full bg-white/40 hover:bg-white/75 transition-all duration-300"></button>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <!-- Manifesto Quote -->
+    <section class="py-20 bg-white dark:bg-slate-900 border-y border-slate-200 dark:border-white/5 relative z-10">
+        <div class="max-w-4xl mx-auto px-4 text-center">
+            <svg class="w-12 h-12 mx-auto text-blue-500/30 mb-8" fill="currentColor" viewBox="0 0 24 24"><path d="M14.017 21v-7.391c0-5.704 3.731-9.57 8.983-10.609l.995 2.151c-2.432.917-3.995 3.638-3.995 5.849h4v10h-9.983zm-14.017 0v-7.391c0-5.704 3.748-9.57 9-10.609l.996 2.151c-2.433.917-3.996 3.638-3.996 5.849h3.983v10h-9.983z"/></svg>
+            <h2 class="text-3xl md:text-5xl font-serif italic font-medium text-slate-800 dark:text-slate-200 leading-tight">
+                "What gets measured,<br>gets improved."
+            </h2>
+        </div>
+    </section>
+
+    <!-- Manifesto Section -->
+    <section id="manifesto" class="py-24 bg-slate-50 dark:bg-slate-950 relative z-10">
+        <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+            <div class="text-center mb-20">
+                <h2 class="text-blue-600 dark:text-blue-500 font-bold tracking-widest uppercase text-sm">Our Philosophy</h2>
+                <p class="mt-3 text-3xl leading-8 font-extrabold tracking-tight sm:text-4xl text-slate-900 dark:text-white">Everything that can be measured, can be improved.</p>
+                <div class="w-24 h-1 bg-gradient-to-r from-blue-500 to-purple-500 mx-auto mt-6 rounded-full"></div>
+            </div>
+
+            <div class="grid grid-cols-1 md:grid-cols-3 gap-8">
+                <div class="bg-white dark:bg-slate-900 p-10 rounded-3xl bento-card border border-slate-200 dark:border-white/5 relative overflow-hidden group hover:shadow-xl dark:hover:shadow-[0_10px_40px_-10px_rgba(59,130,246,0.15)]">
+                    <div class="absolute top-0 right-0 w-32 h-32 bg-orange-500/10 rounded-full blur-[40px] group-hover:bg-orange-500/20 transition-all duration-500"></div>
+                    <div class="w-14 h-14 rounded-2xl bg-orange-50 dark:bg-orange-500/10 flex items-center justify-center mb-8 border border-orange-100 dark:border-orange-500/20">
+                        <svg class="w-7 h-7 text-orange-600 dark:text-orange-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z"></path></svg>
+                    </div>
+                    <h3 class="text-2xl font-bold mb-4 text-slate-900 dark:text-white">The Antidote to Subscriptions</h3>
+                    <p class="text-slate-600 dark:text-slate-400 leading-relaxed font-light text-[15px]">
+                        In an era where wealth management tools are shifting towards costly monthly SaaS subscriptions and intrusive data-harvesting, BlueChip takes a radically different approach. We believe that tracking your hard-earned net worth shouldn't cost you a percentage of it. BlueChip is a sovereign, privacy-first tool that is entirely yours and completely free.
+                    </p>
+                </div>
+
+                <div class="bg-white dark:bg-slate-900 p-10 rounded-3xl bento-card border border-slate-200 dark:border-white/5 relative overflow-hidden group hover:shadow-xl dark:hover:shadow-[0_10px_40px_-10px_rgba(59,130,246,0.15)]">
+                    <div class="absolute top-0 right-0 w-32 h-32 bg-purple-500/10 rounded-full blur-[40px] group-hover:bg-purple-500/20 transition-all duration-500"></div>
+                    <div class="w-14 h-14 rounded-2xl bg-purple-50 dark:bg-purple-500/10 flex items-center justify-center mb-8 border border-purple-100 dark:border-purple-500/20">
+                        <svg class="w-7 h-7 text-purple-600 dark:text-purple-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9.663 17h4.673M12 3v1m6.364 1.636l-.707.707M21 12h-1M4 12H3m3.343-5.657l-.707-.707m2.828 9.9a5 5 0 117.072 0l-.548.547A3.374 3.374 0 0014 18.469V19a2 2 0 11-4 0v-.531c0-.895-.356-1.754-.988-2.386l-.548-.547z"></path></svg>
+                    </div>
+                    <h3 class="text-2xl font-bold mb-4 text-slate-900 dark:text-white">Intentional Investing</h3>
+                    <p class="text-slate-600 dark:text-slate-400 leading-relaxed font-light text-[15px]">
+                        BlueChip fetches real-time stock prices to keep your valuation accurate, but puts you in control of the rest. Why? Because we are long-term investors. Corporate fundamentals and business exposures don't change by the minute. Manually logging your core data forces you to filter out the daily market noise and stay intensely focused on your long-term thesis.
+                    </p>
+                </div>
+
+                <div class="bg-white dark:bg-slate-900 p-10 rounded-3xl bento-card border border-slate-200 dark:border-white/5 relative overflow-hidden group hover:shadow-xl dark:hover:shadow-[0_10px_40px_-10px_rgba(59,130,246,0.15)]">
+                    <div class="absolute top-0 right-0 w-32 h-32 bg-blue-500/10 rounded-full blur-[40px] group-hover:bg-blue-500/20 transition-all duration-500"></div>
+                    <div class="w-14 h-14 rounded-2xl bg-blue-50 dark:bg-blue-500/10 flex items-center justify-center mb-8 border border-blue-100 dark:border-blue-500/20">
+                        <svg class="w-7 h-7 text-blue-600 dark:text-blue-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 20l4-16m4 4l4 4-4 4M6 16l-4-4 4-4"></path></svg>
+                    </div>
+                    <h3 class="text-2xl font-bold mb-4 text-slate-900 dark:text-white">Continuously Evolving</h3>
+                    <p class="text-slate-600 dark:text-slate-400 leading-relaxed font-light text-[15px]">
+                        BlueChip is a passion project, built entirely natively using Apple's latest frameworks (SwiftUI & SwiftData). The application is in a state of continuous improvement, regularly integrating new quantitative analysis modules. Your feedback, brilliant ideas, and feature requests are the exclusive driving force behind its future architecture.
+                    </p>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <!-- Core Engine Section -->
+    <section id="features" class="py-24 bg-white dark:bg-slate-900 border-t border-slate-200 dark:border-white/5 relative z-10">
+        <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+            <div class="text-center mb-16">
+                <h2 class="text-blue-600 dark:text-blue-500 font-bold tracking-widest uppercase text-sm">The Core Engine</h2>
+                <p class="mt-3 text-3xl font-extrabold tracking-tight sm:text-4xl text-slate-900 dark:text-white">Tools built for absolute control.</p>
+                <div class="w-24 h-1 bg-gradient-to-r from-blue-500 to-purple-500 mx-auto mt-6 rounded-full"></div>
+            </div>
+
+            <div class="grid grid-cols-1 md:grid-cols-3 gap-6 auto-rows-[minmax(260px,auto)]">
+                
+                <!-- Feature 1: AI Copilot (Spans 2 columns) -->
+                <div class="md:col-span-2 bg-slate-50 dark:bg-slate-950 rounded-3xl p-8 bento-card relative overflow-hidden group border border-slate-200 dark:border-white/5">
+                    <div class="absolute top-0 right-0 p-8 opacity-5 dark:opacity-10 group-hover:opacity-10 dark:group-hover:opacity-20 transition-opacity">
+                        <svg class="w-48 h-48 text-blue-600 dark:text-blue-500" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="1" d="M9.75 17L9 20l-1 1h8l-1-1-.75-3M3 13h18M5 17h14a2 2 0 002-2V5a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z"></path></svg>
+                    </div>
+                    <div class="relative z-10 flex flex-col h-full">
+                        <div class="inline-flex self-start items-center gap-2 px-3 py-1 rounded-md bg-blue-100 dark:bg-blue-500/20 text-blue-700 dark:text-blue-400 text-[11px] font-bold uppercase tracking-wider mb-5 border border-blue-200 dark:border-blue-500/30">
+                            <span class="relative flex h-2 w-2">
+                                <span class="animate-ping absolute inline-flex h-full w-full rounded-full bg-blue-500 opacity-75"></span>
+                                <span class="relative inline-flex rounded-full h-2 w-2 bg-blue-600"></span>
+                            </span>
+                            BYOK Model (Bring Your Own Key)
+                        </div>
+                        <h3 class="text-2xl font-bold mb-3 text-slate-900 dark:text-white">AI Copilot Insights</h3>
+                        <p class="text-slate-600 dark:text-slate-400 mb-6 max-w-lg font-light leading-relaxed">
+                            Leverage institutional-grade quantitative analysis directly on your portfolio. Simply provide your own Google Gemini API key to unlock a context-aware financial conversational agent across every page of the app. Your data is sent securely and ephemerally to the LLM, with no middlemen collecting your prompts.
+                        </p>
+                        <ul class="space-y-3 text-sm text-slate-700 dark:text-slate-300 mt-auto">
+                            <li class="flex items-center gap-3"><svg class="w-4 h-4 text-green-500 dark:text-green-400 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" d="M5 13l4 4L19 7"></path></svg> Instantly evaluates geographic risk, valuation multiples, and dividend sustainability.</li>
+                            <li class="flex items-center gap-3"><svg class="w-4 h-4 text-green-500 dark:text-green-400 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" d="M5 13l4 4L19 7"></path></svg> Interact with your historical transaction data in a localized, secure chat environment.</li>
+                        </ul>
+                    </div>
+                </div>
+
+                <!-- Feature 2: Security -->
+                <div class="bg-slate-50 dark:bg-slate-950 rounded-3xl p-8 bento-card flex flex-col border border-slate-200 dark:border-white/5 relative group overflow-hidden">
+                    <div class="absolute -right-4 -bottom-4 w-24 h-24 bg-red-500/10 rounded-full blur-[30px] group-hover:bg-red-500/20 transition-colors"></div>
+                    <div class="w-12 h-12 rounded-xl bg-red-50 dark:bg-red-500/10 flex items-center justify-center mb-6 border border-red-100 dark:border-red-500/20">
+                        <svg class="w-6 h-6 text-red-600 dark:text-red-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z"></path></svg>
+                    </div>
+                    <h3 class="text-xl font-bold mb-3 text-slate-900 dark:text-white">Uncompromising Security</h3>
+                    <p class="text-slate-600 dark:text-slate-400 text-sm font-light leading-relaxed flex-grow">
+                        Your net worth is strictly private. Lock the application on startup via <strong>Touch ID</strong> or your macOS password. Activate <strong>Privacy Mode</strong> (⌘ + K) to instantly blur all sensitive figures.
+                    </p>
+                </div>
+
+                <!-- Feature 3: Global Search -->
+                <div class="bg-slate-50 dark:bg-slate-950 rounded-3xl p-8 bento-card flex flex-col border border-slate-200 dark:border-white/5 relative group overflow-hidden">
+                    <div class="absolute -right-4 -bottom-4 w-24 h-24 bg-teal-500/10 rounded-full blur-[30px] group-hover:bg-teal-500/20 transition-colors"></div>
+                    <div class="w-12 h-12 rounded-xl bg-teal-50 dark:bg-teal-500/10 flex items-center justify-center mb-6 border border-teal-100 dark:border-teal-500/20">
+                        <svg class="w-6 h-6 text-teal-600 dark:text-teal-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"></path></svg>
+                    </div>
+                    <h3 class="text-xl font-bold mb-3 text-slate-900 dark:text-white">Spotlight Global Search</h3>
+                    <p class="text-slate-600 dark:text-slate-400 text-sm font-light leading-relaxed flex-grow">
+                        Press ⌘ + F to invoke the highly optimized global search engine. Instantly navigate to specific modules, locate past transactions, or display the details of a tracked stock at the speed of thought.
+                    </p>
+                </div>
+
+                <!-- Feature 4: Settings & Multicurrency -->
+                <div class="bg-slate-50 dark:bg-slate-950 rounded-3xl p-8 bento-card flex flex-col border border-slate-200 dark:border-white/5 relative group overflow-hidden">
+                    <div class="absolute -right-4 -bottom-4 w-24 h-24 bg-indigo-500/10 rounded-full blur-[30px] group-hover:bg-indigo-500/20 transition-colors"></div>
+                    <div class="w-12 h-12 rounded-xl bg-indigo-50 dark:bg-indigo-500/10 flex items-center justify-center mb-6 border border-indigo-100 dark:border-indigo-500/20">
+                        <svg class="w-6 h-6 text-indigo-600 dark:text-indigo-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8c1.11 0 2.08-.402-2.599 1M12 8V7m0 1v8m0 0v1m0-1c-1.11 0-2.08-.402-2.599-1M21 12a9 9 0 11-18 0 9 9 0 0118 0z"></path></svg>
+                    </div>
+                    <h3 class="text-xl font-bold mb-3 text-slate-900 dark:text-white">Advanced Custom Settings</h3>
+                    <p class="text-slate-600 dark:text-slate-400 text-sm font-light leading-relaxed flex-grow">
+                        Designed for the international investor. Define your base currency (USD, EUR, GBP, CHF) and set your local dividend tax rate. BlueChip automatically calculates live FX rates to consolidate your global wealth.
+                    </p>
+                </div>
+
+                <!-- Feature 5: Data Export -->
+                <div class="bg-slate-50 dark:bg-slate-950 rounded-3xl p-8 bento-card flex flex-col border border-slate-200 dark:border-white/5 relative group overflow-hidden">
+                    <div class="absolute -right-4 -bottom-4 w-24 h-24 bg-green-500/10 rounded-full blur-[30px] group-hover:bg-green-500/20 transition-colors"></div>
+                    <div class="w-12 h-12 rounded-xl bg-green-50 dark:bg-green-500/10 flex items-center justify-center mb-6 border border-green-100 dark:border-green-500/20">
+                        <svg class="w-6 h-6 text-green-600 dark:text-green-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-8l-4-4m0 0L8 8m4-4v12"></path></svg>
+                    </div>
+                    <h3 class="text-xl font-bold mb-3 text-slate-900 dark:text-white">Total Data Sovereignty</h3>
+                    <p class="text-slate-600 dark:text-slate-400 text-sm font-light leading-relaxed flex-grow">
+                        You are never trapped. Migrate seamlessly thanks to powerful CSV import/export capabilities for your positions and transactions. Export scheduled events in `.ical` format to sync directly with Apple Calendar.
+                    </p>
+                </div>
+
+            </div>
+        </div>
+    </section>
+
+    <!-- 13 Modules Grid -->
+    <section id="modules" class="py-24 bg-slate-100 dark:bg-slate-900/50 border-t border-slate-200 dark:border-white/5 relative z-10 transition-colors duration-300">
+        <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+            <div class="text-center mb-16">
+                <h2 class="text-3xl font-extrabold tracking-tight text-slate-900 dark:text-white">13 Dedicated Analytical Modules</h2>
+                <p class="mt-4 text-lg text-slate-600 dark:text-slate-400 font-light">An exhaustive suite of tools, covering every single aspect of wealth management.</p>
+            </div>
+            
+            <div class="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4">
+                
+                <div class="p-5 rounded-2xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-white/5 hover:border-blue-500/50 transition-colors group cursor-default flex flex-col gap-2">
+                    <div class="w-10 h-10 rounded-xl bg-blue-50 dark:bg-blue-500/10 flex items-center justify-center">
+                        <svg class="w-5 h-5 text-blue-600 dark:text-blue-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M11 3.055A9.001 9.001 0 1020.945 13H11V3.055z"></path><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M20.488 9H15V3.512A9.025 9.025 0 0120.488 9z"></path></svg>
+                    </div>
+                    <span class="font-semibold text-slate-900 dark:text-slate-200">Composition</span>
+                    <span class="text-xs text-slate-500">Dashboard & Allocations</span>
+                </div>
+
+                <div class="p-5 rounded-2xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-white/5 hover:border-teal-500/50 transition-colors group cursor-default flex flex-col gap-2">
+                    <div class="w-10 h-10 rounded-xl bg-teal-50 dark:bg-teal-500/10 flex items-center justify-center">
+                        <svg class="w-5 h-5 text-teal-600 dark:text-teal-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 21V5a2 2 0 00-2-2H7a2 2 0 00-2 2v16m14 0h2m-2 0h-5m-9 0H3m2 0h5M9 7h1m-1 4h1m4-4h1m-1 4h1m-5 10v-5a1 1 0 011-1h2a1 1 0 011 1v5m-4 0h4"></path></svg>
+                    </div>
+                    <span class="font-semibold text-slate-900 dark:text-slate-200">Fundamentals</span>
+                    <span class="text-xs text-slate-500">Custom Quality Screener</span>
+                </div>
+
+                <div class="p-5 rounded-2xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-white/5 hover:border-green-500/50 transition-colors group cursor-default flex flex-col gap-2">
+                    <div class="w-10 h-10 rounded-xl bg-green-50 dark:bg-green-500/10 flex items-center justify-center">
+                        <svg class="w-5 h-5 text-green-600 dark:text-green-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 7h8m0 0v8m0-8l-8 8-4-4-6 6"></path></svg>
+                    </div>
+                    <span class="font-semibold text-slate-900 dark:text-slate-200">Growth</span>
+                    <span class="text-xs text-slate-500">Historical Performance</span>
+                </div>
+
+                <div class="p-5 rounded-2xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-white/5 hover:border-yellow-500/50 transition-colors group cursor-default flex flex-col gap-2">
+                    <div class="w-10 h-10 rounded-xl bg-yellow-50 dark:bg-yellow-500/10 flex items-center justify-center">
+                        <svg class="w-5 h-5 text-yellow-600 dark:text-yellow-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8c1.11 0 2.08-.402-2.599-1M12 8V7m0 1v8m0 0v1m0-1c-1.11 0-2.08-.402-2.599-1M21 12a9 9 0 11-18 0 9 9 0 0118 0z"></path></svg>
+                    </div>
+                    <span class="font-semibold text-slate-900 dark:text-slate-200">Dividends</span>
+                    <span class="text-xs text-slate-500">Cash Flow Tracking</span>
+                </div>
+
+                <div class="p-5 rounded-2xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-white/5 hover:border-indigo-500/50 transition-colors group cursor-default flex flex-col gap-2">
+                    <div class="w-10 h-10 rounded-xl bg-indigo-50 dark:bg-indigo-500/10 flex items-center justify-center">
+                        <svg class="w-5 h-5 text-indigo-600 dark:text-indigo-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 6l3 1m0 0l-3 9a5.002 5.002 0 006.001 0M6 7l3 9M6 7l6-2m6 2l3-1m-3 1l-3 9a5.002 5.002 0 006.001 0M18 7l3 9m-3-9l-6-2m0-2v2m0 16V5m0 16H9m3 0h3"></path></svg>
+                    </div>
+                    <span class="font-semibold text-slate-900 dark:text-slate-200">Valuation</span>
+                    <span class="text-xs text-slate-500">Multiples & Fair Price</span>
+                </div>
+
+                <div class="p-5 rounded-2xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-white/5 hover:border-orange-500/50 transition-colors group cursor-default flex flex-col gap-2">
+                    <div class="w-10 h-10 rounded-xl bg-orange-50 dark:bg-orange-500/10 flex items-center justify-center">
+                        <svg class="w-5 h-5 text-orange-600 dark:text-orange-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M7 12l3-3 3 3 4-4M8 21l4-4 4 4M3 4h18M4 4h16v12a1 1 0 01-1 1H5a1 1 0 01-1-1V4z"></path></svg>
+                    </div>
+                    <span class="font-semibold text-slate-900 dark:text-slate-200">Projections</span>
+                    <span class="text-xs text-slate-500">Compound Interest Simulator</span>
+                </div>
+
+                <div class="p-5 rounded-2xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-white/5 hover:border-purple-500/50 transition-colors group cursor-default flex flex-col gap-2">
+                    <div class="w-10 h-10 rounded-xl bg-purple-50 dark:bg-purple-500/10 flex items-center justify-center">
+                        <svg class="w-5 h-5 text-purple-600 dark:text-purple-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 6V4m0 2a2 2 0 100 4m0-4a2 2 0 110 4m-6 8a2 2 0 100-4m0 4a2 2 0 110-4m0 4v2m0-6V4m6 6v10m6-2a2 2 0 100-4m0 4a2 2 0 110-4m0 4v2m0-6V4"></path></svg>
+                    </div>
+                    <span class="font-semibold text-slate-900 dark:text-slate-200">Simulation</span>
+                    <span class="text-xs text-slate-500">Sandbox / What-If Scenarios</span>
+                </div>
+
+                <div class="p-5 rounded-2xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-white/5 hover:border-cyan-500/50 transition-colors group cursor-default flex flex-col gap-2">
+                    <div class="w-10 h-10 rounded-xl bg-cyan-50 dark:bg-cyan-500/10 flex items-center justify-center">
+                        <svg class="w-5 h-5 text-cyan-600 dark:text-cyan-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"></path><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z"></path></svg>
+                    </div>
+                    <span class="font-semibold text-slate-900 dark:text-slate-200">Watchlist</span>
+                    <span class="text-xs text-slate-500">Opportunity Monitoring</span>
+                </div>
+
+                <div class="p-5 rounded-2xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-white/5 hover:border-rose-500/50 transition-colors group cursor-default flex flex-col gap-2">
+                    <div class="w-10 h-10 rounded-xl bg-rose-50 dark:bg-rose-500/10 flex items-center justify-center">
+                        <svg class="w-5 h-5 text-rose-600 dark:text-rose-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3.055 11H5a2 2 0 012 2v1a2 2 0 002 2 2 2 0 012 2v2.945M8 3.935V5.5A2.5 2.5 0 0010.5 8h.5a2 2 0 012 2 2 2 0 104 0 2 2 0 012-2h1.064M15 20.488V18a2 2 0 012-2h3.064M21 12a9 9 0 11-18 0 9 9 0 0118 0z"></path></svg>
+                    </div>
+                    <span class="font-semibold text-slate-900 dark:text-slate-200">Exposure</span>
+                    <span class="text-xs text-slate-500">Geographic & FX Risk</span>
+                </div>
+
+                <div class="p-5 rounded-2xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-white/5 hover:border-sky-500/50 transition-colors group cursor-default flex flex-col gap-2">
+                    <div class="w-10 h-10 rounded-xl bg-sky-50 dark:bg-sky-500/10 flex items-center justify-center">
+                        <svg class="w-5 h-5 text-sky-600 dark:text-sky-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 7h12m0 0l-4-4m4 4l-4 4m0 6H4m0 0l4 4m-4-4l4-4"></path></svg>
+                    </div>
+                    <span class="font-semibold text-slate-900 dark:text-slate-200">Transactions</span>
+                    <span class="text-xs text-slate-500">Ledger & Fee Analysis</span>
+                </div>
+
+                <div class="p-5 rounded-2xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-white/5 hover:border-fuchsia-500/50 transition-colors group cursor-default flex flex-col gap-2">
+                    <div class="w-10 h-10 rounded-xl bg-fuchsia-50 dark:bg-fuchsia-500/10 flex items-center justify-center">
+                        <svg class="w-5 h-5 text-fuchsia-600 dark:text-fuchsia-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z"></path></svg>
+                    </div>
+                    <span class="font-semibold text-slate-900 dark:text-slate-200">Benchmark</span>
+                    <span class="text-xs text-slate-500">Alpha Measurement (Indices)</span>
+                </div>
+
+                <div class="p-5 rounded-2xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-white/5 hover:border-red-500/50 transition-colors group cursor-default flex flex-col gap-2">
+                    <div class="w-10 h-10 rounded-xl bg-red-50 dark:bg-red-500/10 flex items-center justify-center">
+                        <svg class="w-5 h-5 text-red-600 dark:text-red-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z"></path></svg>
+                    </div>
+                    <span class="font-semibold text-slate-900 dark:text-slate-200">Calendar</span>
+                    <span class="text-xs text-slate-500">Agenda & Anniversaries</span>
+                </div>
+
+                <!-- 13th Module: Wealth -->
+                <div class="p-5 rounded-2xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-white/5 hover:border-emerald-500/50 transition-colors group cursor-default flex flex-col gap-2 md:col-start-2 lg:col-start-auto">
+                    <div class="w-10 h-10 rounded-xl bg-emerald-50 dark:bg-emerald-500/10 flex items-center justify-center">
+                        <svg class="w-5 h-5 text-emerald-600 dark:text-emerald-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 21h18M3 10h18M5 6l7-3 7 3M4 10v11m16-11v11M8 14v3m4-3v3m4-3v3"></path></svg>
+                    </div>
+                    <span class="font-semibold text-slate-900 dark:text-slate-200">Wealth</span>
+                    <span class="text-xs text-slate-500">Net Balance & FIRE Simulator</span>
+                </div>
+
+            </div>
+        </div>
+    </section>
+
+    <!-- Native macOS & Technology -->
+    <section class="py-24 bg-white dark:bg-slate-950 border-t border-slate-200 dark:border-white/5 relative z-10 overflow-hidden transition-colors duration-300">
+        <div class="absolute left-[-20%] top-[20%] w-[600px] h-[600px] bg-indigo-500/10 dark:bg-indigo-600/5 blur-[150px] rounded-full pointer-events-none"></div>
+        <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+            <div class="flex flex-col lg:flex-row items-center gap-16">
+                <div class="lg:w-1/2">
+                    <div class="inline-flex items-center gap-2 px-3 py-1 rounded-md bg-indigo-100 dark:bg-indigo-500/10 border border-indigo-200 dark:border-indigo-500/20 text-indigo-700 dark:text-indigo-400 text-xs font-bold tracking-wider uppercase mb-6">
+                        Apple Silicon Optimized
+                    </div>
+                    <h2 class="text-4xl font-extrabold tracking-tight text-slate-900 dark:text-white mb-6 leading-tight">
+                        The elegance and raw power of a true <span class="text-indigo-600 dark:text-indigo-400">native application</span>.
+                    </h2>
+                    <p class="text-lg text-slate-600 dark:text-slate-400 mb-8 font-light leading-relaxed">
+                        No more slow, battery-draining web wrappers (Electron). BlueChip is coded from scratch in <strong>SwiftUI</strong> and compiled directly into machine code to fully harness the power of your Mac's architecture.
+                    </p>
+                    <ul class="space-y-4">
+                        <li class="flex items-start gap-4">
+                            <div class="mt-1 w-6 h-6 rounded-full bg-indigo-50 dark:bg-indigo-500/20 flex items-center justify-center shrink-0">
+                                <svg class="w-3.5 h-3.5 text-indigo-600 dark:text-indigo-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="3" d="M5 13l4 4L19 7"></path></svg>
+                            </div>
+                            <div>
+                                <h4 class="text-slate-900 dark:text-white font-semibold">Lightning Fast Performance</h4>
+                                <p class="text-sm text-slate-600 dark:text-slate-400 mt-1">120 fps scrolling, instant rendering of complex charts, and a negligible memory footprint.</p>
+                            </div>
+                        </li>
+                        <li class="flex items-start gap-4">
+                            <div class="mt-1 w-6 h-6 rounded-full bg-indigo-50 dark:bg-indigo-500/20 flex items-center justify-center shrink-0">
+                                <svg class="w-3.5 h-3.5 text-indigo-600 dark:text-indigo-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="3" d="M5 13l4 4L19 7"></path></svg>
+                            </div>
+                            <div>
+                                <h4 class="text-slate-900 dark:text-white font-semibold">SwiftData Architecture</h4>
+                                <p class="text-sm text-slate-600 dark:text-slate-400 mt-1">Your data never leaves your Mac. It is securely structured and locally encrypted directly on your SSD.</p>
+                            </div>
+                        </li>
+                        <li class="flex items-start gap-4">
+                            <div class="mt-1 w-6 h-6 rounded-full bg-indigo-50 dark:bg-indigo-500/20 flex items-center justify-center shrink-0">
+                                <svg class="w-3.5 h-3.5 text-indigo-600 dark:text-indigo-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="3" d="M5 13l4 4L19 7"></path></svg>
+                            </div>
+                            <div>
+                                <h4 class="text-slate-900 dark:text-white font-semibold">Perfect OS Integration</h4>
+                                <p class="text-sm text-slate-600 dark:text-slate-400 mt-1">Menu bar widget, native keyboard shortcuts, deep Spotlight search integration, and flawless Dark Mode support.</p>
+                            </div>
+                        </li>
+                    </ul>
+                </div>
+                <div class="lg:w-1/2 relative mt-12 lg:mt-0">
+                    <!-- Tech Stack graphic -->
+                    <div class="aspect-square w-full max-w-md mx-auto relative flex items-center justify-center">
+                        <div class="absolute inset-0 border border-slate-200 dark:border-white/5 rounded-full animate-spin-slow"></div>
+                        <div class="absolute inset-8 border border-slate-200 dark:border-white/5 rounded-full animate-[spin_40s_linear_infinite_reverse]"></div>
+                        <div class="absolute inset-16 border border-slate-300 dark:border-white/10 rounded-full border-dashed animate-[spin_30s_linear_infinite]"></div>
+                        
+                        <div class="w-32 h-32 bg-gradient-to-br from-indigo-500 to-purple-600 rounded-3xl shadow-[0_0_40px_rgba(99,102,241,0.5)] flex items-center justify-center z-10 rotate-3 hover:rotate-0 transition-all duration-300 cursor-default">
+                            <!-- Apple Icon SVG -->
+                            <svg class="w-16 h-16 text-white" viewBox="0 0 24 24" fill="currentColor"><path d="M17.701 4.542c-2.42-2.155-5.918-2.505-8.59-.838-3.052 1.89-4.045 5.922-2.222 9.034.425.727 1.002 1.34 1.685 1.802.261.176.438.455.495.772.062.348-.052.705-.308.951-1.391 1.346-2.484 2.92-3.178 4.675-.125.32-.424.538-.767.538h-1.282c-.896 0-1.534-.848-1.272-1.706C3.411 15.932 5.892 12.63 9.4 10.378c2.97-1.905 6.843-1.636 9.535.656 2.454 2.089 3.42 5.485 2.441 8.583-.165.526-.642.883-1.196.883H18.9c-.347 0-.661-.2-.8-.517-.864-1.972-2.138-3.708-3.743-5.111-.274-.24-.41-.6-.367-.968.046-.388.277-.724.618-.902.607-.318 1.16-.723 1.637-1.199 1.488-1.487 2.115-3.662 1.456-5.261z"/></svg>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <!-- Pricing & Opportunity Cost -->
+    <section id="pricing" class="py-24 bg-slate-50 dark:bg-slate-900 border-t border-slate-200 dark:border-white/5 relative z-10 transition-colors duration-300">
+        <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+            <div class="text-center mb-16">
+                <h2 class="text-blue-600 dark:text-blue-500 font-bold tracking-widest uppercase text-sm">The Price of Freedom</h2>
+                <p class="mt-3 text-3xl font-extrabold tracking-tight sm:text-4xl text-slate-900 dark:text-white">Every dollar spent on a subscription will never compound in the market.</p>
+                <div class="w-24 h-1 bg-gradient-to-r from-blue-500 to-purple-500 mx-auto mt-6 rounded-full"></div>
+            </div>
+
+            <div class="flex flex-col lg:flex-row gap-8 items-stretch max-w-5xl mx-auto">
+                <!-- Bad SaaS Card -->
+                <div class="flex-1 p-8 rounded-3xl bg-white dark:bg-slate-950 border border-red-200 dark:border-red-500/20 flex flex-col relative overflow-hidden transition-colors">
+                    <div class="absolute top-0 left-0 w-full h-1 bg-gradient-to-r from-red-500 to-orange-500 dark:from-red-600 dark:to-orange-500"></div>
+                    <h3 class="text-2xl font-bold text-slate-700 dark:text-slate-300 mb-2">Web SaaS Platforms</h3>
+                    <div class="flex items-baseline gap-2 mb-6">
+                        <span class="text-5xl font-extrabold text-slate-900 dark:text-white">$15 to $30</span>
+                        <span class="text-slate-500">/ month</span>
+                    </div>
+                    <p class="text-slate-600 dark:text-slate-400 text-sm font-light mb-8 leading-relaxed">
+                        The standard business model. You pay a recurring fee every month just so they can host your financial data on their cloud servers and sell you their proprietary analysis.
+                    </p>
+                    <ul class="space-y-4 mb-8 flex-grow">
+                        <li class="flex items-start gap-3 text-slate-700 dark:text-slate-300">
+                            <svg class="w-5 h-5 text-red-500 shrink-0 mt-0.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path></svg>
+                            <span class="text-sm">Mandatory recurring subscription</span>
+                        </li>
+                        <li class="flex items-start gap-3 text-slate-700 dark:text-slate-300">
+                            <svg class="w-5 h-5 text-red-500 shrink-0 mt-0.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path></svg>
+                            <span class="text-sm">Your financial data stored on 3rd party servers</span>
+                        </li>
+                        <li class="flex items-start gap-3 text-slate-700 dark:text-slate-300">
+                            <svg class="w-5 h-5 text-red-500 shrink-0 mt-0.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path></svg>
+                            <span class="text-sm">Inherent risk of privacy breaches (Cloud)</span>
+                        </li>
+                    </ul>
+                    <div class="p-4 bg-red-50 dark:bg-red-500/10 rounded-xl border border-red-200 dark:border-red-500/20">
+                        <p class="text-xs text-red-600 dark:text-red-300 font-medium">The Hidden Opportunity Cost:</p>
+                        <p class="text-sm text-red-700 dark:text-red-200 mt-1 font-light">A $15/month subscription invested at an 8% return over 30 years equals <strong>over $22,000 lost</strong> in compounding wealth.</p>
+                    </div>
+                </div>
+
+                <!-- BlueChip Card -->
+                <div class="flex-1 p-8 rounded-3xl bg-blue-50 dark:bg-slate-900 border-2 border-blue-500/40 relative flex flex-col transform scale-105 shadow-[0_0_30px_rgba(59,130,246,0.1)] dark:shadow-[0_0_50px_rgba(59,130,246,0.15)] z-10 transition-colors">
+                    <div class="absolute -top-4 right-8 bg-gradient-to-r from-blue-500 to-purple-500 text-white text-xs font-bold px-3 py-1 rounded-full shadow-lg uppercase tracking-wider">
+                        Sovereign Investor
+                    </div>
+                    <h3 class="text-2xl font-bold text-slate-900 dark:text-white mb-2">BlueChip</h3>
+                    <div class="flex items-baseline gap-2 mb-6">
+                        <span class="text-5xl font-extrabold text-transparent bg-clip-text bg-gradient-to-r from-blue-600 to-purple-600 dark:from-blue-400 dark:to-purple-400">$0</span>
+                        <span class="text-slate-500 dark:text-slate-400 font-medium">/ Free for life</span>
+                    </div>
+                    <p class="text-slate-600 dark:text-slate-300 text-sm font-light mb-8 leading-relaxed">
+                        The software provides the institutional-grade infrastructure. Real-time prices are sourced automatically via Yahoo Finance. The rest? You input it, you manage it, and you keep your money.
+                    </p>
+                    <ul class="space-y-4 mb-8 flex-grow">
+                        <li class="flex items-start gap-3 text-slate-900 dark:text-white">
+                            <svg class="w-5 h-5 text-blue-500 dark:text-blue-400 shrink-0 mt-0.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="3" d="M5 13l4 4L19 7"></path></svg>
+                            <span class="text-sm">One-time download, 100% free forever</span>
+                        </li>
+                        <li class="flex items-start gap-3 text-slate-900 dark:text-white">
+                            <svg class="w-5 h-5 text-blue-500 dark:text-blue-400 shrink-0 mt-0.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="3" d="M5 13l4 4L19 7"></path></svg>
+                            <span class="text-sm font-semibold">Your data remains encrypted locally on your Mac</span>
+                        </li>
+                        <li class="flex items-start gap-3 text-slate-900 dark:text-white">
+                            <svg class="w-5 h-5 text-blue-500 dark:text-blue-400 shrink-0 mt-0.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="3" d="M5 13l4 4L19 7"></path></svg>
+                            <span class="text-sm">Live market pricing and FX exchange rates built-in</span>
+                        </li>
+                        <li class="flex items-start gap-3 text-slate-900 dark:text-white">
+                            <svg class="w-5 h-5 text-blue-500 dark:text-blue-400 shrink-0 mt-0.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="3" d="M5 13l4 4L19 7"></path></svg>
+                            <span class="text-sm">Zero friction on your annual compounding returns</span>
+                        </li>
+                    </ul>
+                    <a href="https://github.com/arthvrr/BlueChip" class="w-full block text-center px-6 py-4 rounded-xl bg-blue-600 hover:bg-blue-700 text-white font-bold transition-all shadow-[0_4px_14px_0_rgba(59,130,246,0.39)] hover:shadow-[0_6px_20px_rgba(59,130,246,0.23)]">
+                        Start Compounding
+                    </a>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <!-- Footer -->
+    <footer class="bg-slate-100 dark:bg-slate-950 border-t border-slate-200 dark:border-white/5 py-12 relative z-10 transition-colors duration-300">
+        <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 flex flex-col md:flex-row justify-between items-center gap-6">
+            <div class="flex items-center gap-2">
+                <img src="app icon/icon-without-bg.png" alt="BlueChip Logo" class="w-6 h-6 grayscale opacity-60">
+                <span class="font-semibold text-slate-500">BlueChip v1.0.0 (Beta)</span>
+            </div>
+            
+            <div class="flex space-x-6">
+                <a href="https://www.linkedin.com/in/arthurlouette/" target="_blank" class="text-slate-500 hover:text-blue-600 dark:hover:text-blue-400 transition-colors">
+                    <span class="sr-only">LinkedIn</span>
+                    <svg class="h-6 w-6" fill="currentColor" viewBox="0 0 24 24"><path d="M19 0h-14c-2.761 0-5 2.239-5 5v14c0 2.761 2.239 5 5 5h14c2.762 0 5-2.239 5-5v-14c0-2.761-2.238-5-5-5zm-11 19h-3v-11h3v11zm-1.5-12.268c-.966 0-1.75-.79-1.75-1.764s.784-1.764 1.75-1.764 1.75.79 1.75 1.764-.783 1.764-1.75 1.764zm13.5 12.268h-3v-5.604c0-3.368-4-3.113-4 0v5.604h-3v-11h3v1.765c1.396-2.586 7-2.777 7 2.476v6.759z"/></svg>
+                </a>
+                <a href="https://github.com/arthvrr/BlueChip" target="_blank" class="text-slate-500 hover:text-slate-900 dark:hover:text-white transition-colors">
+                    <span class="sr-only">GitHub</span>
+                    <svg class="h-6 w-6" fill="currentColor" viewBox="0 0 24 24"><path d="M12 0c-6.626 0-12 5.373-12 12 0 5.302 3.438 9.8 8.207 11.387.599.111.793-.261.793-.577v-2.234c-3.338.726-4.033-1.416-4.033-1.416-.546-1.387-1.333-1.756-1.333-1.756-1.089-.745.083-.729.083-.729 1.205.084 1.839 1.237 1.839 1.237 1.07 1.834 2.807 1.304 3.492.997.107-.775.418-1.305.762-1.604-2.665-.305-5.467-1.334-5.467-5.931 0-1.311.469-2.381 1.236-3.221-.124-.303-.535-1.524.117-3.176 0 0 1.008-.322 3.301 1.23.957-.266 1.983-.399 3.003-.404 1.02.005 2.047.138 3.006.404 2.291-1.552 3.297-1.23 3.297-1.23.653 1.653.242 2.874.118 3.176.77.84 1.235 1.911 1.235 3.221 0 4.609-2.807 5.624-5.479 5.921.43.372.823 1.102.823 2.222v3.293c0 .319.192.694.801.576 4.765-1.589 8.199-6.086 8.199-11.386 0-6.627-5.373-12-12-12z"/></svg>
+                </a>
+                <a href="mailto:arthurlouette12@gmail.com?subject=BlueChip%20Inquiry" class="text-slate-500 hover:text-slate-900 dark:hover:text-white transition-colors">
+                    <span class="sr-only">Email</span>
+                    <svg class="h-6 w-6" fill="currentColor" viewBox="0 0 24 24"><path d="M0 3v18h24v-18h-24zm21.518 2l-9.518 7.713-9.518-7.713h19.036zm-19.518 14v-11.817l10 8.104 10-8.104v11.817h-20z"/></svg>
+                </a>
+            </div>
+        </div>
+        <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 mt-8 text-center text-sm text-slate-500 dark:text-slate-600">
+            &copy; 2026 Arthur Louette. Code compiled natively in SwiftUI.
+        </div>
+    </footer>
+
+    <!-- Scripts -->
+    <script>
+        // --- Theme Toggle Logic ---
+        const themeToggleBtn = document.getElementById('theme-toggle');
+        const darkIcon = document.getElementById('theme-toggle-dark-icon');
+        const lightIcon = document.getElementById('theme-toggle-light-icon');
+
+        // Initial Setup Check
+        if (localStorage.getItem('color-theme') === 'light' || (!('color-theme' in localStorage) && !window.matchMedia('(prefers-color-scheme: dark)').matches)) {
+            document.documentElement.classList.remove('dark');
+            darkIcon.classList.remove('hidden'); 
+        } else {
+            document.documentElement.classList.add('dark');
+            lightIcon.classList.remove('hidden'); 
+        }
+
+        themeToggleBtn.addEventListener('click', function() {
+            darkIcon.classList.toggle('hidden');
+            lightIcon.classList.toggle('hidden');
+
+            if (document.documentElement.classList.contains('dark')) {
+                document.documentElement.classList.remove('dark');
+                localStorage.setItem('color-theme', 'light');
+            } else {
+                document.documentElement.classList.add('dark');
+                localStorage.setItem('color-theme', 'dark');
+            }
+        });
+
+        // --- Carousel Logic ---
+        document.addEventListener('DOMContentLoaded', () => {
+            const slider = document.getElementById('mockup-slider');
+            const prevBtn = document.getElementById('slider-prev');
+            const nextBtn = document.getElementById('slider-next');
+            const dots = document.querySelectorAll('.slider-dot');
+            const totalSlides = 7;
+            let currentSlide = 0;
+            let slideInterval;
+
+            function updateSlider() {
+                // Move slider
+                slider.style.transform = `translateX(-${currentSlide * 100}%)`;
+                
+                // Update dots styling
+                dots.forEach((dot, index) => {
+                    if (index === currentSlide) {
+                        dot.classList.remove('bg-white/40');
+                        dot.classList.add('bg-white');
+                        dot.classList.replace('w-2', 'w-4'); // Expand active dot
+                    } else {
+                        dot.classList.remove('bg-white');
+                        dot.classList.add('bg-white/40');
+                        dot.classList.replace('w-4', 'w-2'); // Shrink inactive dots
+                    }
+                });
+            }
+
+            function nextSlide() {
+                currentSlide = (currentSlide + 1) % totalSlides;
+                updateSlider();
+            }
+
+            function prevSlide() {
+                currentSlide = (currentSlide - 1 + totalSlides) % totalSlides;
+                updateSlider();
+            }
+
+            function startInterval() {
+                slideInterval = setInterval(nextSlide, 5000);
+            }
+
+            function resetInterval() {
+                clearInterval(slideInterval);
+                startInterval();
+            }
+
+            nextBtn.addEventListener('click', () => {
+                nextSlide();
+                resetInterval(); // Reset timer so it doesn't swipe immediately after manual click
+            });
+
+            prevBtn.addEventListener('click', () => {
+                prevSlide();
+                resetInterval();
+            });
+
+            dots.forEach((dot, index) => {
+                dot.addEventListener('click', () => {
+                    currentSlide = index;
+                    updateSlider();
+                    resetInterval();
+                });
+            });
+
+            // Initialize
+            updateSlider();
+            startInterval();
+        });
+    </script>
+</body>
+</html>
