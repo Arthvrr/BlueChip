@@ -292,17 +292,17 @@ struct GlobalSearchView: View {
             ("Return on Investment (ROI % by Asset)", "Chart • Wealth", "roi performance bar chart wealth", "chart.bar.fill", .green, .wealth)
         ]
         
-        for item in uiElements {
-            let searchableText = "\(item.title) \(item.subtitle) \(item.keywords)"
-            if matchesQuery(searchableText) {
-                results.append(SearchResult(title: item.title, subtitle: item.subtitle, icon: item.icon, color: item.color, tab: item.tab))
-            }
-        }
-        
         // --- 1. PAGES DE L'APPLICATION ---
         for tab in AppTab.allCases {
             if matchesQuery(tab.rawValue) {
                 results.append(SearchResult(title: tab.rawValue, subtitle: "App Page", icon: "macwindow", color: .blue, tab: tab))
+            }
+        }
+        
+        for item in uiElements {
+            let searchableText = "\(item.title) \(item.subtitle) \(item.keywords)"
+            if matchesQuery(searchableText) {
+                results.append(SearchResult(title: item.title, subtitle: item.subtitle, icon: item.icon, color: item.color, tab: item.tab))
             }
         }
         

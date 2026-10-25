@@ -7,6 +7,17 @@ import Combine
 // MARK: - ENUMS & HELPERS
 // =========================================================================
 
+// Modèles locaux pour lire la réponse de Yahoo Finance
+private struct YahooSearchResponse: Codable {
+    let quotes: [YahooQuote]
+}
+
+private struct YahooQuote: Codable, Hashable {
+    let symbol: String
+    let shortname: String?
+    let exchDisp: String?
+}
+
 enum TxChartZoomType: String, Identifiable {
     case annualCount, typeSummary, buysOverTime, taxBreakdown
     case capitalAllocation, holdingPeriod
@@ -2012,6 +2023,10 @@ struct AddEditTransactionView: View {
 
     var isEditing: Bool { transaction != nil }
 
+    // NOUVEAU : Variables pour l'auto-complétion
+    @State private var suggestedTickers: [YahooQuote] = []
+    @State private var searchTask: Task<Void, Never>? = nil
+
     var body: some View {
         VStack(spacing: 0) {
             HStack {
@@ -2043,11 +2058,53 @@ struct AddEditTransactionView: View {
                     }
                     if type == .buy || type == .sell {
                         GroupBox("Asset") {
-                            HStack(spacing: 12) {
+                            HStack(alignment: .top, spacing: 12) {
                                 VStack(alignment: .leading, spacing: 4) {
                                     Text("Ticker").font(.caption).foregroundColor(.secondary)
-                                    TextField("e.g. AAPL", text: $ticker).textFieldStyle(.roundedBorder)
-                                        .onChange(of: ticker) { ticker = ticker.uppercased() }
+                                    TextField("e.g. AAPL", text: $ticker)
+                                        .textFieldStyle(.roundedBorder)
+                                        .onChange(of: ticker) { newValue in
+                                            let upper = newValue.uppercased()
+                                            if ticker != upper { ticker = upper } // Évite la boucle
+                                            
+                                            searchTask?.cancel()
+                                            if upper.trimmingCharacters(in: .whitespaces).isEmpty {
+                                                suggestedTickers = []
+                                                return
+                                            }
+                                            searchTask = Task {
+                                                try? await Task.sleep(nanoseconds: 300_000_000)
+                                                guard !Task.isCancelled else { return }
+                                                await searchYahooFinance(query: upper)
+                                            }
+                                        }
+                                    
+                                    if !suggestedTickers.isEmpty {
+                                        VStack(spacing: 0) {
+                                            ForEach(suggestedTickers, id: \.symbol) { quote in
+                                                Button(action: {
+                                                    searchTask?.cancel()
+                                                    ticker = quote.symbol
+                                                    suggestedTickers = []
+                                                }) {
+                                                    HStack {
+                                                        Text(quote.symbol).bold()
+                                                        Text(quote.shortname ?? "").foregroundColor(.secondary).lineLimit(1)
+                                                        Spacer()
+                                                        Text(quote.exchDisp ?? "").font(.caption2).foregroundColor(.secondary)
+                                                    }
+                                                    .padding(6)
+                                                    .contentShape(Rectangle())
+                                                }
+                                                .buttonStyle(.plain)
+                                                Divider()
+                                            }
+                                        }
+                                        .background(Color(NSColor.controlBackgroundColor))
+                                        .cornerRadius(6)
+                                        .overlay(RoundedRectangle(cornerRadius: 6).stroke(Color.gray.opacity(0.3), lineWidth: 1))
+                                        .padding(.top, 2)
+                                    }
                                 }
                                 VStack(alignment: .leading, spacing: 4) {
                                     Text("Quantity").font(.caption).foregroundColor(.secondary)
@@ -2095,8 +2152,25 @@ struct AddEditTransactionView: View {
                     .keyboardShortcut(.defaultAction).buttonStyle(.borderedProminent)
             }.padding()
         }
-        .frame(width: 520)
+        .frame(width: 520, height: 600) // Un peu plus haut pour le dropdown
         .onAppear { populate() }
+    }
+
+    // NOUVEAU : Fonction de recherche asynchrone Yahoo Finance
+    func searchYahooFinance(query: String) async {
+        guard let encodedQuery = query.addingPercentEncoding(withAllowedCharacters: .urlQueryAllowed),
+              let url = URL(string: "https://query2.finance.yahoo.com/v1/finance/search?q=\(encodedQuery)") else { return }
+        
+        do {
+            let (data, _) = try await URLSession.shared.data(from: url)
+            let decoded = try JSONDecoder().decode(YahooSearchResponse.self, from: data)
+            
+            await MainActor.run {
+                self.suggestedTickers = Array(decoded.quotes.prefix(5))
+            }
+        } catch {
+            print("Erreur recherche Yahoo: \(error)")
+        }
     }
 
     func populate() {
