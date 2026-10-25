@@ -24,11 +24,16 @@
                     animation: {
                         'float': 'float 6s ease-in-out infinite',
                         'spin-slow': 'spin 20s linear infinite',
+                        'modal-in': 'modalIn 0.3s cubic-bezier(0.16, 1, 0.3, 1) forwards',
                     },
                     keyframes: {
                         float: {
                             '0%, 100%': { transform: 'translateY(0)' },
                             '50%': { transform: 'translateY(-10px)' },
+                        },
+                        modalIn: {
+                            '0%': { opacity: '0', transform: 'scale(0.95)' },
+                            '100%': { opacity: '1', transform: 'scale(1)' },
                         }
                     }
                 }
@@ -48,18 +53,32 @@
         .bento-card:hover {
             transform: translateY(-4px);
         }
+        /* Custom scrollbar for modal */
+        .custom-scrollbar::-webkit-scrollbar {
+            width: 8px;
+        }
+        .custom-scrollbar::-webkit-scrollbar-track {
+            background: transparent;
+        }
+        .custom-scrollbar::-webkit-scrollbar-thumb {
+            background-color: rgba(156, 163, 175, 0.3);
+            border-radius: 20px;
+        }
+        .dark .custom-scrollbar::-webkit-scrollbar-thumb {
+            background-color: rgba(255, 255, 255, 0.2);
+        }
     </style>
 </head>
 <body class="antialiased bg-slate-50 dark:bg-slate-950 text-slate-900 dark:text-slate-50 selection:bg-blue-500 selection:text-white transition-colors duration-300">
 
-    <!-- Ambient Background Glows (Fixed for Dark/Light Mode) -->
+    <!-- Ambient Background Glows -->
     <div class="fixed top-0 left-0 w-full h-full overflow-hidden pointer-events-none z-[-1]">
         <div class="absolute top-[-10%] left-[-10%] w-[500px] h-[500px] bg-blue-500/20 dark:bg-blue-600/10 blur-[120px] rounded-full"></div>
         <div class="absolute bottom-[-10%] right-[-10%] w-[500px] h-[500px] bg-purple-500/20 dark:bg-purple-600/10 blur-[120px] rounded-full"></div>
     </div>
 
     <!-- Navigation -->
-    <nav class="fixed w-full z-50 bg-white/80 dark:bg-slate-950/80 backdrop-blur-lg border-b border-slate-200 dark:border-white/10 transition-colors duration-300">
+    <nav class="fixed w-full z-40 bg-white/80 dark:bg-slate-950/80 backdrop-blur-lg border-b border-slate-200 dark:border-white/10 transition-colors duration-300">
         <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
             <div class="flex justify-between items-center h-16">
                 <div class="flex items-center gap-3">
@@ -75,11 +94,9 @@
                 <div class="flex items-center gap-4">
                     <!-- Theme Toggle Button -->
                     <button id="theme-toggle" type="button" class="text-slate-500 dark:text-slate-400 hover:bg-slate-200 dark:hover:bg-slate-800 rounded-lg text-sm p-2.5 transition-colors focus:outline-none">
-                        <!-- Dark Icon (Moon) -->
                         <svg id="theme-toggle-dark-icon" class="hidden w-5 h-5" fill="currentColor" viewBox="0 0 20 20" xmlns="http://www.w3.org/2000/svg">
                             <path d="M17.293 13.293A8 8 0 016.707 2.707a8.001 8.001 0 1010.586 10.586z"></path>
                         </svg>
-                        <!-- Light Icon (Sun) -->
                         <svg id="theme-toggle-light-icon" class="hidden w-5 h-5" fill="currentColor" viewBox="0 0 20 20" xmlns="http://www.w3.org/2000/svg">
                             <path d="M10 2a1 1 0 011 1v1a1 1 0 11-2 0V3a1 1 0 011-1zm4 8a4 4 0 11-8 0 4 4 0 018 0zm-.464 4.95l.707.707a1 1 0 001.414-1.414l-.707-.707a1 1 0 00-1.414 1.414zm2.12-10.607a1 1 0 010 1.414l-.706.707a1 1 0 11-1.414-1.414l.707-.707a1 1 0 011.414 0zM17 11a1 1 0 100-2h-1a1 1 0 100 2h1zm-7 4a1 1 0 011 1v1a1 1 0 11-2 0v-1a1 1 0 011-1zM5.05 6.464A1 1 0 106.465 5.05l-.708-.707a1 1 0 00-1.414 1.414l.707.707zm1.414 8.486l-.707.707a1 1 0 01-1.414-1.414l.707-.707a1 1 0 011.414 1.414zM4 11a1 1 0 100-2H3a1 1 0 000 2h1z" fill-rule="evenodd" clip-rule="evenodd"></path>
                         </svg>
@@ -127,7 +144,6 @@
             <div class="mt-24 relative mx-auto w-full max-w-5xl animate-float group">
                 <div class="absolute -inset-1 bg-gradient-to-r from-blue-600 to-purple-600 rounded-xl blur opacity-30 dark:opacity-40"></div>
                 <div class="relative rounded-xl overflow-hidden shadow-2xl border border-slate-300 dark:border-white/10 bg-white dark:bg-slate-950">
-                    <!-- Fake macOS Window Header -->
                     <div class="h-10 bg-slate-100 dark:bg-slate-900 border-b border-slate-200 dark:border-white/10 flex items-center px-4 gap-2 z-20 relative">
                         <div class="w-3 h-3 rounded-full bg-[#ff5f56] border border-[#e0443e]"></div>
                         <div class="w-3 h-3 rounded-full bg-[#ffbd2e] border border-[#dea123]"></div>
@@ -135,13 +151,9 @@
                         <div class="ml-4 text-xs text-slate-500 font-medium">BlueChip - Portfolio Command Center</div>
                     </div>
                     
-                    <!-- Carousel Container -->
                     <div class="bg-slate-50 dark:bg-[#020617] w-full aspect-[16/10] relative overflow-hidden">
-                        
-                        <!-- Fallback background just in case -->
                         <div class="absolute inset-0 opacity-10 bg-[url('data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHdpZHRoPSI0MCIgaGVpZ2h0PSI0MCI+CjxyZWN0IHdpZHRoPSI0MCIgaGVpZ2h0PSI0MCIgZmlsbD0iI2ZmZiIgZmlsbC1vcGFjaXR5PSIwLjEiLz4KPC9zdmc+')] z-0"></div>
                         
-                        <!-- Slides Track -->
                         <div id="mockup-slider" class="flex w-full h-full transition-transform duration-700 ease-[cubic-bezier(0.25,1,0.5,1)] relative z-10">
                             <img src="pics/1.png" alt="BlueChip Screenshot 1" class="w-full h-full object-cover shrink-0">
                             <img src="pics/2.png" alt="BlueChip Screenshot 2" class="w-full h-full object-cover shrink-0">
@@ -150,9 +162,9 @@
                             <img src="pics/5.png" alt="BlueChip Screenshot 5" class="w-full h-full object-cover shrink-0">
                             <img src="pics/6.png" alt="BlueChip Screenshot 6" class="w-full h-full object-cover shrink-0">
                             <img src="pics/7.jpeg" alt="BlueChip Screenshot 7" class="w-full h-full object-cover shrink-0">
+                            <img src="pics/8.png" alt="BlueChip Screenshot 8" class="w-full h-full object-cover shrink-0">
                         </div>
 
-                        <!-- Navigation Arrows (Appear on hover) -->
                         <button id="slider-prev" class="absolute left-4 top-1/2 -translate-y-1/2 w-10 h-10 rounded-full bg-white/20 dark:bg-black/40 backdrop-blur-md border border-white/20 text-slate-800 dark:text-white flex items-center justify-center opacity-0 group-hover:opacity-100 transition-all duration-300 z-20 hover:bg-white/40 dark:hover:bg-black/60 focus:outline-none shadow-lg">
                             <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" d="M15 19l-7-7 7-7"></path></svg>
                         </button>
@@ -160,9 +172,9 @@
                             <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" d="M9 5l7 7-7 7"></path></svg>
                         </button>
 
-                        <!-- Indicators -->
                         <div class="absolute bottom-4 left-1/2 -translate-x-1/2 flex gap-2 z-20 bg-black/20 dark:bg-black/40 backdrop-blur-md px-3 py-2 rounded-full border border-white/10 shadow-xl">
                             <button class="slider-dot w-2 h-2 rounded-full bg-white transition-all duration-300"></button>
+                            <button class="slider-dot w-2 h-2 rounded-full bg-white/40 hover:bg-white/75 transition-all duration-300"></button>
                             <button class="slider-dot w-2 h-2 rounded-full bg-white/40 hover:bg-white/75 transition-all duration-300"></button>
                             <button class="slider-dot w-2 h-2 rounded-full bg-white/40 hover:bg-white/75 transition-all duration-300"></button>
                             <button class="slider-dot w-2 h-2 rounded-full bg-white/40 hover:bg-white/75 transition-all duration-300"></button>
@@ -175,6 +187,41 @@
             </div>
         </div>
     </section>
+
+    <!-- Metrics Banner Section -->
+    <div class="relative z-20 max-w-6xl mx-auto px-6 lg:px-8 -mt-12 mb-32">
+        <div class="grid grid-cols-1 md:grid-cols-3 gap-6">
+            <!-- Stat 1 -->
+            <div class="p-8 rounded-2xl bg-white/60 dark:bg-white/5 border border-slate-200 dark:border-white/10 backdrop-blur-xl flex flex-col items-center justify-center text-center transition-all duration-300 hover:-translate-y-1 hover:shadow-2xl hover:shadow-blue-500/10 group">
+                <span class="text-5xl font-black bg-clip-text text-transparent bg-gradient-to-br from-blue-500 to-indigo-600 dark:from-blue-400 dark:to-blue-600 mb-3 group-hover:scale-105 transition-transform duration-300">
+                    84
+                </span>
+                <span class="text-slate-600 dark:text-slate-400 font-semibold tracking-wider uppercase text-xs">
+                    Interactive Charts & Graphs
+                </span>
+            </div>
+            
+            <!-- Stat 2 -->
+            <div class="p-8 rounded-2xl bg-white/60 dark:bg-white/5 border border-slate-200 dark:border-white/10 backdrop-blur-xl flex flex-col items-center justify-center text-center transition-all duration-300 hover:-translate-y-1 hover:shadow-2xl hover:shadow-purple-500/10 group">
+                <span class="text-5xl font-black bg-clip-text text-transparent bg-gradient-to-br from-purple-500 to-pink-600 dark:from-purple-400 dark:to-purple-600 mb-3 group-hover:scale-105 transition-transform duration-300">
+                    23,561
+                </span>
+                <span class="text-slate-600 dark:text-slate-400 font-semibold tracking-wider uppercase text-xs">
+                    Lines of Native Swift Code
+                </span>
+            </div>
+            
+            <!-- Stat 3 -->
+            <div class="p-8 rounded-2xl bg-white/60 dark:bg-white/5 border border-slate-200 dark:border-white/10 backdrop-blur-xl flex flex-col items-center justify-center text-center transition-all duration-300 hover:-translate-y-1 hover:shadow-2xl hover:shadow-emerald-500/10 group">
+                <span class="text-5xl font-black bg-clip-text text-transparent bg-gradient-to-br from-emerald-500 to-teal-600 dark:from-emerald-400 dark:to-teal-500 mb-3 group-hover:scale-105 transition-transform duration-300">
+                    $0
+                </span>
+                <span class="text-slate-600 dark:text-slate-400 font-semibold tracking-wider uppercase text-xs">
+                    Free For Life. No Subscriptions.
+                </span>
+            </div>
+        </div>
+    </div>
 
     <!-- Manifesto Quote -->
     <section class="py-20 bg-white dark:bg-slate-900 border-y border-slate-200 dark:border-white/5 relative z-10">
@@ -191,7 +238,7 @@
         <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
             <div class="text-center mb-20">
                 <h2 class="text-blue-600 dark:text-blue-500 font-bold tracking-widest uppercase text-sm">Our Philosophy</h2>
-                <p class="mt-3 text-3xl leading-8 font-extrabold tracking-tight sm:text-4xl text-slate-900 dark:text-white">Everything that can be measured, can be improved.</p>
+                <p class="mt-3 text-3xl leading-8 font-extrabold tracking-tight sm:text-4xl text-slate-900 dark:text-white">Built by an investor, for investors.</p>
                 <div class="w-24 h-1 bg-gradient-to-r from-blue-500 to-purple-500 mx-auto mt-6 rounded-full"></div>
             </div>
 
@@ -243,7 +290,7 @@
 
             <div class="grid grid-cols-1 md:grid-cols-3 gap-6 auto-rows-[minmax(260px,auto)]">
                 
-                <!-- Feature 1: AI Copilot (Spans 2 columns) -->
+                <!-- Feature 1: AI Copilot -->
                 <div class="md:col-span-2 bg-slate-50 dark:bg-slate-950 rounded-3xl p-8 bento-card relative overflow-hidden group border border-slate-200 dark:border-white/5">
                     <div class="absolute top-0 right-0 p-8 opacity-5 dark:opacity-10 group-hover:opacity-10 dark:group-hover:opacity-20 transition-opacity">
                         <svg class="w-48 h-48 text-blue-600 dark:text-blue-500" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="1" d="M9.75 17L9 20l-1 1h8l-1-1-.75-3M3 13h18M5 17h14a2 2 0 002-2V5a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z"></path></svg>
@@ -324,115 +371,115 @@
         <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
             <div class="text-center mb-16">
                 <h2 class="text-3xl font-extrabold tracking-tight text-slate-900 dark:text-white">13 Dedicated Analytical Modules</h2>
-                <p class="mt-4 text-lg text-slate-600 dark:text-slate-400 font-light">An exhaustive suite of tools, covering every single aspect of wealth management.</p>
+                <p class="mt-4 text-lg text-slate-600 dark:text-slate-400 font-light">An exhaustive suite of tools, covering every single aspect of wealth management. <span class="font-medium text-blue-500">Click any card to explore.</span></p>
             </div>
             
             <div class="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4">
                 
-                <div class="p-5 rounded-2xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-white/5 hover:border-blue-500/50 transition-colors group cursor-default flex flex-col gap-2">
+                <!-- Interactive Module Cards -->
+                <button onclick="openModule('composition')" class="p-5 rounded-2xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-white/5 hover:border-blue-500/50 hover:shadow-lg dark:hover:shadow-[0_4px_20px_-5px_rgba(59,130,246,0.15)] transition-all transform hover:scale-[1.02] group text-left flex flex-col gap-2 focus:outline-none">
                     <div class="w-10 h-10 rounded-xl bg-blue-50 dark:bg-blue-500/10 flex items-center justify-center">
                         <svg class="w-5 h-5 text-blue-600 dark:text-blue-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M11 3.055A9.001 9.001 0 1020.945 13H11V3.055z"></path><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M20.488 9H15V3.512A9.025 9.025 0 0120.488 9z"></path></svg>
                     </div>
                     <span class="font-semibold text-slate-900 dark:text-slate-200">Composition</span>
                     <span class="text-xs text-slate-500">Dashboard & Allocations</span>
-                </div>
+                </button>
 
-                <div class="p-5 rounded-2xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-white/5 hover:border-teal-500/50 transition-colors group cursor-default flex flex-col gap-2">
+                <button onclick="openModule('fundamentals')" class="p-5 rounded-2xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-white/5 hover:border-teal-500/50 hover:shadow-lg dark:hover:shadow-[0_4px_20px_-5px_rgba(20,184,166,0.15)] transition-all transform hover:scale-[1.02] group text-left flex flex-col gap-2 focus:outline-none">
                     <div class="w-10 h-10 rounded-xl bg-teal-50 dark:bg-teal-500/10 flex items-center justify-center">
                         <svg class="w-5 h-5 text-teal-600 dark:text-teal-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 21V5a2 2 0 00-2-2H7a2 2 0 00-2 2v16m14 0h2m-2 0h-5m-9 0H3m2 0h5M9 7h1m-1 4h1m4-4h1m-1 4h1m-5 10v-5a1 1 0 011-1h2a1 1 0 011 1v5m-4 0h4"></path></svg>
                     </div>
                     <span class="font-semibold text-slate-900 dark:text-slate-200">Fundamentals</span>
                     <span class="text-xs text-slate-500">Custom Quality Screener</span>
-                </div>
+                </button>
 
-                <div class="p-5 rounded-2xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-white/5 hover:border-green-500/50 transition-colors group cursor-default flex flex-col gap-2">
+                <button onclick="openModule('growth')" class="p-5 rounded-2xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-white/5 hover:border-green-500/50 hover:shadow-lg dark:hover:shadow-[0_4px_20px_-5px_rgba(34,197,94,0.15)] transition-all transform hover:scale-[1.02] group text-left flex flex-col gap-2 focus:outline-none">
                     <div class="w-10 h-10 rounded-xl bg-green-50 dark:bg-green-500/10 flex items-center justify-center">
                         <svg class="w-5 h-5 text-green-600 dark:text-green-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 7h8m0 0v8m0-8l-8 8-4-4-6 6"></path></svg>
                     </div>
                     <span class="font-semibold text-slate-900 dark:text-slate-200">Growth</span>
                     <span class="text-xs text-slate-500">Historical Performance</span>
-                </div>
+                </button>
 
-                <div class="p-5 rounded-2xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-white/5 hover:border-yellow-500/50 transition-colors group cursor-default flex flex-col gap-2">
+                <button onclick="openModule('dividends')" class="p-5 rounded-2xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-white/5 hover:border-yellow-500/50 hover:shadow-lg dark:hover:shadow-[0_4px_20px_-5px_rgba(234,179,8,0.15)] transition-all transform hover:scale-[1.02] group text-left flex flex-col gap-2 focus:outline-none">
                     <div class="w-10 h-10 rounded-xl bg-yellow-50 dark:bg-yellow-500/10 flex items-center justify-center">
                         <svg class="w-5 h-5 text-yellow-600 dark:text-yellow-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8c1.11 0 2.08-.402-2.599-1M12 8V7m0 1v8m0 0v1m0-1c-1.11 0-2.08-.402-2.599-1M21 12a9 9 0 11-18 0 9 9 0 0118 0z"></path></svg>
                     </div>
                     <span class="font-semibold text-slate-900 dark:text-slate-200">Dividends</span>
                     <span class="text-xs text-slate-500">Cash Flow Tracking</span>
-                </div>
+                </button>
 
-                <div class="p-5 rounded-2xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-white/5 hover:border-indigo-500/50 transition-colors group cursor-default flex flex-col gap-2">
+                <button onclick="openModule('valuation')" class="p-5 rounded-2xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-white/5 hover:border-indigo-500/50 hover:shadow-lg dark:hover:shadow-[0_4px_20px_-5px_rgba(99,102,241,0.15)] transition-all transform hover:scale-[1.02] group text-left flex flex-col gap-2 focus:outline-none">
                     <div class="w-10 h-10 rounded-xl bg-indigo-50 dark:bg-indigo-500/10 flex items-center justify-center">
                         <svg class="w-5 h-5 text-indigo-600 dark:text-indigo-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 6l3 1m0 0l-3 9a5.002 5.002 0 006.001 0M6 7l3 9M6 7l6-2m6 2l3-1m-3 1l-3 9a5.002 5.002 0 006.001 0M18 7l3 9m-3-9l-6-2m0-2v2m0 16V5m0 16H9m3 0h3"></path></svg>
                     </div>
                     <span class="font-semibold text-slate-900 dark:text-slate-200">Valuation</span>
                     <span class="text-xs text-slate-500">Multiples & Fair Price</span>
-                </div>
+                </button>
 
-                <div class="p-5 rounded-2xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-white/5 hover:border-orange-500/50 transition-colors group cursor-default flex flex-col gap-2">
+                <button onclick="openModule('projections')" class="p-5 rounded-2xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-white/5 hover:border-orange-500/50 hover:shadow-lg dark:hover:shadow-[0_4px_20px_-5px_rgba(249,115,22,0.15)] transition-all transform hover:scale-[1.02] group text-left flex flex-col gap-2 focus:outline-none">
                     <div class="w-10 h-10 rounded-xl bg-orange-50 dark:bg-orange-500/10 flex items-center justify-center">
                         <svg class="w-5 h-5 text-orange-600 dark:text-orange-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M7 12l3-3 3 3 4-4M8 21l4-4 4 4M3 4h18M4 4h16v12a1 1 0 01-1 1H5a1 1 0 01-1-1V4z"></path></svg>
                     </div>
                     <span class="font-semibold text-slate-900 dark:text-slate-200">Projections</span>
                     <span class="text-xs text-slate-500">Compound Interest Simulator</span>
-                </div>
+                </button>
 
-                <div class="p-5 rounded-2xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-white/5 hover:border-purple-500/50 transition-colors group cursor-default flex flex-col gap-2">
+                <button onclick="openModule('simulation')" class="p-5 rounded-2xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-white/5 hover:border-purple-500/50 hover:shadow-lg dark:hover:shadow-[0_4px_20px_-5px_rgba(168,85,247,0.15)] transition-all transform hover:scale-[1.02] group text-left flex flex-col gap-2 focus:outline-none">
                     <div class="w-10 h-10 rounded-xl bg-purple-50 dark:bg-purple-500/10 flex items-center justify-center">
                         <svg class="w-5 h-5 text-purple-600 dark:text-purple-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 6V4m0 2a2 2 0 100 4m0-4a2 2 0 110 4m-6 8a2 2 0 100-4m0 4a2 2 0 110-4m0 4v2m0-6V4m6 6v10m6-2a2 2 0 100-4m0 4a2 2 0 110-4m0 4v2m0-6V4"></path></svg>
                     </div>
                     <span class="font-semibold text-slate-900 dark:text-slate-200">Simulation</span>
                     <span class="text-xs text-slate-500">Sandbox / What-If Scenarios</span>
-                </div>
+                </button>
 
-                <div class="p-5 rounded-2xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-white/5 hover:border-cyan-500/50 transition-colors group cursor-default flex flex-col gap-2">
+                <button onclick="openModule('watchlist')" class="p-5 rounded-2xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-white/5 hover:border-cyan-500/50 hover:shadow-lg dark:hover:shadow-[0_4px_20px_-5px_rgba(6,182,212,0.15)] transition-all transform hover:scale-[1.02] group text-left flex flex-col gap-2 focus:outline-none">
                     <div class="w-10 h-10 rounded-xl bg-cyan-50 dark:bg-cyan-500/10 flex items-center justify-center">
                         <svg class="w-5 h-5 text-cyan-600 dark:text-cyan-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"></path><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z"></path></svg>
                     </div>
                     <span class="font-semibold text-slate-900 dark:text-slate-200">Watchlist</span>
                     <span class="text-xs text-slate-500">Opportunity Monitoring</span>
-                </div>
+                </button>
 
-                <div class="p-5 rounded-2xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-white/5 hover:border-rose-500/50 transition-colors group cursor-default flex flex-col gap-2">
+                <button onclick="openModule('exposure')" class="p-5 rounded-2xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-white/5 hover:border-rose-500/50 hover:shadow-lg dark:hover:shadow-[0_4px_20px_-5px_rgba(225,29,72,0.15)] transition-all transform hover:scale-[1.02] group text-left flex flex-col gap-2 focus:outline-none">
                     <div class="w-10 h-10 rounded-xl bg-rose-50 dark:bg-rose-500/10 flex items-center justify-center">
                         <svg class="w-5 h-5 text-rose-600 dark:text-rose-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3.055 11H5a2 2 0 012 2v1a2 2 0 002 2 2 2 0 012 2v2.945M8 3.935V5.5A2.5 2.5 0 0010.5 8h.5a2 2 0 012 2 2 2 0 104 0 2 2 0 012-2h1.064M15 20.488V18a2 2 0 012-2h3.064M21 12a9 9 0 11-18 0 9 9 0 0118 0z"></path></svg>
                     </div>
                     <span class="font-semibold text-slate-900 dark:text-slate-200">Exposure</span>
                     <span class="text-xs text-slate-500">Geographic & FX Risk</span>
-                </div>
+                </button>
 
-                <div class="p-5 rounded-2xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-white/5 hover:border-sky-500/50 transition-colors group cursor-default flex flex-col gap-2">
+                <button onclick="openModule('transactions')" class="p-5 rounded-2xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-white/5 hover:border-sky-500/50 hover:shadow-lg dark:hover:shadow-[0_4px_20px_-5px_rgba(14,165,233,0.15)] transition-all transform hover:scale-[1.02] group text-left flex flex-col gap-2 focus:outline-none">
                     <div class="w-10 h-10 rounded-xl bg-sky-50 dark:bg-sky-500/10 flex items-center justify-center">
                         <svg class="w-5 h-5 text-sky-600 dark:text-sky-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 7h12m0 0l-4-4m4 4l-4 4m0 6H4m0 0l4 4m-4-4l4-4"></path></svg>
                     </div>
                     <span class="font-semibold text-slate-900 dark:text-slate-200">Transactions</span>
                     <span class="text-xs text-slate-500">Ledger & Fee Analysis</span>
-                </div>
+                </button>
 
-                <div class="p-5 rounded-2xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-white/5 hover:border-fuchsia-500/50 transition-colors group cursor-default flex flex-col gap-2">
+                <button onclick="openModule('benchmark')" class="p-5 rounded-2xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-white/5 hover:border-fuchsia-500/50 hover:shadow-lg dark:hover:shadow-[0_4px_20px_-5px_rgba(217,70,239,0.15)] transition-all transform hover:scale-[1.02] group text-left flex flex-col gap-2 focus:outline-none">
                     <div class="w-10 h-10 rounded-xl bg-fuchsia-50 dark:bg-fuchsia-500/10 flex items-center justify-center">
                         <svg class="w-5 h-5 text-fuchsia-600 dark:text-fuchsia-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z"></path></svg>
                     </div>
                     <span class="font-semibold text-slate-900 dark:text-slate-200">Benchmark</span>
                     <span class="text-xs text-slate-500">Alpha Measurement (Indices)</span>
-                </div>
+                </button>
 
-                <div class="p-5 rounded-2xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-white/5 hover:border-red-500/50 transition-colors group cursor-default flex flex-col gap-2">
+                <button onclick="openModule('calendar')" class="p-5 rounded-2xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-white/5 hover:border-red-500/50 hover:shadow-lg dark:hover:shadow-[0_4px_20px_-5px_rgba(239,68,68,0.15)] transition-all transform hover:scale-[1.02] group text-left flex flex-col gap-2 focus:outline-none">
                     <div class="w-10 h-10 rounded-xl bg-red-50 dark:bg-red-500/10 flex items-center justify-center">
                         <svg class="w-5 h-5 text-red-600 dark:text-red-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z"></path></svg>
                     </div>
                     <span class="font-semibold text-slate-900 dark:text-slate-200">Calendar</span>
                     <span class="text-xs text-slate-500">Agenda & Anniversaries</span>
-                </div>
+                </button>
 
-                <!-- 13th Module: Wealth -->
-                <div class="p-5 rounded-2xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-white/5 hover:border-emerald-500/50 transition-colors group cursor-default flex flex-col gap-2 md:col-start-2 lg:col-start-auto">
+                <button onclick="openModule('wealth')" class="p-5 rounded-2xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-white/5 hover:border-emerald-500/50 hover:shadow-lg dark:hover:shadow-[0_4px_20px_-5px_rgba(16,185,129,0.15)] transition-all transform hover:scale-[1.02] group text-left flex flex-col gap-2 md:col-start-2 lg:col-start-auto focus:outline-none">
                     <div class="w-10 h-10 rounded-xl bg-emerald-50 dark:bg-emerald-500/10 flex items-center justify-center">
                         <svg class="w-5 h-5 text-emerald-600 dark:text-emerald-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 21h18M3 10h18M5 6l7-3 7 3M4 10v11m16-11v11M8 14v3m4-3v3m4-3v3"></path></svg>
                     </div>
                     <span class="font-semibold text-slate-900 dark:text-slate-200">Wealth</span>
                     <span class="text-xs text-slate-500">Net Balance & FIRE Simulator</span>
-                </div>
+                </button>
 
             </div>
         </div>
@@ -484,14 +531,12 @@
                     </ul>
                 </div>
                 <div class="lg:w-1/2 relative mt-12 lg:mt-0">
-                    <!-- Tech Stack graphic -->
                     <div class="aspect-square w-full max-w-md mx-auto relative flex items-center justify-center">
                         <div class="absolute inset-0 border border-slate-200 dark:border-white/5 rounded-full animate-spin-slow"></div>
                         <div class="absolute inset-8 border border-slate-200 dark:border-white/5 rounded-full animate-[spin_40s_linear_infinite_reverse]"></div>
                         <div class="absolute inset-16 border border-slate-300 dark:border-white/10 rounded-full border-dashed animate-[spin_30s_linear_infinite]"></div>
                         
                         <div class="w-32 h-32 bg-gradient-to-br from-indigo-500 to-purple-600 rounded-3xl shadow-[0_0_40px_rgba(99,102,241,0.5)] flex items-center justify-center z-10 rotate-3 hover:rotate-0 transition-all duration-300 cursor-default">
-                            <!-- Apple Icon SVG -->
                             <svg class="w-16 h-16 text-white" viewBox="0 0 24 24" fill="currentColor"><path d="M17.701 4.542c-2.42-2.155-5.918-2.505-8.59-.838-3.052 1.89-4.045 5.922-2.222 9.034.425.727 1.002 1.34 1.685 1.802.261.176.438.455.495.772.062.348-.052.705-.308.951-1.391 1.346-2.484 2.92-3.178 4.675-.125.32-.424.538-.767.538h-1.282c-.896 0-1.534-.848-1.272-1.706C3.411 15.932 5.892 12.63 9.4 10.378c2.97-1.905 6.843-1.636 9.535.656 2.454 2.089 3.42 5.485 2.441 8.583-.165.526-.642.883-1.196.883H18.9c-.347 0-.661-.2-.8-.517-.864-1.972-2.138-3.708-3.743-5.111-.274-.24-.41-.6-.367-.968.046-.388.277-.724.618-.902.607-.318 1.16-.723 1.637-1.199 1.488-1.487 2.115-3.662 1.456-5.261z"/></svg>
                         </div>
                     </div>
@@ -500,7 +545,7 @@
         </div>
     </section>
 
-    <!-- Pricing & Opportunity Cost -->
+    <!-- Pricing -->
     <section id="pricing" class="py-24 bg-slate-50 dark:bg-slate-900 border-t border-slate-200 dark:border-white/5 relative z-10 transition-colors duration-300">
         <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
             <div class="text-center mb-16">
@@ -510,7 +555,6 @@
             </div>
 
             <div class="flex flex-col lg:flex-row gap-8 items-stretch max-w-5xl mx-auto">
-                <!-- Bad SaaS Card -->
                 <div class="flex-1 p-8 rounded-3xl bg-white dark:bg-slate-950 border border-red-200 dark:border-red-500/20 flex flex-col relative overflow-hidden transition-colors">
                     <div class="absolute top-0 left-0 w-full h-1 bg-gradient-to-r from-red-500 to-orange-500 dark:from-red-600 dark:to-orange-500"></div>
                     <h3 class="text-2xl font-bold text-slate-700 dark:text-slate-300 mb-2">Web SaaS Platforms</h3>
@@ -541,7 +585,6 @@
                     </div>
                 </div>
 
-                <!-- BlueChip Card -->
                 <div class="flex-1 p-8 rounded-3xl bg-blue-50 dark:bg-slate-900 border-2 border-blue-500/40 relative flex flex-col transform scale-105 shadow-[0_0_30px_rgba(59,130,246,0.1)] dark:shadow-[0_0_50px_rgba(59,130,246,0.15)] z-10 transition-colors">
                     <div class="absolute -top-4 right-8 bg-gradient-to-r from-blue-500 to-purple-500 text-white text-xs font-bold px-3 py-1 rounded-full shadow-lg uppercase tracking-wider">
                         Sovereign Investor
@@ -608,6 +651,29 @@
         </div>
     </footer>
 
+    <!-- Module Detail Modal (Hidden by default) -->
+    <div id="module-modal" class="fixed inset-0 z-[100] hidden flex items-center justify-center p-4 sm:p-6 opacity-0 transition-opacity duration-300">
+        <!-- Backdrop -->
+        <div id="modal-backdrop" class="absolute inset-0 bg-slate-900/60 dark:bg-black/60 backdrop-blur-md cursor-pointer transition-opacity"></div>
+        
+        <!-- Modal Content Container -->
+        <div id="modal-content" class="relative w-full max-w-3xl bg-white dark:bg-slate-900 rounded-3xl shadow-2xl border border-slate-200 dark:border-white/10 flex flex-col max-h-[85vh] transform scale-95 transition-transform duration-300">
+            
+            <!-- Close Button -->
+            <button id="close-modal" class="absolute top-5 right-5 w-8 h-8 rounded-full bg-slate-100 dark:bg-slate-800 text-slate-500 dark:text-slate-400 flex items-center justify-center hover:bg-slate-200 dark:hover:bg-slate-700 hover:text-slate-900 dark:hover:text-white transition-colors z-10 focus:outline-none">
+                <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path></svg>
+            </button>
+
+            <!-- Scrollable Content -->
+            <div class="overflow-y-auto custom-scrollbar p-8 sm:p-10">
+                <!-- Header Injected via JS -->
+                <div id="modal-header" class="mb-8"></div>
+                <!-- Body Injected via JS -->
+                <div id="modal-body" class="prose prose-slate dark:prose-invert max-w-none text-slate-600 dark:text-slate-300 font-light leading-relaxed"></div>
+            </div>
+        </div>
+    </div>
+
     <!-- Scripts -->
     <script>
         // --- Theme Toggle Logic ---
@@ -615,7 +681,6 @@
         const darkIcon = document.getElementById('theme-toggle-dark-icon');
         const lightIcon = document.getElementById('theme-toggle-light-icon');
 
-        // Initial Setup Check
         if (localStorage.getItem('color-theme') === 'light' || (!('color-theme' in localStorage) && !window.matchMedia('(prefers-color-scheme: dark)').matches)) {
             document.documentElement.classList.remove('dark');
             darkIcon.classList.remove('hidden'); 
@@ -643,69 +708,601 @@
             const prevBtn = document.getElementById('slider-prev');
             const nextBtn = document.getElementById('slider-next');
             const dots = document.querySelectorAll('.slider-dot');
-            const totalSlides = 7;
+            const totalSlides = 8;
             let currentSlide = 0;
             let slideInterval;
 
             function updateSlider() {
-                // Move slider
                 slider.style.transform = `translateX(-${currentSlide * 100}%)`;
-                
-                // Update dots styling
                 dots.forEach((dot, index) => {
                     if (index === currentSlide) {
                         dot.classList.remove('bg-white/40');
                         dot.classList.add('bg-white');
-                        dot.classList.replace('w-2', 'w-4'); // Expand active dot
+                        dot.classList.replace('w-2', 'w-4');
                     } else {
                         dot.classList.remove('bg-white');
                         dot.classList.add('bg-white/40');
-                        dot.classList.replace('w-4', 'w-2'); // Shrink inactive dots
+                        dot.classList.replace('w-4', 'w-2');
                     }
                 });
             }
 
-            function nextSlide() {
-                currentSlide = (currentSlide + 1) % totalSlides;
-                updateSlider();
-            }
+            function nextSlide() { currentSlide = (currentSlide + 1) % totalSlides; updateSlider(); }
+            function prevSlide() { currentSlide = (currentSlide - 1 + totalSlides) % totalSlides; updateSlider(); }
+            function startInterval() { slideInterval = setInterval(nextSlide, 5000); }
+            function resetInterval() { clearInterval(slideInterval); startInterval(); }
 
-            function prevSlide() {
-                currentSlide = (currentSlide - 1 + totalSlides) % totalSlides;
-                updateSlider();
-            }
-
-            function startInterval() {
-                slideInterval = setInterval(nextSlide, 5000);
-            }
-
-            function resetInterval() {
-                clearInterval(slideInterval);
-                startInterval();
-            }
-
-            nextBtn.addEventListener('click', () => {
-                nextSlide();
-                resetInterval(); // Reset timer so it doesn't swipe immediately after manual click
-            });
-
-            prevBtn.addEventListener('click', () => {
-                prevSlide();
-                resetInterval();
-            });
-
+            nextBtn.addEventListener('click', () => { nextSlide(); resetInterval(); });
+            prevBtn.addEventListener('click', () => { prevSlide(); resetInterval(); });
             dots.forEach((dot, index) => {
-                dot.addEventListener('click', () => {
-                    currentSlide = index;
-                    updateSlider();
-                    resetInterval();
-                });
+                dot.addEventListener('click', () => { currentSlide = index; updateSlider(); resetInterval(); });
             });
 
-            // Initialize
             updateSlider();
             startInterval();
         });
+
+        // --- Modal & Module Data Logic ---
+        const moduleData = {
+            'composition': {
+                title: 'Composition',
+                iconSvg: '<svg class="w-10 h-10 text-blue-600 dark:text-blue-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M11 3.055A9.001 9.001 0 1020.945 13H11V3.055z"></path><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M20.488 9H15V3.512A9.025 9.025 0 0120.488 9z"></path></svg>',
+                colorClass: 'bg-blue-50 dark:bg-blue-500/10',
+                content: `
+                    <p class="font-bold text-lg text-slate-900 dark:text-white mb-2">The Central Command Center of Your Portfolio</p>
+                    <p class="mb-6">The Composition page serves as your high-level dashboard, providing a holistic and comprehensive snapshot of your overall invested capital, available cash, and total unrealized returns.</p>
+                    
+                    <p class="font-bold text-lg text-slate-900 dark:text-white mb-2">The Executive Dashboard</p>
+                    <p class="mb-3">At the top of the page, you will find 8 key metric cards.</p>
+                    <ul class="list-disc pl-5 mb-6 space-y-2">
+                        <li><strong>Manual Inputs:</strong> You only need to manually update two metrics. Click the pencil icon on the <strong>Cash</strong> card to log your available liquidity, and the <strong>Initial Investment</strong> card to track your total out-of-pocket deposits.</li>
+                        <li><strong>Automated Metrics:</strong> The remaining six cards (Total Value, Unrealized P/L, Positions count, Annual Dividends, etc.) are calculated automatically in real-time based on your holdings and live market data!</li>
+                    </ul>
+                    
+                    <p class="font-bold text-lg text-slate-900 dark:text-white mb-2">Custom Portfolio Goals</p>
+                    <p class="mb-6">Just below the dashboard, you can track your overarching financial objective using the Goal Progress Bar. <strong>Double-click</strong> the bar to configure it. You can choose to track either your <em>Initial Investment</em> milestone or your <em>Total Portfolio Value</em> objective. Simply enter your target amount, and the progress bar will automatically update as your wealth grows.</p>
+                    
+                    <p class="font-bold text-lg text-slate-900 dark:text-white mb-2">Adding & Managing Assets</p>
+                    <p class="mb-3">To register a new holding, click the <strong>+ Add</strong> button at the top right of the application (or use the shortcut <strong>⌘ + N</strong>). You will need to provide:</p>
+                    <ul class="list-disc pl-5 mb-4 space-y-2">
+                        <li><strong>Asset Information:</strong> Ticker (e.g., AAPL), Company Name, Country, Sector, and Market Cap.</li>
+                        <li><strong>Investment Details:</strong> Your exact Quantity, Average Cost (PRU), and Purchase Date.</li>
+                        <li><strong>Dividend Data (Optional):</strong> Annual Dividend per share, 5Y Growth rate, and payout months.</li>
+                    </ul>
+                    <p class="mb-3 italic opacity-80">(Note: Live pricing and USD/EUR FX rates are fetched automatically based on the ticker!)</p>
+                    <p class="mb-6">To modify an existing asset, simply <strong>double-click</strong> its row in the main table.</p>
+                    
+                    <p class="font-bold text-lg text-slate-900 dark:text-white mb-2">Interactive Positions Table</p>
+                    <p class="mb-6">Your holdings are displayed in a powerful data table. You can dynamically sort your portfolio by clicking on any column header (e.g., sort by P/L %, Total Value, or Ticker). Click the exact same column header again to reverse the sorting order (ascending/descending).</p>
+                    
+                    <p class="font-bold text-lg text-slate-900 dark:text-white mb-2">Visual Analytics & Charts</p>
+                    <p class="mb-3">Scroll down to explore 12 institutional-grade diagnostics:</p>
+                    <ul class="list-disc pl-5 mb-6 space-y-2">
+                        <li><strong>Weight by Position:</strong> A classic donut chart breaking down the exact percentage each individual stock represents in your overall portfolio.</li>
+                        <li><strong>Macro Allocation (Geography, Sector, Market Cap):</strong> Three dedicated donut charts analyzing your structural diversification by country, industry sector, and company size.</li>
+                        <li><strong>Currency Exposure:</strong> A donut chart revealing your underlying foreign exchange (FX) risk across different currencies, including your available cash.</li>
+                        <li><strong>Estimated Asset Correlation:</strong> A heatmap matrix estimating how your assets move in relation to one another to ensure true structural diversification.</li>
+                        <li><strong>Avg Cost vs Current Price:</strong> A comparative bar chart mapping your Average Cost (PRU) directly against the live Current Price for every holding.</li>
+                        <li><strong>Return on Investment (P/L):</strong> A dual-axis combo chart tracking your unrealized performance in both absolute Currency and percentage terms.</li>
+                        <li><strong>Weight vs Unrealized Performance:</strong> A crucial scatter plot ensuring your heaviest portfolio allocations are actually generating the highest returns.</li>
+                        <li><strong>Capital Status:</strong> A donut chart showing what proportion of your originally invested capital is currently generating a positive return versus running at a loss.</li>
+                        <li><strong>Performance Heatmap:</strong> An interactive treemap scaling your holdings by portfolio weight and dynamically color-coding them by their performance intensity.</li>
+                        <li><strong>Daily P/L by Holding Period:</strong> A bar chart tracking the daily equivalent return for each position based on how long you've held it in your portfolio.</li>
+                    </ul>
+                    
+                `
+            },
+            'fundamentals': {
+                title: 'Fundamentals',
+                iconSvg: '<svg class="w-10 h-10 text-teal-600 dark:text-teal-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 21V5a2 2 0 00-2-2H7a2 2 0 00-2 2v16m14 0h2m-2 0h-5m-9 0H3m2 0h5M9 7h1m-1 4h1m4-4h1m-1 4h1m-5 10v-5a1 1 0 011-1h2a1 1 0 011 1v5m-4 0h4"></path></svg>',
+                colorClass: 'bg-teal-50 dark:bg-teal-500/10',
+                content: `
+                    <p class="font-bold text-lg text-slate-900 dark:text-white mb-2">The Ultimate Stock Quality Screener</p>
+                    <p class="mb-6">The Fundamentals page is a powerful, fully customizable screener designed to evaluate the intrinsic quality of your portfolio. Rather than relying on generic external ratings, you build your own scoring engine to rank your stocks based on the financial metrics that matter most to your strategy.</p>
+                    
+                    <p class="font-bold text-lg text-slate-900 dark:text-white mb-2">The Executive Dashboard</p>
+                    <p class="mb-6">At the top of the page, the 8-card dashboard is generated <strong>entirely automatically</strong> based on your screener data. It provides an instant snapshot of your portfolio's average quality score, your highest-rated stock, and the specific fundamental categories where your portfolio excels or lags.</p>
+                    
+                    <p class="font-bold text-lg text-slate-900 dark:text-white mb-2">Building Your Scoring Engine</p>
+                    <p class="mb-3">Click the <strong>+ Add Criterion</strong> button to create a new metric (e.g., Gross Margin, P/E Ratio, Payout Ratio).</p>
+                    <ul class="list-disc pl-5 mb-6 space-y-2">
+                        <li><strong>Data Types:</strong> You can flexibly define each criterion to be evaluated as a Boolean (Yes/No condition), a Percentage, or a standard Numeric Value.</li>
+                        <li><strong>Scoring Thresholds:</strong> For numeric and percentage metrics, you define two targets: a Premium Threshold and a Standard Threshold. Meeting these targets awards points to the stock, multiplied by the weight you assign to the metric.</li>
+                        <li><strong>Reference Links:</strong> You can attach a dynamic web link to any criterion. When it's time to enter data for a holding, a built-in shortcut will instantly open your preferred financial website directly to that specific ticker's metrics page.</li>
+                        <li><strong>Custom Sections & Layout:</strong> Group your criteria into logical categories (e.g., <em>PROFITABILITY, GROWTH, DEBT</em>) and use the <strong>Reorder Layout</strong> button to seamlessly drag and drop your columns into your preferred order.</li>
+                    </ul>
+                    
+                    <p class="font-bold text-lg text-slate-900 dark:text-white mb-2">Data Entry & Portfolio Weighted Averages</p>
+                    <p class="mb-3">Click on any cell in the spreadsheet to input the financial data for a specific stock. The system will instantly color-code the result (Green for Premium, Blue for Standard, Red for Failed) and recalculate the stock's total score.</p>
+                    <p class="mb-3">To modify an existing criterion's underlying rules or weight, simply <strong>double-click</strong> its column header in the table.</p>
+                    <p class="mb-6">At the bottom of the spreadsheet, the <strong>WEIGHTED AVG</strong> row calculates the true fundamental health of your entire portfolio by weighting each stock's score according to its actual capital allocation.</p>
+                    
+                    <p class="font-bold text-lg text-slate-900 dark:text-white mb-2">Visual Analytics & Charts</p>
+                    <p class="mb-3">Scroll down to explore 6 dynamic, institutional-grade visualizations:</p>
+                    <ul class="list-disc pl-5 mb-6 space-y-2">
+                        <li><strong>Quality Score Comparison:</strong> A clear, ranked bar chart of your stocks based on their total fundamental score.</li>
+                        <li><strong>Score Composition Profile:</strong> A stacked bar chart breaking down exactly how each stock earns its points across your custom sections.</li>
+                        <li><strong>Quality Matrix (Score vs Weight):</strong> A crucial scatter plot ensuring your heaviest portfolio weights are correctly allocated to your highest-quality stocks.</li>
+                        <li><strong>Stock Quality by Segment:</strong> A comparative line chart to easily identify which stocks dominate specific fundamental categories.</li>
+                        <li><strong>Weighted Portfolio Scorecard:</strong> A polar area chart summarizing the macro-fundamental health of your overall portfolio.</li>
+                        <li><strong>Stock Radar Profiles:</strong> A classic radar web comparing the multi-dimensional footprint of your individual holdings.</li>
+                    </ul>
+                    
+                `
+            },
+            'growth': {
+                title: 'Growth',
+                iconSvg: '<svg class="w-10 h-10 text-green-600 dark:text-green-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 7h8m0 0v8m0-8l-8 8-4-4-6 6"></path></svg>',
+                colorClass: 'bg-green-50 dark:bg-green-500/10',
+                content: `
+                    <p class="font-bold text-lg text-slate-900 dark:text-white mb-2">The Wealth Accumulator Engine</p>
+                    <p class="mb-6">The Growth page is your long-term performance tracker. It isolates your out-of-pocket deposits from pure market returns to reveal your true compounding trajectory over time.</p>
+                    
+                    <p class="font-bold text-lg text-slate-900 dark:text-white mb-2">The Executive Dashboard</p>
+                    <p class="mb-6">At the top of the page, 8 fully automated metric cards provide a real-time summary of your capital appreciation. You can instantly track your Current Wallet Value, Total Invested Capital, and All-Time Returns. Advanced metrics like your Compound Annual Growth Rate (CAGR), Average Yearly Returns, and Best Year Return are continuously recalculated as your portfolio evolves.</p>
+                    
+                    <p class="font-bold text-lg text-slate-900 dark:text-white mb-2">Custom Annual Targets</p>
+                    <p class="mb-6">Just below the dashboard, you can monitor your performance against your personalized annual goal. <strong>Double-click</strong> the progress bar to configure whether you want to target a specific <em>Percentage Return (%)</em> or an <em>Absolute Amount</em> for the ongoing year.</p>
+                    
+                    <p class="font-bold text-lg text-slate-900 dark:text-white mb-2">Portfolio Structure & Gains</p>
+                    <p class="mb-3">Three side-by-side donut charts break down your exact wealth composition:</p>
+                    <ul class="list-disc pl-5 mb-6 space-y-2">
+                        <li><strong>Cash vs Stocks:</strong> Visualizes your deployment ratio (Dry Powder vs Invested Capital).</li>
+                        <li><strong>Value Source:</strong> Separates your net deposits from your market-generated gains.</li>
+                        <li><strong>Gains Source:</strong> Breaks down your total gains between collected Dividends and pure Capital Appreciation.</li>
+                    </ul>
+                    
+                    <p class="font-bold text-lg text-slate-900 dark:text-white mb-2">Capital Growth History (The Spreadsheet)</p>
+                    <p class="mb-3">This table is the engine of the Growth page. To make it work, you must manually input three values for each past year: <strong>Start Wallet</strong>, <strong>Invested</strong> (Net deposits during the year), and <strong>End Wallet</strong>. The system will automatically calculate your exact Return in absolute value and % for each year.</p>
+                    <p class="mb-3 italic opacity-80">(Note: The current year's End Wallet is automatically synced to your live portfolio value!).</p>
+                    <p class="mb-6">To adjust the timeline of this table, open your <strong>Preferences (⌘ + ,)</strong> and set your <em>Investment Start Year</em>. The table will automatically generate rows from that specific year up to the present day.</p>
+                    
+                    <p class="font-bold text-lg text-slate-900 dark:text-white mb-2">Advanced Growth Analytics</p>
+                    <p class="mb-3">Scroll down to explore 6 advanced institutional-grade charts based on your spreadsheet data:</p>
+                    <ul class="list-disc pl-5 mb-6 space-y-2">
+                        <li><strong>Annual Returns:</strong> A dual-axis combo chart tracking your absolute and relative (%) performance year-over-year.</li>
+                        <li><strong>Invested vs Portfolio Value:</strong> An area chart visualizing the widening gap between what you put in and what it's worth.</li>
+                        <li><strong>Wealth Accumulation Waterfall:</strong> A clear step-by-step bridge showing exactly how your initial capital grew into your current wealth.</li>
+                        <li><strong>MoIC Trend:</strong> Tracks your <em>Multiple on Invested Capital</em> (Money on Money), showing how many times you've multiplied your out-of-pocket cash.</li>
+                        <li><strong>The Tipping Point:</strong> A bar chart comparing your active effort (Contributions) against passive market returns. Watch for the year your money starts working harder than you do!</li>
+                        <li><strong>The Compounding Stack:</strong> A 100% stacked bar chart revealing how investment growth eventually snowballs and overtakes your principal capital.</li>
+                    </ul>
+                    
+                `
+            },
+            'dividends': {
+                title: 'Dividends',
+                iconSvg: '<svg class="w-10 h-10 text-yellow-600 dark:text-yellow-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8c1.11 0 2.08-.402-2.599-1M12 8V7m0 1v8m0 0v1m0-1c-1.11 0-2.08-.402-2.599-1M21 12a9 9 0 11-18 0 9 9 0 0118 0z"></path></svg>',
+                colorClass: 'bg-yellow-50 dark:bg-yellow-500/10',
+                content: `
+                    <p class="font-bold text-lg text-slate-900 dark:text-white mb-2">The Passive Income Engine</p>
+                    <p class="mb-6">The Dividends page is your ultimate cash flow command center. It bridges the gap between your theoretical projected yields and your actual out-of-pocket cash collected, allowing you to master your passive income snowball.</p>
+                    
+                    <p class="font-bold text-lg text-slate-900 dark:text-white mb-2">The Executive Dashboard</p>
+                    <p class="mb-6">At the top of the page, 8 fully automated metric cards summarize your cash flow health. You can instantly track your <em>Total Received (All Time)</em>, <em>Projected Annual Income</em>, and <em>Projected Portfolio Yield</em>. The dashboard also monitors your momentum by calculating your <em>YoY Growth</em> against last year, your <em>Avg. Monthly</em> income, and highlighting your <em>Best Year</em> on record.</p>
+                    
+                    <p class="font-bold text-lg text-slate-900 dark:text-white mb-2">Custom Income Targets</p>
+                    <p class="mb-6">Set a personalized passive income goal using the progress bar. <strong>Double-click</strong> the bar to toggle your objective: you can either aim for a target <em>Portfolio Yield (%)</em> or a flat <em>Annual Expected Dividends</em> amount.</p>
+                    
+                    <p class="font-bold text-lg text-slate-900 dark:text-white mb-2">Projected Analytics</p>
+                    <p class="mb-3">Two forward-looking charts map out your portfolio's potential:</p>
+                    <ul class="list-disc pl-5 mb-6 space-y-2">
+                        <li><strong>Expected Monthly Income:</strong> A bar chart comparing your Gross vs Net expected payouts for all 12 months based on your current holdings.</li>
+                        <li><strong>Current Stock Yield:</strong> A visual ranking of your individual stocks by their current dividend yield.</li>
+                    </ul>
+                    
+                    <p class="font-bold text-lg text-slate-900 dark:text-white mb-2">This Month's Payout Radar</p>
+                    <p class="mb-6">A dedicated, interactive tracker for the current ongoing month. The system automatically identifies which stocks are scheduled to pay you and exactly how much you should expect. Use the mini-table to log the actual cash you receive, and watch your monthly progress donut chart fill up to 100%!</p>
+                    
+                    <p class="font-bold text-lg text-slate-900 dark:text-white mb-2">Manual Dividend Tracker (The Spreadsheet)</p>
+                    <p class="mb-3">This is your core accounting tool for historical tracking. Simply input the net dividends you receive each month (Jan-Dec) for every year, and the table will automatically calculate your annual totals.</p>
+                    <p class="mb-6 italic opacity-80">(Note: To adjust the timeline of this table, open your <strong>Preferences (⌘ + ,)</strong> and set your 'Investment Start Year'. The spreadsheet will generate rows from that date up to the current year).</p>
+                    
+                    <p class="font-bold text-lg text-slate-900 dark:text-white mb-2">Advanced Income Analytics</p>
+                    <p class="mb-3">Scroll down to explore 8 advanced visualizations powered by your spreadsheet data:</p>
+                    <ul class="list-disc pl-5 mb-6 space-y-2">
+                        <li><strong>Received This Year & Annual Received History:</strong> Two bar charts tracking your manual monthly receipts for the current year, and your macro year-over-year progression.</li>
+                        <li><strong>Total Dividends by Position & Yield On Cost (YOC):</strong> Discover which stocks are your biggest cash cows, and track your true YOC (how much your dividend has grown relative to your original purchase price).</li>
+                        <li><strong>All-Time History & Trend:</strong> A majestic area chart mapping your entire dividend journey since inception, complete with an algorithmic trendline.</li>
+                        <li><strong>Dividend Calendar Heatmap:</strong> A visual matrix showing exactly which stocks pay during which months, highlighting payout concentration risks.</li>
+                        <li><strong>Cumulative Monthly Seasonality:</strong> Aggregates your all-time data to reveal your strongest and weakest payout months historically.</li>
+                        <li><strong>Dividend Growth Rate (YoY DGR):</strong> A line chart tracking the crucial year-over-year percentage increase of your total dividends, showing the true speed of your compounding engine.</li>
+                    </ul>
+                    
+                `
+            },
+            'valuation': {
+                title: 'Valuation',
+                iconSvg: '<svg class="w-10 h-10 text-indigo-600 dark:text-indigo-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 6l3 1m0 0l-3 9a5.002 5.002 0 006.001 0M6 7l3 9M6 7l6-2m6 2l3-1m-3 1l-3 9a5.002 5.002 0 006.001 0M18 7l3 9m-3-9l-6-2m0-2v2m0 16V5m0 16H9m3 0h3"></path></svg>',
+                colorClass: 'bg-indigo-50 dark:bg-indigo-500/10',
+                content: `
+                    <p class="font-bold text-lg text-slate-900 dark:text-white mb-2">The Intrinsic Value Command Center</p>
+                    <p class="mb-6">The Valuation page is your dedicated pricing and risk assessment engine. It empowers you to look beyond daily market noise by evaluating your holdings through strict fundamental pricing models, historical multiples, and cash flow yields.</p>
+                    
+                    <p class="font-bold text-lg text-slate-900 dark:text-white mb-2">The Executive Dashboard</p>
+                    <p class="mb-6">At the top of the page, the 8-card dashboard is generated <strong>entirely automatically</strong> based on the data you provide. It delivers an instant macro-snapshot of your portfolio's valuation health, revealing the number of Undervalued Stocks, the Average Fair Price Upside, and comprehensive portfolio-wide multiples such as the Average Current P/E, Historical 10Y P/E, and PEG Ratio.</p>
+                    
+                    <p class="font-bold text-lg text-slate-900 dark:text-white mb-2">Risk Controls & Global Data Links</p>
+                    <p class="mb-3">Just below the dashboard, you have total control over your pricing conservatism:</p>
+                    <ul class="list-disc pl-5 mb-6 space-y-2">
+                        <li><strong>Global Margin of Safety:</strong> Use the slider to enforce a strict discount (adjustable from 0% up to 50%) across all your intrinsic value calculations. A 20% margin means you demand a 20% discount on the fair price before considering a stock undervalued.</li>
+                        <li><strong>Global Data Links:</strong> Configure your preferred financial research websites (e.g., GuruFocus, TipRanks, FinanceCharts). By using the <code>{ticker}</code> tag in the URL, the system will automatically generate dynamic shortcuts in the edit menu to instantly pull external valuation data for any specific stock!</li>
+                    </ul>
+                    
+                    <p class="font-bold text-lg text-slate-900 dark:text-white mb-2">Valuation Spreadsheets</p>
+                    <p class="mb-3">Your data is organized into two comprehensive tables. To input or update metrics for any holding, simply <strong>double-click</strong> its row in either table:</p>
+                    <ul class="list-disc pl-5 mb-6 space-y-2">
+                        <li><strong>Price Valuation Models:</strong> Track the Current Price against Analyst Targets, GuruFocus estimates, and TipRanks consensus to determine your blended Fair Price and ultimate Upside.</li>
+                        <li><strong>Multiples & Yields:</strong> Monitor crucial pricing metrics including Current P/E, Forward P/E, 10-Year Historical P/E, Price-to-FCF, PEG Ratio, Earnings Yield, and FCF Yield.</li>
+                    </ul>
+                    
+                    <p class="font-bold text-lg text-slate-900 dark:text-white mb-2">Visual Analytics & Charts</p>
+                    <p class="mb-3">Scroll down to explore 8 sophisticated, institutional-grade visual diagnostics:</p>
+                    <ul class="list-disc pl-5 mb-6 space-y-2">
+                        <li><strong>Price vs Analyst Consensus:</strong> A comparative bar chart mapping the current price against your external fair value estimates.</li>
+                        <li><strong>Historical PE Valuation Gauge:</strong> A bullet chart pinpointing where a stock's current P/E sits relative to its 10-Year historical average.</li>
+                        <li><strong>Yield Barometer (Earnings vs Cash):</strong> A direct comparison of Earnings Yield versus Free Cash Flow (FCF) Yield.</li>
+                        <li><strong>Quality Matrix (Cash vs Accounting):</strong> A scatter plot separating true cash-generating machines from paper-profit illusions.</li>
+                        <li><strong>PEG Ratio Matrix (Price vs Growth):</strong> Evaluates if you are overpaying for growth (GARP analysis).</li>
+                        <li><strong>Portfolio Discount Heatmap:</strong> A visual treemap scaling your holdings by portfolio weight and color-coding them by their Margin of Safety upside.</li>
+                        <li><strong>Current vs Target Price:</strong> A visual gap analysis between where the stock trades today and your ultimate price target.</li>
+                        <li><strong>Valuation Range Distribution:</strong> A donut chart classifying your deployed capital into Deep Value, Fairly Valued, and Overvalued territories.</li>
+                    </ul>
+                    
+                `
+            },
+            'projections': {
+                title: 'Projections',
+                iconSvg: '<svg class="w-10 h-10 text-orange-600 dark:text-orange-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M7 12l3-3 3 3 4-4M8 21l4-4 4 4M3 4h18M4 4h16v12a1 1 0 01-1 1H5a1 1 0 01-1-1V4z"></path></svg>',
+                colorClass: 'bg-orange-50 dark:bg-orange-500/10',
+                content: `
+                    <p class="font-bold text-lg text-slate-900 dark:text-white mb-2">The Future Wealth Simulator</p>
+                    <p class="mb-6">The Projections page is your financial time machine. It uses your historical portfolio data and advanced compounding algorithms to forecast your future net worth and passive income over a multi-decade horizon.</p>
+                    
+                    <p class="font-bold text-lg text-slate-900 dark:text-white mb-2">The Executive Dashboard</p>
+                    <p class="mb-3">At the top of the page, the 8-card dashboard provides an instant <strong>fully automated</strong> comparison between your portfolio today and its projected terminal value.</p>
+                    <ul class="list-disc pl-5 mb-6 space-y-2">
+                        <li>The top row contrasts your <em>Current Portfolio Value</em> against your <em>Projected Value</em> at the end of the horizon, displaying the <em>Portfolio CAGR Used</em> and the exact <em>Projected Capital Gain</em>.</li>
+                        <li>The bottom row focuses on cash flow, comparing your <em>Current Annual Div.</em> to your <em>Projected Div.</em>, alongside your <em>Weighted 5Y Div Growth</em> rate and your future <em>Projected Monthly Div.</em></li>
+                    </ul>
+                    
+                    <p class="font-bold text-lg text-slate-900 dark:text-white mb-2">Projection Parameters & Assumptions</p>
+                    <p class="mb-3">You have complete control over the variables that dictate your compounding trajectory:</p>
+                    <ul class="list-disc pl-5 mb-6 space-y-2">
+                        <li><strong>Time Horizon:</strong> Use the slider to set your forecasting period (from 5 up to 50 years).</li>
+                        <li><strong>Capital CAGR & Dividend Growth:</strong> The system automatically calculates and applies your portfolio's real historical rates. However, you can manually override these to stress-test more conservative or aggressive scenarios.</li>
+                        <li><strong>Monthly Contributions:</strong> Toggle this on to simulate injecting fresh capital into your portfolio every month.</li>
+                        <li><strong>DRIP (Reinvest Dividends):</strong> Toggle this to activate the ultimate snowball effect, where your generated dividends automatically buy more shares to compound your returns.</li>
+                        <li><strong>Adjust for Inflation:</strong> Toggle this to discount your future terminal values by an annual inflation rate, revealing your true "Real" purchasing power rather than just "Nominal" numbers.</li>
+                    </ul>
+                    
+                    <p class="font-bold text-lg text-slate-900 dark:text-white mb-2">Visual Analytics & Charts</p>
+                    <p class="mb-3">Scroll down to explore 4 institutional-grade forecasting models:</p>
+                    <ul class="list-disc pl-5 mb-6 space-y-2">
+                        <li><strong>Portfolio Capital Growth:</strong> An area chart mapping your portfolio's total projected value alongside pure capital gains over the time horizon.</li>
+                        <li><strong>Annual Dividend Income Growth:</strong> A dual-axis chart tracking the exponential rise of your Gross Annual Dividends and your Monthly Equivalent payouts.</li>
+                        <li><strong>Total Cumulative Dividends Collected:</strong> An area chart visualizing the massive snowball effect of all cash generated and collected throughout the entire period.</li>
+                        <li><strong>Projected Yield On Cost (YOC):</strong> A vital trend line showing how your dividends scale relative to your out-of-pocket invested capital (watch for the 100% line where your portfolio effectively pays for itself!).</li>
+                    </ul>
+                    
+                    <p class="font-bold text-lg text-slate-900 dark:text-white mb-2">Year-by-Year Projection Schedule</p>
+                    <p class="mb-6">At the bottom of the page, a dynamic accounting table automatically generates a detailed row for every single year of your chosen horizon. It provides a transparent, year-by-year breakdown of your projected Portfolio Value, Cumulative Gain, and Expected Income.</p>
+                    
+                    
+                `
+            },
+            'simulation': {
+                title: 'Simulation',
+                iconSvg: '<svg class="w-10 h-10 text-purple-600 dark:text-purple-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 6V4m0 2a2 2 0 100 4m0-4a2 2 0 110 4m-6 8a2 2 0 100-4m0 4a2 2 0 110-4m0 4v2m0-6V4m6 6v10m6-2a2 2 0 100-4m0 4a2 2 0 110-4m0 4v2m0-6V4"></path></svg>',
+                colorClass: 'bg-purple-50 dark:bg-purple-500/10',
+                content: `
+                    <p class="font-bold text-lg text-slate-900 dark:text-white mb-2">The Ultimate Sandbox Environment</p>
+                    <p class="mb-6">The Simulation page is your risk-free testing ground. It creates an isolated, identical clone of your current portfolio, allowing you to test theoretical trades, rebalancing strategies, and cash deployments without ever altering your real accounting data.</p>
+                    
+                    <p class="font-bold text-lg text-slate-900 dark:text-white mb-2">The Executive Dashboard</p>
+                    <p class="mb-6">At the top of the page, 8 fully automated metric cards provide a direct, side-by-side comparison between Reality and your Sandbox. Instantly evaluate how your theoretical trades impact your <em>Total Portfolio Value</em>, <em>Available Cash</em>, <em>Annual Expected Dividends</em>, and <em>Total Portfolio Yield</em>.</p>
+                    
+                    <p class="font-bold text-lg text-slate-900 dark:text-white mb-2">The Sandbox Workbenches</p>
+                    <p class="mb-3">Below the dashboard and the Action Log, you will find two comparative tables:</p>
+                    <ul class="list-disc pl-5 mb-6 space-y-2">
+                        <li><strong>Current Portfolio (Left):</strong> A read-only snapshot of your actual, real-world holdings and weights.</li>
+                        <li><strong>Simulated Sandbox (Right):</strong> Your interactive testing environment.</li>
+                    </ul>
+                    
+                    <p class="font-bold text-lg text-slate-900 dark:text-white mb-2">Executing Simulated Trades</p>
+                    <p class="mb-3">Use the control icons above the Sandbox table to manipulate your theoretical portfolio:</p>
+                    <ul class="list-disc pl-5 mb-4 space-y-2">
+                        <li><strong>Modify Cash (Coin Icon):</strong> Add or remove simulated cash (e.g., simulating a new salary deposit or a major withdrawal).</li>
+                        <li><strong>Add/Edit Position (+ Icon):</strong> Simulate buying a new stock or selling an existing one. Enter the Ticker, click 'Fetch Price' for live data, and input the exact number of shares. You can also specify the <em>Net Dividend / Share</em> and <em>Sector</em>.</li>
+                        <li><strong>Taxes & Fees Calculator:</strong> The simulation is hyper-realistic. You can input exact <em>Broker Taxes</em> and <em>Country Taxes</em> (either as a flat amount or as a %) to see the true <em>Net Cash Impact</em> of your theoretical trade.</li>
+                        <li><strong>Reset (Arrow Icon):</strong> Instantly wipe all theoretical trades and reset the Sandbox to strictly match your current real portfolio.</li>
+                    </ul>
+                    <p class="mb-6 italic opacity-80">Note: Every trade you make is recorded in the <strong>Sandbox Actions Log</strong> just above the tables, complete with a convenient "Undo" button to revert any specific action!</p>
+                    
+                    <p class="font-bold text-lg text-slate-900 dark:text-white mb-2">Comparative Visual Analytics</p>
+                    <p class="mb-3">Scroll down to explore 8 comparative charts showing the before-and-after impact of your decisions:</p>
+                    <ul class="list-disc pl-5 mb-6 space-y-2">
+                        <li><strong>Weight by Position:</strong> Two side-by-side donuts comparing your current vs simulated stock concentration.</li>
+                        <li><strong>Sector Allocation:</strong> Evaluate how your simulated trades alter your macro sector exposure.</li>
+                        <li><strong>Total Value & Yield Impact:</strong> Two clear bar charts contrasting your absolute Wealth and your Portfolio Yield (%) before and after the trades.</li>
+                        <li><strong>Simulated Cash Allocation & Dividends:</strong> Two final donuts visualizing exactly where your freshly deployed cash was allocated and which positions are generating your new simulated dividends.</li>
+                    </ul>
+                    
+                    
+                `
+            },
+            'watchlist': {
+                title: 'Watchlist',
+                iconSvg: '<svg class="w-10 h-10 text-cyan-600 dark:text-cyan-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"></path><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z"></path></svg>',
+                colorClass: 'bg-cyan-50 dark:bg-cyan-500/10',
+                content: `
+                    <p class="font-bold text-lg text-slate-900 dark:text-white mb-2">The Prospective Command Center</p>
+                    <p class="mb-6">The Watchlist page is your dedicated scouting environment. It allows you to monitor potential future investments, evaluate their intrinsic value, and strictly compare their fundamental quality against the assets you already own in your portfolio.</p>
+                    
+                    <p class="font-bold text-lg text-slate-900 dark:text-white mb-2">The Executive Dashboard</p>
+                    <p class="mb-6">At the top of the page, an 8-card dashboard is generated <strong>entirely automatically</strong> based on your tracked stocks. It provides an instant macro-snapshot of your prospective targets, revealing the number of Undervalued Companies, Average Target Upside, Average PEG Ratio, and highlighting your ultimate 'Top Pick' based on Fair Price upside.</p>
+                    
+                    <p class="font-bold text-lg text-slate-900 dark:text-white mb-2">Risk Controls & Data Sourcing</p>
+                    <p class="mb-3">Just below the dashboard, you have total control over your monitoring tools:</p>
+                    <ul class="list-disc pl-5 mb-6 space-y-2">
+                        <li><strong>Margin of Safety:</strong> Use the slider (adjustable from 0% up to 50%) to enforce a strict discount on your Fair Price calculations across the entire watchlist.</li>
+                        <li><strong>Live Data Fetching:</strong> Click the <strong>Fetch Prices</strong> button to instantly update the current market price of all your tracked stocks.</li>
+                        <li><strong>Global Data Links:</strong> Configure your preferred financial research websites (e.g., GuruFocus, TipRanks). The system uses the <code>{ticker}</code> tag to generate dynamic shortcuts, allowing you to open web pages for specific stock metrics with a single click!</li>
+                    </ul>
+                    
+                    <p class="font-bold text-lg text-slate-900 dark:text-white mb-2">Watchlist Valuation Table</p>
+                    <p class="mb-6">Your prospective stocks are organized in a powerful, interactive data table. You can instantly sort the list by any column—such as Fair Price, Forward P/E, PEG, or Upside—to bubble the best bargains to the top. To modify a stock's metrics or target prices, simply <strong>double-click</strong> its row.</p>
+                    
+                    <p class="font-bold text-lg text-slate-900 dark:text-white mb-2">Valuation Visual Analytics</p>
+                    <p class="mb-3">Scroll down to explore 4 dedicated chart modules for your prospective stocks:</p>
+                    <ul class="list-disc pl-5 mb-6 space-y-2">
+                        <li><strong>Valuation & Target Prices Comparison:</strong> A bar chart mapping the current price against your external fair value estimates.</li>
+                        <li><strong>PE Valuation (Current vs Fwd vs 10Y):</strong> Evaluates if the stock is historically cheap and expected to grow.</li>
+                        <li><strong>PEG Ratio Analysis:</strong> A targeted chart hunting for growth at a reasonable price (PEG ≤ 1.0).</li>
+                        <li><strong>Potential Upside %:</strong> Compares the specific percentage gap to your Target Price versus your Fair Price.</li>
+                    </ul>
+                    
+                    <p class="font-bold text-lg text-slate-900 dark:text-white mb-2">Quality Analysis Laboratory</p>
+                    <p class="mb-3">At the bottom of the page lies the Laboratory. This section strictly uses the custom scoring engine and criteria you built on the <strong>Fundamentals</strong> page to analyze a prospective stock!</p>
+                    <ul class="list-disc pl-5 mb-6 space-y-2">
+                        <li><strong>Strengths (+) & Weaknesses (-):</strong> Select a watchlist stock from the dropdown. The system will automatically compare its fundamental metrics against the <em>weighted average of your actual portfolio</em>, generating a clear list of fundamental strengths and weaknesses.</li>
+                        <li><strong>Analyzed Stock vs Portfolio Avg:</strong> A direct bar chart comparing the total quality score of the prospective stock against your current portfolio's average score.</li>
+                        <li><strong>Stock Radar Profile:</strong> A stunning spider web chart contrasting the multi-dimensional fundamental footprint of the targeted stock against your existing holdings.</li>
+                    </ul>
+                    
+                `
+            },
+            'exposure': {
+                title: 'Exposure',
+                iconSvg: '<svg class="w-10 h-10 text-rose-600 dark:text-rose-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3.055 11H5a2 2 0 012 2v1a2 2 0 002 2 2 2 0 012 2v2.945M8 3.935V5.5A2.5 2.5 0 0010.5 8h.5a2 2 0 012 2 2 2 0 104 0 2 2 0 012-2h1.064M15 20.488V18a2 2 0 012-2h3.064M21 12a9 9 0 11-18 0 9 9 0 0118 0z"></path></svg>',
+                colorClass: 'bg-rose-50 dark:bg-rose-500/10',
+                content: `
+                    <p class="font-bold text-lg text-slate-900 dark:text-white mb-2">The Global Risk Command Center</p>
+                    <p class="mb-6">The Exposure page is your macroeconomic risk manager. Instead of simply looking at where a company is headquartered, it dives deep into actual geographic revenue streams to reveal your true geopolitical footprint and foreign exchange (FX) risks.</p>
+                    
+                    <p class="font-bold text-lg text-slate-900 dark:text-white mb-2">The Executive Dashboard</p>
+                    <p class="mb-6">At the top of the page, 8 fully automated metric cards instantly quantify your global diversification. The dashboard automatically calculates your <em>Weighted USA Exposure</em> versus <em>Rest of World (ROW)</em>, tracks the percentage of <em>Unassigned Revenue</em> in your portfolio, and estimates your overall <em>FX Risk</em> (non-USA exposure). It also monitors your data quality by tracking how many stocks are <em>Fully Mapped</em> to 100%.</p>
+                    
+                    <p class="font-bold text-lg text-slate-900 dark:text-white mb-2">Macro Rankings & FX Matrices</p>
+                    <p class="mb-3">Just below the dashboard, two automated modules summarize your risk concentrations:</p>
+                    <ul class="list-disc pl-5 mb-6 space-y-2">
+                        <li><strong>Top Dominant Markets:</strong> Ranks your absolute highest regional exposures across your entire portfolio.</li>
+                        <li><strong>FX Risk Matrix:</strong> Automatically groups your global revenues into major currency zones (USD/Americas, EUR-GBP/EMEA, JPY-CNY/Asia, and Emerging Markets) to highlight potential currency headwinds or tailwinds.</li>
+                    </ul>
+                    
+                    <p class="font-bold text-lg text-slate-900 dark:text-white mb-2">Revenue Segmentation Table & Data Sourcing</p>
+                    <p class="mb-3">Your stocks are listed in a massive, interactive geographic matrix. To map a stock's revenue, <strong>double-click</strong> its row.</p>
+                    <ul class="list-disc pl-5 mb-6 space-y-2">
+                        <li>Inside the editor, a convenient <strong>Safari icon</strong> dynamically links you to the stock's GuruFocus summary page to easily fetch geographic revenue data.</li>
+                        <li>Add specific <em>Revenue Segments</em> (e.g., "China", "Europe") with their exact percentage, and toggle whether they classify as "USA" or "ROW". A built-in progress bar ensures you never exceed 100% total revenue!</li>
+                    </ul>
+                    
+                    <p class="font-bold text-lg text-slate-900 dark:text-white mb-2">Visual Analytics & Charts</p>
+                    <p class="mb-3">Scroll down to explore 4 institutional-grade geographical diagnostics:</p>
+                    <ul class="list-disc pl-5 mb-6 space-y-2">
+                        <li><strong>Weighted Portfolio Exposure:</strong> A macro donut chart visualizing your total capital balance between the United States and the Rest of the World.</li>
+                        <li><strong>Detailed Geographic Breakdown:</strong> An interactive 100% stacked bar chart dissecting the regional revenue components of every single stock in your portfolio.</li>
+                        <li><strong>Global Exposure Heatmap (Treemap):</strong> A stunning spatial visualization where block sizes represent your actual portfolio weight, instantly highlighting your most dominant geographic bets.</li>
+                        <li><strong>Sector × Geography Risk Matrix:</strong> A heat-mapped intersection of your industries and regions. It specifically flags dangerous structural concentrations (e.g., having 30% of your portfolio exclusively in Asian Technology) by turning orange for high-risk zones.</li>
+                    </ul>
+                    
+                `
+            },
+            'transactions': {
+                title: 'Transactions',
+                iconSvg: '<svg class="w-10 h-10 text-sky-600 dark:text-sky-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 7h12m0 0l-4-4m4 4l-4 4m0 6H4m0 0l4 4m-4-4l4-4"></path></svg>',
+                colorClass: 'bg-sky-50 dark:bg-sky-500/10',
+                content: `
+                    <p class="font-bold text-lg text-slate-900 dark:text-white mb-2">The Behavioral & Cash Flow Ledger</p>
+                    <p class="mb-6">The Transactions page is your centralized accounting book. It provides a complete, chronological audit trail of every deposit, withdrawal, buy, and sell order you execute, allowing you to rigorously track your behavioral metrics and capital deployment.</p>
+                    
+                    <p class="font-bold text-lg text-slate-900 dark:text-white mb-2">The Executive Dashboard</p>
+                    <p class="mb-6">At the top of the page, 8 automated metric cards summarize your historic cash flows. You can instantly track your <em>Total Deposited</em> versus <em>Total Withdrawn</em> to reveal your true <em>Net Cash Flow</em>, and compare your <em>Total Bought</em> versus <em>Total Sold</em> to see your actual <em>Net Invested</em> capital. The dashboard also tracks your <em>Total Fees & Taxes</em> and the total number of <em>Transactions Found</em>.</p>
+                    
+                    <p class="font-bold text-lg text-slate-900 dark:text-white mb-2">Custom Transaction Goals</p>
+                    <p class="mb-6">Set a personalized target for the number of transactions you aim to execute using the Goal Progress Bar. <strong>Double-click</strong> the bar to set your desired transaction count.</p>
+                    
+                    <p class="font-bold text-lg text-slate-900 dark:text-white mb-2">Transaction History (The Ledger)</p>
+                    <p class="mb-3">Below the progress bar is your interactive transaction history table.</p>
+                    <ul class="list-disc pl-5 mb-6 space-y-2">
+                        <li><strong>Adding Transactions:</strong> Click the <strong>+ Add</strong> button (or use the <strong>⌘ + T</strong> shortcut) to log a new transaction. You can record the date, type (Buy, Sell, Deposit, Withdrawal), ticker, quantity, amount, and add optional notes.</li>
+                        <li><strong>Custom Columns:</strong> Click the <strong>+ Column</strong> button to add custom tracking fields, such as specific taxes (e.g., TOB) or broker fees.</li>
+                        <li><strong>Filtering & Search:</strong> The table is highly interactive. Use the <em>Time Filter</em> dropdown to view transactions from "This Month," "Year to Date," or a "Custom Range." You can also quickly filter by transaction type using the pill buttons (Buy, Sell, Deposit, etc.) or search for specific tickers or notes using the search bar.</li>
+                        <li><strong>Editing:</strong> <strong>Double-click</strong> any transaction row to modify or delete it.</li>
+                    </ul>
+                    
+                    <p class="font-bold text-lg text-slate-900 dark:text-white mb-2">Yearly Summary</p>
+                    <p class="mb-6">A consolidated table breaks down your transaction history year by year. It provides a clean aggregation of your total buys, sells, deposits, and withdrawals, alongside your total invested capital and any custom fee columns you've created.</p>
+                    
+                    <p class="font-bold text-lg text-slate-900 dark:text-white mb-2">Visual Analytics & Charts</p>
+                    <p class="mb-3">Scroll down to explore 10 analytical charts that visualize your trading behavior:</p>
+                    <ul class="list-disc pl-5 mb-6 space-y-2">
+                        <li><strong>Transactions per Year:</strong> A stacked bar chart showing the volume of each transaction type executed annually.</li>
+                        <li><strong>Summary by Type:</strong> A dual-axis chart comparing the total monetary amount versus the absolute count of each transaction type.</li>
+                        <li><strong>Buys over Time:</strong> A bar chart tracking your historical buy orders, complete with an algorithmic trendline to visualize your capital deployment velocity.</li>
+                        <li><strong>Fees & Taxes Breakdown:</strong> A donut chart illustrating exactly where your frictional costs (custom fee columns) are accumulating.</li>
+                        <li><strong>Deployed Capital Allocation:</strong> A donut chart illustrating how your total invested capital is distributed across your current holdings, grouping all sold assets into a single category.</li>
+                        <li><strong>Days Held per Asset:</strong> A bar chart tracking the holding period (in days) for each stock in your portfolio, sorted from longest to shortest duration.</li>
+                        <li><strong>Trade Balance (Buys vs Sells):</strong> A diverging bar chart comparing your annual accumulation (buys) against distribution (sells) phases to visualize your net trading activity.</li>
+                        <li><strong>Cumulative Capital Injected:</strong> An area chart tracking your "dry powder" by plotting total deposits minus withdrawals over time.</li>
+                        <li><strong>Tax Drag Index (Fees / Volume):</strong> A line chart revealing the percentage of your trading volume lost to frictional costs (broker fees, state taxes) year over year.</li>
+                        <li><strong>Activity Heatmap:</strong> A GitHub-style heatmap displaying your transaction frequency by month and year to identify seasonal trading behaviors.</li>
+                    </ul>
+                    
+                `
+            },
+            'benchmark': {
+                title: 'Benchmark',
+                iconSvg: '<svg class="w-10 h-10 text-fuchsia-600 dark:text-fuchsia-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z"></path></svg>',
+                colorClass: 'bg-fuchsia-50 dark:bg-fuchsia-500/10',
+                content: `
+                    <p class="font-bold text-lg text-slate-900 dark:text-white mb-2">The Ultimate Active vs. Passive Test</p>
+                    <p class="mb-6">The Benchmark page is where you evaluate your true "Alpha" (outperformance). It answers the most critical question in investing: Is your stock-picking strategy actually beating a simple, passive index fund?</p>
+                    
+                    <p class="font-bold text-lg text-slate-900 dark:text-white mb-2">The Executive Dashboard</p>
+                    <p class="mb-6">At the top of the page, an 8-card dashboard is generated <strong>automatically</strong> to compare your portfolio against your benchmarks. It displays your <em>Current Year Return</em>, your <em>Average Return</em>, and identifies your <em>Best Index</em>. Crucially, it instantly calculates whether you are ahead or behind your best benchmark, and translates these percentages into a concrete <em>10k Simulation</em> to show absolute wealth differences.</p>
+                    
+                    <p class="font-bold text-lg text-slate-900 dark:text-white mb-2">Custom Outperformance Goal (Alpha)</p>
+                    <p class="mb-6">Set your personal outperformance target using the Goal Progress Bar. <strong>Double-click</strong> the bar to define the exact Alpha (%) by which you aim to beat your strongest index over time.</p>
+                    
+                    <p class="font-bold text-lg text-slate-900 dark:text-white mb-2">Adding Indices & Data Sourcing</p>
+                    <p class="mb-3">To begin, click the <strong>+ Add Index</strong> button. You can name your benchmark (e.g., S&P 500, MSCI World) and optionally attach a <em>Performance Link</em> (e.g., a Yahoo Finance URL).</p>
+                    <p class="mb-6">Once added, a convenient <strong>Safari icon</strong> will appear next to the index name in the table, allowing you to instantly open your browser and fetch the required historical data with a single click!</p>
+                    
+                    <p class="font-bold text-lg text-slate-900 dark:text-white mb-2">Performance Comparison Table</p>
+                    <p class="mb-3">This matrix is where you log your benchmark returns. Simply <strong>click on any empty cell</strong> (—) under an index's column to input its return for a specific year. Your portfolio's return is calculated automatically based on your Growth page data.</p>
+                    <p class="mb-6 italic opacity-80">(Note: To adjust the timeline of this table, open your <strong>Preferences (⌘ + ,)</strong> and set your 'Investment Start Year'. The table will automatically generate rows from that date up to the current year).</p>
+                    
+                    <p class="font-bold text-lg text-slate-900 dark:text-white mb-2">Visual Analytics & Charts</p>
+                    <p class="mb-3">Scroll down to explore 2 core comparative visualizations:</p>
+                    <ul class="list-disc pl-5 mb-6 space-y-2">
+                        <li><strong>Annual Return (%):</strong> A side-by-side grouped bar chart directly comparing your portfolio's specific percentage return against every tracked index, year after year.</li>
+                        <li><strong>10,000 Simulated Growth:</strong> A multi-line compounding chart visualizing the absolute wealth trajectory. It illustrates exactly how a theoretical investment would have grown if deployed in your portfolio versus your chosen passive indices.</li>
+                    </ul>
+                    
+                `
+            },
+            'calendar': {
+                title: 'Calendar',
+                iconSvg: '<svg class="w-10 h-10 text-red-600 dark:text-red-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z"></path></svg>',
+                colorClass: 'bg-red-50 dark:bg-red-500/10',
+                content: `
+                    <p class="font-bold text-lg text-slate-900 dark:text-white mb-2">The Investor's Time Management Hub</p>
+                    <p class="mb-6">The Calendar page is your forward-looking catalyst tracker. It ensures you never miss a crucial market event, dividend payout, or earnings report by organizing your portfolio's timeline over a rolling 12-month horizon.</p>
+                    
+                    <p class="font-bold text-lg text-slate-900 dark:text-white mb-2">Automated Market & System Events</p>
+                    <p class="mb-3">Right out of the box, your calendar is already intelligently pre-populated with critical systemic dates:</p>
+                    <ul class="list-disc pl-5 mb-6 space-y-2">
+                        <li><strong>US Market Holidays:</strong> Automatically tracks days when the stock market is closed (e.g., Memorial Day, Thanksgiving) so you can anticipate liquidity constraints.</li>
+                        <li><strong>Macro Catalysts:</strong> Flags major market events like <em>Quadruple Witching Days</em> (options and futures expiration) which typically inject high volatility into the markets.</li>
+                        <li><strong>Purchase Anniversaries:</strong> Automatically celebrates and logs the holding duration of your active positions.</li>
+                    </ul>
+                    
+                    <p class="font-bold text-lg text-slate-900 dark:text-white mb-2">Adding & Exporting Events</p>
+                    <p class="mb-3">To schedule a manual catalyst, click the <strong>+ Add Event</strong> button at the top right (or use the shortcut <strong>⌘ + E</strong>). You can select a date, link it to a specific stock ticker from your portfolio or watchlist, choose the event type (Earnings, Dividend, Macro, etc.), and add personalized notes.</p>
+                    <ul class="list-disc pl-5 mb-6 space-y-2">
+                        <li><strong>iCal Export:</strong> Click the <strong>Export .ical</strong> button to instantly generate a standard calendar file. You can import this directly into your personal Apple Calendar, Google Agenda, or Outlook to seamlessly integrate your financial timeline with your daily life.</li>
+                    </ul>
+                    
+                    <p class="font-bold text-lg text-slate-900 dark:text-white mb-2">Upcoming Events & Advanced Filtering</p>
+                    <p class="mb-3">Stay focused on the short-term horizon using the <strong>Next Upcoming Events</strong> stack, which acts as an immediate alert center summarizing your 5 closest catalysts.</p>
+                    <ul class="list-disc pl-5 mb-6 space-y-2">
+                        <li><strong>Interactive Filters:</strong> Use the robust filtering engine to declutter the calendar. You can search by keyword, filter the entire view to only show a specific stock ticker, or isolate specific event categories (e.g., clicking the 'Earnings' or 'Dividend' pills).</li>
+                    </ul>
+                    
+                    <p class="font-bold text-lg text-slate-900 dark:text-white mb-2">12-Month Rolling Horizon</p>
+                    <p class="mb-6">Scroll down to view a fully expanded, continuous 12-month calendar starting from the current month. Each day cell visually indicates scheduled events with color-coded ticker tags, providing a clear bird's-eye view of your portfolio's upcoming timeline.</p>
+                `
+            },
+            'wealth': {
+                title: 'Wealth',
+                iconSvg: '<svg class="w-10 h-10 text-emerald-600 dark:text-emerald-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 21h18M3 10h18M5 6l7-3 7 3M4 10v11m16-11v11M8 14v3m4-3v3m4-3v3"></path></svg>',
+                colorClass: 'bg-emerald-50 dark:bg-emerald-500/10',
+                content: `
+                    <p class="font-bold text-lg text-slate-900 dark:text-white mb-2">The Master Balance Sheet & FIRE Planner</p>
+                    <p class="mb-6">The Wealth page is the ultimate culmination of your financial journey. It steps back from daily stock fluctuations to provide a comprehensive, macro-level view of your entire net worth, integrating your brokerage account with external assets and liabilities.</p>
+                    
+                    <p class="font-bold text-lg text-slate-900 dark:text-white mb-2">The Executive Dashboard</p>
+                    <p class="mb-6">At the top of the page, 8 automated metric cards summarize your global financial position. You can instantly track your <em>True Net Worth</em> (Assets minus Liabilities), your absolute <em>Net P/L</em> across all assets, and your <em>Overall Assets ROI</em>. Crucially, the dashboard calculates your <em>Debt-to-Asset Ratio</em> (color-coding your leverage risk) and tracks your <em>Brokerage Weight</em> to show exactly how much of your total wealth is exposed to the stock market.</p>
+                    
+                    <p class="font-bold text-lg text-slate-900 dark:text-white mb-2">Custom Net Worth Goal</p>
+                    <p class="mb-6">Set your ultimate financial milestone using the Goal Progress Bar. <strong>Double-click</strong> the bar to define your target <em>Net Worth</em>, and watch the gradient fill up as your assets appreciate and your debts diminish.</p>
+                    
+                    <p class="font-bold text-lg text-slate-900 dark:text-white mb-2">Assets & Liabilities Management</p>
+                    <p class="mb-3">Below the dashboard, you will find two dedicated accounting sections:</p>
+                    <ul class="list-disc pl-5 mb-4 space-y-2">
+                        <li><strong>Assets Allocation:</strong> This table automatically imports your stock portfolio (locked) while allowing you to manually add external assets (e.g., Real Estate, Crypto, Cash Savings). Enter the Asset Name, Invested Amount, and Current Value to track their individual P/L.</li>
+                        <li><strong>Liabilities & Debts:</strong> Track your mortgages, loans, and other debts here. Enter the Liability Name, the Initial Amount Borrowed, and the Amount Already Refunded. The system will automatically calculate the remaining <em>Amount Owed</em> and your <em>% of Total Debt</em>.</li>
+                    </ul>
+                    <p class="mb-6 italic opacity-80">To edit any manual asset or liability, simply <strong>double-click</strong> its row in the tables.</p>
+                    
+                    <p class="font-bold text-lg text-slate-900 dark:text-white mb-2">Visual Analytics & Charts</p>
+                    <p class="mb-3">Scroll down to explore 2 macro-level wealth charts:</p>
+                    <ul class="list-disc pl-5 mb-6 space-y-2">
+                        <li><strong>Assets Allocation:</strong> A comprehensive donut chart visualizing your total wealth distribution across all asset classes (Brokerage, Real Estate, Crypto, Cash, etc.).</li>
+                        <li><strong>Return on Investment (ROI % by Asset):</strong> A clear bar chart comparing the percentage return of every individual asset class, helping you identify your strongest compounding engines.</li>
+                    </ul>
+                    
+                    <p class="font-bold text-lg text-slate-900 dark:text-white mb-2">Financial Independence (FIRE) Simulator</p>
+                    <p class="mb-6">At the bottom of the page lies the FIRE Simulator. This powerful tool uses your <em>True Net Worth</em> to estimate your passive income potential. Use the slider to set your <em>Safe Withdrawal Rate (SWR)</em>—the percentage of your wealth you plan to withdraw annually to cover living expenses—and the system will instantly calculate your <em>Estimated Passive Income</em> in both yearly and monthly amounts.</p>
+                    
+                    
+                `
+            }
+        };
+
+        const modal = document.getElementById('module-modal');
+        const modalBackdrop = document.getElementById('modal-backdrop');
+        const modalContent = document.getElementById('modal-content');
+        const closeModalBtn = document.getElementById('close-modal');
+        const modalHeader = document.getElementById('modal-header');
+        const modalBody = document.getElementById('modal-body');
+
+        function openModule(moduleId) {
+            const data = moduleData[moduleId];
+            if (!data) return;
+
+            // Populate Modal Content
+            modalHeader.innerHTML = `
+                <div class="flex items-center gap-4">
+                    <div class="w-16 h-16 rounded-2xl ${data.colorClass} flex items-center justify-center shrink-0">
+                        ${data.iconSvg}
+                    </div>
+                    <h3 class="text-3xl font-extrabold text-slate-900 dark:text-white">${data.title}</h3>
+                </div>
+            `;
+            modalBody.innerHTML = data.content;
+
+            // Show Modal
+            modal.classList.remove('hidden');
+            // Small delay to allow display block to apply before animating opacity
+            setTimeout(() => {
+                modal.classList.remove('opacity-0');
+                modalContent.classList.remove('scale-95');
+                document.body.classList.add('overflow-hidden'); // Prevent background scrolling
+            }, 10);
+        }
+
+        function closeModal() {
+            modal.classList.add('opacity-0');
+            modalContent.classList.add('scale-95');
+            
+            // Wait for transition to finish before hiding
+            setTimeout(() => {
+                modal.classList.add('hidden');
+                document.body.classList.remove('overflow-hidden');
+            }, 300);
+        }
+
+        // Event Listeners for closing modal
+        closeModalBtn.addEventListener('click', closeModal);
+        modalBackdrop.addEventListener('click', closeModal);
+        document.addEventListener('keydown', (e) => {
+            if (e.key === 'Escape' && !modal.classList.contains('hidden')) {
+                closeModal();
+            }
+        });
+
     </script>
 </body>
 </html>
