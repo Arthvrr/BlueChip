@@ -88,6 +88,7 @@ struct BenchmarkView: View {
                     currentValue: currentGoalValueForProgressBar,
                     targetValue: viewModel.benchmarkGoalTarget,
                     privacyMode: $privacyMode,
+                    currency: $viewModel.preferredCurrency,
                     isPercentage: viewModel.benchmarkGoalType != .positiveAlphaYears,
                     isCount: viewModel.benchmarkGoalType == .positiveAlphaYears // <-- NOUVEAU
                 )
@@ -377,6 +378,8 @@ struct BenchmarkDashboardSection: View {
     }
 
     var body: some View {
+        let sym = AppCurrency(rawValue: viewModel.preferredCurrency)?.symbol ?? "€"
+        
         VStack(spacing: 16) {
             HStack(spacing: 16) {
                 VStack(alignment: .leading, spacing: 4) {
@@ -438,8 +441,8 @@ struct BenchmarkDashboardSection: View {
                 DashboardCard(title: "Years Tracked", value: "\(currentYear - startYear + 1)", titleIcon: nil, privacyMode: $privacyMode)
 
                 VStack(alignment: .leading, spacing: 4) {
-                    Text("Portfolio 10k€ Simulation").font(.subheadline).foregroundColor(.secondary).lineLimit(1)
-                    Text(portfolio10k.formatted(.currency(code: "EUR").precision(.fractionLength(0))))
+                    Text("Portfolio 10k\(sym) Simulation").font(.subheadline).foregroundColor(.secondary).lineLimit(1)
+                    Text(portfolio10k.formatted(.currency(code: viewModel.preferredCurrency).precision(.fractionLength(0))))
                         .font(.title2).fontWeight(.bold)
                         .foregroundColor(.primary) // <-- Modifié en noir
                         .blur(radius: privacyMode ? 6 : 0)
@@ -449,9 +452,9 @@ struct BenchmarkDashboardSection: View {
                 .shadow(color: Color.black.opacity(0.05), radius: 2, x: 0, y: 1)
 
                 VStack(alignment: .leading, spacing: 4) {
-                    Text("Best Index 10k€").font(.subheadline).foregroundColor(.secondary).lineLimit(1)
+                    Text("Best Index 10k\(sym)").font(.subheadline).foregroundColor(.secondary).lineLimit(1)
                     if let best = bestIndex {
-                        Text(best10k.formatted(.currency(code: "EUR").precision(.fractionLength(0))))
+                        Text(best10k.formatted(.currency(code: viewModel.preferredCurrency).precision(.fractionLength(0))))
                             .font(.title2).fontWeight(.bold)
                             .foregroundColor(.primary) // <-- Modifié en noir
                             .blur(radius: privacyMode ? 6 : 0)
@@ -724,6 +727,7 @@ struct BenchmarkChartsSection: View {
     @Binding var chartToZoom: BenchmarkChartZoomType?
 
     var body: some View {
+        let sym = AppCurrency(rawValue: viewModel.preferredCurrency)?.symbol ?? "€"
         VStack(alignment: .leading, spacing: 12) {
             Text("Performance Analytics").font(.title2).fontWeight(.bold).foregroundColor(.secondary)
             HStack(alignment: .top, spacing: 24) {
@@ -732,7 +736,7 @@ struct BenchmarkChartsSection: View {
                     BenchmarkAnnualBarsChart(viewModel: viewModel, privacyMode: $privacyMode, expandedChart: $chartToZoom)
                 }
                 VStack(alignment: .leading) {
-                    HStack { Text("€10,000 Simulated Growth").font(.headline).foregroundColor(.secondary); Spacer() }
+                    HStack { Text("\(sym)10,000 Simulated Growth").font(.headline).foregroundColor(.secondary); Spacer() }
                     BenchmarkGrowth10kChart(viewModel: viewModel, privacyMode: $privacyMode, expandedChart: $chartToZoom)
                 }
             }
@@ -978,9 +982,10 @@ struct BenchmarkGrowth10kChart: View {
     }
 
     var body: some View {
+        let sym = AppCurrency(rawValue: viewModel.preferredCurrency)?.symbol ?? "€"
         VStack(alignment: .leading, spacing: 8) {
             HStack {
-                if !isExpanded { Text("€10,000 Simulated Growth").font(.headline).foregroundColor(.secondary) }
+                if !isExpanded { Text("\(sym)10,000 Simulated Growth").font(.headline).foregroundColor(.secondary) }
                 Spacer()
                 InteractiveLegendView(items: seriesLabels, colorMap: color, hiddenItems: $hiddenSeries)
                 if !isExpanded {
@@ -1004,7 +1009,7 @@ struct BenchmarkGrowth10kChart: View {
                     ForEach(lineData.filter { !hiddenSeries.contains($0.label) }) { point in
                         LineMark(
                             x: .value("Year", String(point.year)),
-                            y: .value("€", point.value),
+                            y: .value("Value", point.value),
                             series: .value("Series", point.label)
                         )
                         .foregroundStyle(point.color)
@@ -1040,7 +1045,7 @@ struct BenchmarkGrowth10kChart: View {
                                             Circle().fill(color(for: label)).frame(width: 7, height: 7)
                                             Text(label).font(.caption2).foregroundColor(.secondary)
                                             Spacer(minLength: 8)
-                                            Text(val.formatted(.currency(code: "EUR").precision(.fractionLength(0))))
+                                            Text(val.formatted(.currency(code: viewModel.preferredCurrency).precision(.fractionLength(0))))
                                                 .font(.caption2.bold())
                                                 .foregroundColor(val >= 10000 ? .green : .red)
                                                 .blur(radius: privacyMode ? 6 : 0)
@@ -1061,7 +1066,7 @@ struct BenchmarkGrowth10kChart: View {
                         AxisGridLine(); AxisTick()
                         AxisValueLabel {
                             if let v = value.as(Double.self) {
-                                Text(v.formatted(.currency(code: "EUR").precision(.fractionLength(0)))).font(.system(size: 10))
+                                Text(v.formatted(.currency(code: viewModel.preferredCurrency).precision(.fractionLength(0)))).font(.system(size: 10))
                             }
                         }
                     }
@@ -1072,7 +1077,7 @@ struct BenchmarkGrowth10kChart: View {
                     }
                 }
             }
-            HStack { Text("Simulates €10,000 invested across the portfolio and indices").font(.caption2).foregroundColor(.secondary); Spacer(); BlueChipWatermark() }.padding(.top, 4)
+            HStack { Text("Simulates \(sym)10,000 invested across the portfolio and indices").font(.caption2).foregroundColor(.secondary); Spacer(); BlueChipWatermark() }.padding(.top, 4)
         }
         .padding()
         .frame(minHeight: isExpanded ? 500 : 320, maxHeight: isExpanded ? .infinity : 320)
@@ -1092,9 +1097,10 @@ struct BenchmarkFullScreenChartView: View {
     @Binding var privacyMode: Bool
 
     var chartTitle: String {
+        let sym = AppCurrency(rawValue: viewModel.preferredCurrency)?.symbol ?? "€"
         switch zoomType {
         case .annualBars: return "Annual Return (%)"
-        case .growth10k:  return "€10,000 Simulated Growth"
+        case .growth10k:  return "\(sym)10,000 Simulated Growth"
         }
     }
 

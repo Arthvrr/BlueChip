@@ -2,9 +2,12 @@ import SwiftUI
 
 struct TutorialView: View {
     @Environment(\.dismiss) var dismiss
+    @ObservedObject var viewModel: PortfolioViewModel // <-- NOUVEAU : Requis pour connaître la devise
     let currentTab: AppTab // Le tutoriel s'adapte !
     
     var tutorialContent: (title: String, icon: String, text: String) {
+        let sym = AppCurrency(rawValue: viewModel.preferredCurrency)?.symbol ?? "€"
+        
         switch currentTab {
 
         case .composition:
@@ -43,7 +46,7 @@ struct TutorialView: View {
                 • **Currency Exposure:** A donut chart revealing your underlying foreign exchange (FX) risk across different currencies, including your available cash.
                 • **Estimated Asset Correlation:** A heatmap matrix estimating how your assets move in relation to one another to ensure true structural diversification.
                 • **Avg Cost vs Current Price:** A comparative bar chart mapping your Average Cost (PRU) directly against the live Current Price for every holding.
-                • **Return on Investment (P/L):** A dual-axis combo chart tracking your unrealized performance in both absolute Euros and percentage terms.
+                • **Return on Investment (P/L):** A dual-axis combo chart tracking your unrealized performance in both absolute Currency and percentage terms.
                 • **Weight vs Unrealized Performance:** A crucial scatter plot ensuring your heaviest portfolio allocations are actually generating the highest returns.
                 • **Capital Status:** A donut chart showing what proportion of your originally invested capital is currently generating a positive return versus running at a loss.
                 • **Performance Heatmap:** An interactive treemap scaling your holdings by portfolio weight and dynamically color-coding them by their performance intensity.
@@ -102,7 +105,7 @@ struct TutorialView: View {
                 At the top of the page, 8 fully automated metric cards provide a real-time summary of your capital appreciation. You can instantly track your Current Wallet Value, Total Invested Capital, and All-Time Returns. Advanced metrics like your Compound Annual Growth Rate (CAGR), Average Yearly Returns, and Best Year Return are continuously recalculated as your portfolio evolves.
                 
                 **Custom Annual Targets**
-                Just below the dashboard, you can monitor your performance against your personalized annual goal. **Double-click** the progress bar to configure whether you want to target a specific *Percentage Return (%)* or an *Absolute Euro Amount (€)* for the ongoing year.
+                Just below the dashboard, you can monitor your performance against your personalized annual goal. **Double-click** the progress bar to configure whether you want to target a specific *Percentage Return (%)* or an *Absolute Amount (\(sym))* for the ongoing year.
                 
                 **Portfolio Structure & Gains**
                 Three side-by-side donut charts break down your exact wealth composition:
@@ -111,13 +114,13 @@ struct TutorialView: View {
                 • **Gains Source:** Breaks down your total gains between collected Dividends and pure Capital Appreciation.
                 
                 **Capital Growth History (The Spreadsheet)**
-                This table is the engine of the Growth page. To make it work, you must manually input three values for each past year: **Start Wallet**, **Invested** (Net deposits during the year), and **End Wallet**. The system will automatically calculate your exact Return in € and % for each year. 
+                This table is the engine of the Growth page. To make it work, you must manually input three values for each past year: **Start Wallet**, **Invested** (Net deposits during the year), and **End Wallet**. The system will automatically calculate your exact Return in \(sym) and % for each year. 
                 *(Note: The current year's End Wallet is automatically synced to your live portfolio value!).*
                 To adjust the timeline of this table, open your **Preferences (⌘ + ,)** and set your *Investment Start Year*. The table will automatically generate rows from that specific year up to the present day.
                 
                 **Advanced Growth Analytics**
                 Scroll down to explore 6 advanced institutional-grade charts based on your spreadsheet data:
-                • **Annual Returns:** A dual-axis combo chart tracking your absolute (€) and relative (%) performance year-over-year.
+                • **Annual Returns:** A dual-axis combo chart tracking your absolute (\(sym)) and relative (%) performance year-over-year.
                 • **Invested vs Portfolio Value:** An area chart visualizing the widening gap between what you put in and what it's worth.
                 • **Wealth Accumulation Waterfall:** A clear step-by-step bridge showing exactly how your initial capital grew into your current wealth.
                 • **MoIC Trend:** Tracks your *Multiple on Invested Capital* (Money on Money), showing how many times you've multiplied your out-of-pocket cash.
@@ -140,7 +143,7 @@ struct TutorialView: View {
                 At the top of the page, 8 fully automated metric cards summarize your cash flow health. You can instantly track your *Total Received (All Time)*, *Projected Annual Income*, and *Projected Portfolio Yield*. The dashboard also monitors your momentum by calculating your *YoY Growth* against last year, your *Avg. Monthly* income, and highlighting your *Best Year* on record.
                 
                 **Custom Income Targets**
-                Set a personalized passive income goal using the progress bar. **Double-click** the bar to toggle your objective: you can either aim for a target *Portfolio Yield (%)* or a flat *Annual Expected Dividends (€)* amount.
+                Set a personalized passive income goal using the progress bar. **Double-click** the bar to toggle your objective: you can either aim for a target *Portfolio Yield (%)* or a flat *Annual Expected Dividends (\(sym))* amount.
                 
                 **Projected Analytics**
                 Two forward-looking charts map out your portfolio's potential:
@@ -257,9 +260,9 @@ struct TutorialView: View {
                 
                 **Executing Simulated Trades**
                 Use the control icons above the Sandbox table to manipulate your theoretical portfolio:
-                • **Modify Cash (Euro Icon):** Add or remove simulated cash (e.g., simulating a new salary deposit or a major withdrawal).
+                • **Modify Cash (Coin Icon):** Add or remove simulated cash (e.g., simulating a new salary deposit or a major withdrawal).
                 • **Add/Edit Position (+ Icon):** Simulate buying a new stock or selling an existing one. Enter the Ticker, click 'Fetch Price' for live data, and input the exact number of shares. You can also specify the *Net Dividend / Share* and *Sector*.
-                • **Taxes & Fees Calculator:** The simulation is hyper-realistic. You can input exact *Broker Taxes* and *Country Taxes* (either as a flat € amount or as a %) to see the true *Net Cash Impact* of your theoretical trade.
+                • **Taxes & Fees Calculator:** The simulation is hyper-realistic. You can input exact *Broker Taxes* and *Country Taxes* (either as a flat \(sym) amount or as a %) to see the true *Net Cash Impact* of your theoretical trade.
                 • **Reset (Arrow Icon):** Instantly wipe all theoretical trades and reset the Sandbox to strictly match your current real portfolio.
                 
                 *Note: Every trade you make is recorded in the **Sandbox Actions Log** just above the tables, complete with a convenient "Undo" button to revert any specific action!*
@@ -268,7 +271,7 @@ struct TutorialView: View {
                 Scroll down to explore 8 comparative charts showing the before-and-after impact of your decisions:
                 • **Weight by Position:** Two side-by-side donuts comparing your current vs simulated stock concentration.
                 • **Sector Allocation:** Evaluate how your simulated trades alter your macro sector exposure.
-                • **Total Value & Yield Impact:** Two clear bar charts contrasting your absolute Wealth (€) and your Portfolio Yield (%) before and after the trades.
+                • **Total Value & Yield Impact:** Two clear bar charts contrasting your absolute Wealth (\(sym)) and your Portfolio Yield (%) before and after the trades.
                 • **Simulated Cash Allocation & Dividends:** Two final donuts visualizing exactly where your freshly deployed cash was allocated and which positions are generating your new simulated dividends.
                 
                 *Pro-tip: Click the magnifying glass icon on any chart to open a detailed full-screen view!*
@@ -360,7 +363,7 @@ struct TutorialView: View {
                 
                 **Transaction History (The Ledger)**
                 Below the progress bar is your interactive transaction history table. 
-                - **Adding Transactions:** Click the **+ Add** button (or use the **⌘ + T** shortcut) to log a new transaction. You can record the date, type (Buy, Sell, Deposit, Withdrawal), ticker, quantity, amount in €, and add optional notes.
+                - **Adding Transactions:** Click the **+ Add** button (or use the **⌘ + T** shortcut) to log a new transaction. You can record the date, type (Buy, Sell, Deposit, Withdrawal), ticker, quantity, amount in \(sym), and add optional notes.
                 - **Custom Columns:** Click the **+ Column** button to add custom tracking fields, such as specific taxes (e.g., TOB) or broker fees.
                 - **Filtering & Search:** The table is highly interactive. Use the *Time Filter* dropdown to view transactions from "This Month," "Year to Date," or a "Custom Range." You can also quickly filter by transaction type using the pill buttons (Buy, Sell, Deposit, etc.) or search for specific tickers or notes using the search bar.
                 - **Editing:** **Double-click** any transaction row to modify or delete it.
@@ -371,7 +374,7 @@ struct TutorialView: View {
                 **Visual Analytics & Charts**
                 Scroll down to explore 10 analytical charts that visualize your trading behavior:
                 - **Transactions per Year:** A stacked bar chart showing the volume of each transaction type executed annually.
-                - **Summary by Type:** A dual-axis chart comparing the total monetary amount (€) versus the absolute count of each transaction type.
+                - **Summary by Type:** A dual-axis chart comparing the total monetary amount (\(sym)) versus the absolute count of each transaction type.
                 - **Buys over Time:** A bar chart tracking your historical buy orders, complete with an algorithmic trendline to visualize your capital deployment velocity.
                 - **Fees & Taxes Breakdown:** A donut chart illustrating exactly where your frictional costs (custom fee columns) are accumulating.
                 - **Deployed Capital Allocation:** A donut chart illustrating how your total invested capital is distributed across your current holdings, grouping all sold assets into a single category.
@@ -395,7 +398,7 @@ struct TutorialView: View {
                 The Benchmark page is where you evaluate your true "Alpha" (outperformance). It answers the most critical question in investing: Is your stock-picking strategy actually beating a simple, passive index fund?
                 
                 **The Executive Dashboard**
-                At the top of the page, an 8-card dashboard is generated **automatically** to compare your portfolio against your benchmarks. It displays your *Current Year Return*, your *Average Return*, and identifies your *Best Index*. Crucially, it instantly calculates whether you are ahead or behind your best benchmark, and translates these percentages into a concrete *10k€ Simulation* to show absolute wealth differences.
+                At the top of the page, an 8-card dashboard is generated **automatically** to compare your portfolio against your benchmarks. It displays your *Current Year Return*, your *Average Return*, and identifies your *Best Index*. Crucially, it instantly calculates whether you are ahead or behind your best benchmark, and translates these percentages into a concrete *10k\(sym) Simulation* to show absolute wealth differences.
                 
                 **Custom Outperformance Goal (Alpha)**
                 Set your personal outperformance target using the Goal Progress Bar. **Double-click** the bar to define the exact Alpha (%) by which you aim to beat your strongest index over time.
@@ -411,7 +414,7 @@ struct TutorialView: View {
                 **Visual Analytics & Charts**
                 Scroll down to explore 2 core comparative visualizations:
                 • **Annual Return (%):** A side-by-side grouped bar chart directly comparing your portfolio's specific percentage return against every tracked index, year after year.
-                • **€10,000 Simulated Growth:** A multi-line compounding chart visualizing the absolute wealth trajectory. It illustrates exactly how a theoretical €10,000 investment would have grown if deployed in your portfolio versus your chosen passive indices.
+                • **\(sym)10,000 Simulated Growth:** A multi-line compounding chart visualizing the absolute wealth trajectory. It illustrates exactly how a theoretical \(sym)10,000 investment would have grown if deployed in your portfolio versus your chosen passive indices.
                 
                 *Pro-tip: Click the magnifying glass icon on any chart to open a detailed full-screen view!*
                 """
@@ -529,4 +532,3 @@ struct TutorialView: View {
         .frame(width: 700, height: 600) // Fenêtre globale considérablement agrandie
     }
 }
-

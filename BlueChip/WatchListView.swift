@@ -23,7 +23,7 @@ import Combine // <-- CORRECTION : Requis pour objectWillChange.send()
     
     var fundamentalValues: [String: Double]?
     
-    init(id: UUID = UUID(), ticker: String, currentPrice: Double, targetPrice: Double, currentPE: Double, forwardPE: Double, historicalPE10Y: Double, guruFocusPrice: Double, tipRanksPrice: Double, peg: Double, currency: String = "EUR", note: String = "", fundamentalValues: [String: Double]? = nil) {
+    init(id: UUID = UUID(), ticker: String, currentPrice: Double, targetPrice: Double, currentPE: Double, forwardPE: Double, historicalPE10Y: Double, guruFocusPrice: Double, tipRanksPrice: Double, peg: Double, currency: String, note: String = "", fundamentalValues: [String: Double]? = nil) {
         self.id = id
         self.ticker = ticker
         self.currentPrice = currentPrice
@@ -153,6 +153,7 @@ struct WatchListView: View {
                 )
                 
                 WatchListChartsSection(
+                    viewModel: viewModel,
                     items: viewModel.watchlistItems,
                     marginOfSafety: marginOfSafety,
                     privacyMode: $privacyMode,
@@ -422,6 +423,7 @@ struct WatchListTableSection: View {
 // =========================================================================
 
 struct WatchListChartsSection: View {
+    @ObservedObject var viewModel: PortfolioViewModel
     let items: [WatchlistItem]
     let marginOfSafety: Double
     @Binding var privacyMode: Bool
@@ -436,12 +438,10 @@ struct WatchListChartsSection: View {
                 
                 HStack(spacing: 24) {
                     VStack(alignment: .leading) {
-                        //HStack { Text("Valuation & Target Prices Comparison").font(.headline).foregroundColor(.secondary); Spacer() }
-                        WatchListPriceComparisonChart(items: items, marginOfSafety: marginOfSafety, privacyMode: $privacyMode, expandedChart: $chartToZoom)
+                        WatchListPriceComparisonChart(viewModel: viewModel, items: items, marginOfSafety: marginOfSafety, privacyMode: $privacyMode, expandedChart: $chartToZoom)
                     }
                     
                     VStack(alignment: .leading) {
-                        //HStack { Text("PE Valuation (Current vs Fwd vs 10Y)").font(.headline).foregroundColor(.secondary); Spacer() }
                         WatchListPEComparisonChart(items: items, privacyMode: $privacyMode, expandedChart: $chartToZoom)
                     }
                 }
@@ -453,12 +453,10 @@ struct WatchListChartsSection: View {
                 
                 HStack(spacing: 24) {
                     VStack(alignment: .leading) {
-                        //HStack { Text("PEG Ratio (PEG < 1.0 = Undervalued)").font(.headline).foregroundColor(.secondary); Spacer() }
                         WatchListPEGChart(items: items, privacyMode: $privacyMode, expandedChart: $chartToZoom)
                     }
                     
                     VStack(alignment: .leading) {
-                        //HStack { Text("Potential Upside % (Target vs Fair Price)").font(.headline).foregroundColor(.secondary); Spacer() }
                         WatchListUpsideChart(items: items, marginOfSafety: marginOfSafety, privacyMode: $privacyMode, expandedChart: $chartToZoom)
                     }
                 }
@@ -470,6 +468,7 @@ struct WatchListChartsSection: View {
 struct PriceSeriesItem: Identifiable { let id = UUID(); let ticker: String; let type: String; let price: Double; let currency: String }
 
 struct WatchListPriceComparisonChart: View {
+    @ObservedObject var viewModel: PortfolioViewModel
     let items: [WatchlistItem]; let marginOfSafety: Double; @Binding var privacyMode: Bool; var isExpanded: Bool = false; @Binding var expandedChart: WatchListChartZoomType?
     @State private var hiddenSeries: Set<String> = []; @State private var hoveredTicker: String? = nil
     
@@ -533,7 +532,7 @@ struct WatchListPriceComparisonChart: View {
                         }
                     }
                 }
-                .chartLegend(.hidden).chartYAxis { AxisMarks(position: .leading) { value in AxisGridLine(); AxisTick(); if let val = value.as(Double.self) { AxisValueLabel(val.formatted(.currency(code: "EUR").notation(.compactName))) } } }
+                .chartLegend(.hidden).chartYAxis { AxisMarks(position: .leading) { value in AxisGridLine(); AxisTick(); if let val = value.as(Double.self) { AxisValueLabel(val.formatted(.currency(code: viewModel.preferredCurrency).notation(.compactName))) } } }
             }
             HStack { Text("Hover over bars for comparison").font(.caption2).foregroundColor(.secondary); Spacer(); BlueChipWatermark() }
         }.padding().frame(minHeight: isExpanded ? 500 : 360, maxHeight: isExpanded ? .infinity : 360).background(Color(NSColor.controlBackgroundColor)).cornerRadius(12).shadow(color: Color.black.opacity(0.05), radius: 2, x: 0, y: 1)
@@ -1305,7 +1304,7 @@ struct AddEditWatchListItemView: View {
     @State private var guruFocusPrice: Double = 0.0
     @State private var tipRanksPrice: Double = 0.0
     @State private var peg: Double = 1.0
-    @State private var currency: String = "EUR"
+    @State private var currency: String = ""
     @State private var note: String = ""
     @State private var isFetching: Bool = false
     
@@ -1372,7 +1371,8 @@ struct AddEditWatchListItemView: View {
                         }
                     }
                     
-                    GroupBox("Note / Investment Thesis") { TextField("e.g. Moat, AI Growth, Buy under 150€...", text: $note).textFieldStyle(.roundedBorder) }
+                    let sym = AppCurrency(rawValue: viewModel.preferredCurrency)?.symbol ?? "€"
+                    GroupBox("Note / Investment Thesis") { TextField("e.g. Moat, AI Growth, Buy under 150\(sym)...", text: $note).textFieldStyle(.roundedBorder) }
                     
                     // NOUVEAU : Configuration des liens globaux
                     DisclosureGroup("⚙️ Configure Global Data Links") {
@@ -1418,8 +1418,11 @@ struct AddEditWatchListItemView: View {
     }
 
     func populate() {
-        guard let item = item else { return }
-        ticker = item.ticker; currentPrice = item.currentPrice; targetPrice = item.targetPrice; currentPE = item.currentPE; forwardPE = item.forwardPE; historicalPE10Y = item.historicalPE10Y; guruFocusPrice = item.guruFocusPrice; tipRanksPrice = item.tipRanksPrice; peg = item.peg; currency = item.currency; note = item.note
+        if let item = item {
+            ticker = item.ticker; currentPrice = item.currentPrice; targetPrice = item.targetPrice; currentPE = item.currentPE; forwardPE = item.forwardPE; historicalPE10Y = item.historicalPE10Y; guruFocusPrice = item.guruFocusPrice; tipRanksPrice = item.tipRanksPrice; peg = item.peg; currency = item.currency; note = item.note
+        } else {
+            currency = viewModel.preferredCurrency
+        }
     }
 
     func fetchYahooData() {
@@ -1486,7 +1489,7 @@ struct WatchListFullScreenChartView: View {
             
             switch zoomType {
             case .priceComparison:
-                WatchListPriceComparisonChart(items: items, marginOfSafety: marginOfSafety, privacyMode: $privacyMode, isExpanded: true, expandedChart: .constant(nil))
+                WatchListPriceComparisonChart(viewModel: viewModel, items: items, marginOfSafety: marginOfSafety, privacyMode: $privacyMode, isExpanded: true, expandedChart: .constant(nil))
             case .peComparison:
                 WatchListPEComparisonChart(items: items, privacyMode: $privacyMode, isExpanded: true, expandedChart: .constant(nil))
             case .pegComparison:
@@ -1520,4 +1523,3 @@ struct WatchListFullScreenChartView: View {
         }
     }
 }
-

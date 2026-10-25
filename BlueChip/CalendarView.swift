@@ -807,6 +807,7 @@ struct EventDetailSheet: View {
                         let totalGrossUSD = singlePaymentPerShareUSD * pos.quantity
                         let singlePaymentGrossEUR = totalGrossUSD * pos.usdToEurRate
                         let singlePaymentNetEUR = singlePaymentGrossEUR * 0.85
+                        let currencyCode = viewModel.preferredCurrency
                         
                         GroupBox("Estimated Dividend Payout") {
                             VStack(spacing: 12) {
@@ -819,12 +820,12 @@ struct EventDetailSheet: View {
                                 HStack {
                                     Text("Estimated Gross:")
                                     Spacer()
-                                    Text(singlePaymentGrossEUR.formatted(.currency(code: "EUR")))
+                                    Text(singlePaymentGrossEUR.formatted(.currency(code: currencyCode)))
                                 }
                                 HStack {
                                     Text("Estimated Net (85%):").fontWeight(.bold)
                                     Spacer()
-                                    Text(singlePaymentNetEUR.formatted(.currency(code: "EUR"))).fontWeight(.bold).foregroundColor(.green)
+                                    Text(singlePaymentNetEUR.formatted(.currency(code: currencyCode))).fontWeight(.bold).foregroundColor(.green)
                                 }
                             }
                             .padding(.vertical, 4)
@@ -1184,12 +1185,12 @@ struct AddEditEventSheet: View {
                                     HStack {
                                         Text("Estimated Gross:").font(.headline)
                                         Spacer()
-                                        Text(singlePaymentGrossEUR.formatted(.currency(code: "EUR"))).font(.headline)
+                                        Text(singlePaymentGrossEUR.formatted(.currency(code: viewModel.preferredCurrency))).font(.headline)
                                     }
                                     HStack {
                                         Text("Estimated Net (85%):").font(.title3).fontWeight(.bold)
                                         Spacer()
-                                        Text(singlePaymentNetEUR.formatted(.currency(code: "EUR"))).font(.title3).fontWeight(.bold).foregroundColor(.green)
+                                        Text(singlePaymentNetEUR.formatted(.currency(code: viewModel.preferredCurrency))).font(.title3).fontWeight(.bold).foregroundColor(.green)
                                     }
                                 }
                                 .padding(.vertical, 8)

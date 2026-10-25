@@ -4,11 +4,9 @@ struct MenuBarDashboardView: View {
     @ObservedObject var viewModel: PortfolioViewModel
     @Environment(\.dismiss) var dismiss
     
-    // Mode Confidentialité global
     @AppStorage("privacyMode") private var privacyMode: Bool = false
     
     // --- VARIABLES CALCULÉES ---
-    // (Ces variables ne seront calculées que si l'app est déverrouillée)
     let currentMonthName: String = {
         let f = DateFormatter()
         f.dateFormat = "MMMM"
@@ -27,6 +25,7 @@ struct MenuBarDashboardView: View {
         for pos in viewModel.positions {
             if pos.dividendMonths.contains(currentMonthIndex) {
                 let paymentsPerYear = max(1.0, Double(pos.dividendMonths.count))
+                // totalDividendEUR est techniquement déjà converti dans la preferredCurrency dans le ViewModel via usdToEurRate
                 let singlePaymentEUR = pos.totalDividendEUR / paymentsPerYear
                 payouts.append((pos.ticker, singlePaymentEUR))
             }
@@ -82,11 +81,10 @@ struct MenuBarDashboardView: View {
     }
 
     // =====================================================================
-    // MARK: - BODY PRINCIPAL (SÉCURISE LE ROUTAGE)
+    // MARK: - BODY PRINCIPAL
     // =====================================================================
     var body: some View {
         Group {
-            // MODIFIÉ : Aligné sur la même variable
             if viewModel.isUnlocked {
                 unlockedDashboard
             } else {
@@ -97,7 +95,7 @@ struct MenuBarDashboardView: View {
     }
     
     // =====================================================================
-    // MARK: - ÉTAT VERROUILLÉ (LOCKED)
+    // MARK: - ÉTAT VERROUILLÉ
     // =====================================================================
     @ViewBuilder
     var lockedDashboard: some View {
@@ -122,13 +120,12 @@ struct MenuBarDashboardView: View {
             .buttonStyle(.borderedProminent)
             .padding(.top, 8)
         }
-        // Taille fixe pour éviter que le menu de macOS ne plante en essayant de deviner la taille
         .frame(width: 320, height: 260)
         .background(Color(NSColor.windowBackgroundColor))
     }
     
     // =====================================================================
-    // MARK: - ÉTAT DÉVERROUILLÉ (UNLOCKED)
+    // MARK: - ÉTAT DÉVERROUILLÉ
     // =====================================================================
     @ViewBuilder
     var unlockedDashboard: some View {
@@ -137,7 +134,7 @@ struct MenuBarDashboardView: View {
             HStack(alignment: .center) {
                 VStack(alignment: .leading, spacing: 2) {
                     Text("Total Portfolio").font(.caption).foregroundColor(.secondary)
-                    Text(privacyMode ? "€ ****" : viewModel.currentTotalCapital.formatted(.currency(code: "EUR")))
+                    Text(privacyMode ? "****" : viewModel.currentTotalCapital.formatted(.currency(code: viewModel.preferredCurrency)))
                         .font(.headline)
                         .fontWeight(.bold)
                     
@@ -148,7 +145,7 @@ struct MenuBarDashboardView: View {
                     let color = isPositive ? Color.green : Color.red
                     
                     HStack(spacing: 4) {
-                        Text(privacyMode ? "****" : "\(sign)\(roiValue.formatted(.currency(code: "EUR")))")
+                        Text(privacyMode ? "****" : "\(sign)\(roiValue.formatted(.currency(code: viewModel.preferredCurrency)))")
                         Text(privacyMode ? "(***%)" : "(\(sign)\(roiPercent.formatted(.percent.precision(.fractionLength(1)))))")
                     }
                     .font(.caption2)
@@ -275,7 +272,7 @@ struct MenuBarDashboardView: View {
                         HStack {
                             Text("Dividends (\(currentMonthName))").font(.subheadline).fontWeight(.bold).foregroundColor(.secondary)
                             Spacer()
-                            Text(privacyMode ? "€ ****" : totalDividendsThisMonth.formatted(.currency(code: "EUR"))).font(.caption).fontWeight(.bold).foregroundColor(privacyMode ? .secondary : .green)
+                            Text(privacyMode ? "****" : totalDividendsThisMonth.formatted(.currency(code: viewModel.preferredCurrency))).font(.caption).fontWeight(.bold).foregroundColor(privacyMode ? .secondary : .green)
                         }
                         if thisMonthDividends.isEmpty {
                             Text("No dividends expected this month.").font(.caption).foregroundColor(.secondary).italic()
@@ -285,7 +282,7 @@ struct MenuBarDashboardView: View {
                                     HStack {
                                         Text(div.ticker).font(.caption).fontWeight(.semibold)
                                         Spacer()
-                                        Text(privacyMode ? "€ ****" : div.amountEUR.formatted(.currency(code: "EUR"))).font(.caption).foregroundColor(privacyMode ? .secondary : .green)
+                                        Text(privacyMode ? "****" : div.amountEUR.formatted(.currency(code: viewModel.preferredCurrency))).font(.caption).foregroundColor(privacyMode ? .secondary : .green)
                                     }
                                 }
                             }
@@ -337,11 +334,9 @@ struct MenuBarDashboardView: View {
                 if hovering { NSCursor.pointingHand.push() } else { NSCursor.pop() }
             }
         }
-        // Taille fixe en mode déverrouillé
         .frame(width: 320, height: 480)
     }
     
-    // Fonction d'ouverture de l'app principale
     private func openMainApp() {
         dismiss()
         NSApp.activate(ignoringOtherApps: true)

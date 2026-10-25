@@ -16,7 +16,13 @@ class YahooFinanceService {
         } catch { print("Yahoo Error: \(error.localizedDescription)") }
         return nil
     }
-    func fetchUSDEURRate() async -> Double { return await fetchStockData(for: "EUR=X")?.price ?? 1.0 }
+    
+    // MODIFIÉ : Récupère le taux de n'importe quelle devise vers n'importe quelle devise
+    func fetchExchangeRate(from base: String, to target: String) async -> Double {
+        if base == target { return 1.0 }
+        let ticker = "\(base)\(target)=X"
+        return await fetchStockData(for: ticker)?.price ?? 1.0
+    }
 }
 
 @MainActor
@@ -24,6 +30,14 @@ class PortfolioViewModel: ObservableObject {
     
     var modelContext: ModelContext?
     @Published var settings: AppSettings?
+    
+    // NOUVEAU : Variable publiée pour rafraîchir l'UI immédiatement au changement
+    @Published var preferredCurrency: String = "EUR" {
+        didSet {
+            settings?.preferredCurrency = preferredCurrency
+            Task { await refreshPrices() }
+        }
+    }
     
     // ==========================================
     // VARIABLES PUBLIÉES (Synchronisées avec SwiftData)
@@ -112,6 +126,9 @@ class PortfolioViewModel: ObservableObject {
                 
                 // NOUVEAU : On fetch l'investissement manuel pour le calcul correct du ROI
                 self.manuallyInvested = existingSettings.manuallyInvested
+                
+                // NOUVEAU : Charger la devise globale
+                if let prefCurr = existingSettings.preferredCurrency { self.preferredCurrency = prefCurr }
             }
         } catch {
             print("Erreur de chargement des données dans le ViewModel (Menu Bar) : \(error)")
@@ -170,6 +187,9 @@ class PortfolioViewModel: ObservableObject {
         
         if let bmkType = settings!.benchmarkGoalType { self.benchmarkGoalType = bmkType }
         if let bmkTarget = settings!.benchmarkGoalTarget { self.benchmarkGoalTarget = bmkTarget }
+        
+        // NOUVEAU : Assigner la devise globale
+        if let prefCurr = settings!.preferredCurrency { self.preferredCurrency = prefCurr }
         
         // 4. SETUP FINAL
         setupDividendYears()
@@ -327,21 +347,39 @@ class PortfolioViewModel: ObservableObject {
     
     func refreshPrices() async {
         isLoading = true
-        let rate = await yahooService.fetchUSDEURRate()
+        
+        // MODIFIÉ : On garde le nom usdToEurRate pour la BDD, mais on stocke la conversion vers la Devise Préférée !
+        let targetCurrency = preferredCurrency
         
         // On combine les tickers des positions ET de la watchlist
         let positionTickers = positions.map { $0.ticker }
         let watchlistTickers = watchlistItems.map { $0.ticker }
         let allTickers = Array(Set(positionTickers + watchlistTickers))
         
+        // Petit cache pour ne pas faire d'appels Yahoo répétés pour la même paire de devises
+        var exchangeRatesCache: [String: Double] = [:]
+        
         for ticker in allTickers {
             if let data = await yahooService.fetchStockData(for: ticker) {
+                let stockCurrency = data.currency
+                var conversionRate = 1.0
+                
+                // Si la devise de l'action est différente de la devise globale de l'app, on convertit
+                if stockCurrency != targetCurrency {
+                    let cacheKey = "\(stockCurrency)-\(targetCurrency)"
+                    if let cachedRate = exchangeRatesCache[cacheKey] {
+                        conversionRate = cachedRate
+                    } else {
+                        conversionRate = await yahooService.fetchExchangeRate(from: stockCurrency, to: targetCurrency)
+                        exchangeRatesCache[cacheKey] = conversionRate
+                    }
+                }
                 
                 // Mise à jour des positions
                 for i in 0..<positions.count where positions[i].ticker == ticker {
                     positions[i].currentPrice = data.price
                     positions[i].currency = data.currency
-                    positions[i].usdToEurRate = rate
+                    positions[i].usdToEurRate = conversionRate // On utilise cette variable comme convertisseur générique
                 }
                 
                 // Mise à jour de la watchlist (en supposant que WatchlistItem a les propriétés currentPrice et currency)
@@ -369,24 +407,24 @@ class PortfolioViewModel: ObservableObject {
         for pos in positions {
             guard pos.annualDividendNet > 0, !pos.dividendMonths.isEmpty else { continue }
             
-            // 1. Calcul du dividende annuel total BRUT en Euros
-            // annualDividendNet stocke le brut local par action, on le convertit en brut total €
-            let rate = pos.currency == "USD" ? pos.usdToEurRate : 1.0
-            let brutPerYearEUR = pos.quantity * pos.annualDividendNet * rate
+            // 1. Calcul du dividende annuel total BRUT en Devises globales
+            // annualDividendNet stocke le brut local par action, on le convertit en brut total global
+            let rate = pos.usdToEurRate // Ce taux convertit la devise locale vers la devise globale de l'app
+            let brutPerYearGlobal = pos.quantity * pos.annualDividendNet * rate
             
-            // 2. Calcul du dividende annuel total NET en Euros
-            let netPerYearEUR = brutPerYearEUR * taxMultiplier
+            // 2. Calcul du dividende annuel total NET en Devises Globales
+            let netPerYearGlobal = brutPerYearGlobal * taxMultiplier
             
             // 3. Division par le nombre de mois de versements pour avoir le montant par mois
             let monthsCount = Double(pos.dividendMonths.count)
-            let brutPerMonthEUR = brutPerYearEUR / monthsCount
-            let netPerMonthEUR = netPerYearEUR / monthsCount
+            let brutPerMonthGlobal = brutPerYearGlobal / monthsCount
+            let netPerMonthGlobal = netPerYearGlobal / monthsCount
             
             for m in pos.dividendMonths {
                 guard m >= 1 && m <= 12 else { continue }
                 let monthName = monthsShort[m-1]
-                newExpectedSeries.append(ExpectedMonthlyDividendSeries(month: m, monthName: monthName, type: "Net", ticker: pos.ticker, amount: netPerMonthEUR))
-                newExpectedSeries.append(ExpectedMonthlyDividendSeries(month: m, monthName: monthName, type: "Gross", ticker: pos.ticker, amount: brutPerMonthEUR))
+                newExpectedSeries.append(ExpectedMonthlyDividendSeries(month: m, monthName: monthName, type: "Net", ticker: pos.ticker, amount: netPerMonthGlobal))
+                newExpectedSeries.append(ExpectedMonthlyDividendSeries(month: m, monthName: monthName, type: "Gross", ticker: pos.ticker, amount: brutPerMonthGlobal))
             }
         }
         self.expectedMonthlyDividendSeries = newExpectedSeries.sorted { $0.month < $1.month }
@@ -565,6 +603,7 @@ class PortfolioViewModel: ObservableObject {
     private var notifiedAlerts: Set<String> = []
 
     func checkAlertsAndNotify() {
+        let targetCurrency = preferredCurrency
         
         // -----------------------------------------------------
         // 1. Target Prices (Opportunités d'achat / Vente)
@@ -616,7 +655,7 @@ class PortfolioViewModel: ObservableObject {
                 NotificationManager.shared.sendImmediateNotification(
                     title: "\(emoji) High Volatility Detected",
                     subtitle: "Daily Market Action",
-                    body: "Your portfolio moved by \(sign)\(dailyROIPercent.formatted(.percent.precision(.fractionLength(2)))) (\(sign)\(totalDailyROIValue.formatted(.currency(code: "EUR")))) today."
+                    body: "Your portfolio moved by \(sign)\(dailyROIPercent.formatted(.percent.precision(.fractionLength(2)))) (\(sign)\(totalDailyROIValue.formatted(.currency(code: targetCurrency)))) today."
                 )
                 notifiedAlerts.insert(volAlertId)
             }
@@ -633,7 +672,7 @@ class PortfolioViewModel: ObservableObject {
                 NotificationManager.shared.sendImmediateNotification(
                     title: "🏆 Goal Reached!",
                     subtitle: "Congratulations!",
-                    body: "Your portfolio has surpassed your goal of \(currentGoalTarget.formatted(.currency(code: "EUR")))."
+                    body: "Your portfolio has surpassed your goal of \(currentGoalTarget.formatted(.currency(code: targetCurrency)))."
                 )
                 notifiedAlerts.insert(alertId)
             }
@@ -656,7 +695,7 @@ class PortfolioViewModel: ObservableObject {
                 } else {
                     currentValue = 0.0
                 }
-                formattedGoal = growthGoalTarget.formatted(.currency(code: "EUR"))
+                formattedGoal = growthGoalTarget.formatted(.currency(code: targetCurrency))
             case .cagr:
                 currentValue = cagr * 100
                 formattedGoal = "\(growthGoalTarget.formatted(.number.precision(.fractionLength(2))))%"
@@ -685,7 +724,7 @@ class PortfolioViewModel: ObservableObject {
             switch goalType {
             case .dividendsAnnual:
                 currentValue = totalDividends
-                formattedGoal = dividendGoalTarget.formatted(.currency(code: "EUR"))
+                formattedGoal = dividendGoalTarget.formatted(.currency(code: targetCurrency))
                 goalDescription = "expected annual dividend"
             case .portfolioYield:
                 currentValue = portfolioYield * 100
@@ -694,11 +733,11 @@ class PortfolioViewModel: ObservableObject {
             case .currentYearTotal:
                 let currentYear = Calendar.current.component(.year, from: Date())
                 currentValue = dividendYears.first(where: { $0.year == currentYear })?.total ?? 0.0
-                formattedGoal = dividendGoalTarget.formatted(.currency(code: "EUR"))
+                formattedGoal = dividendGoalTarget.formatted(.currency(code: targetCurrency))
                 goalDescription = "dividends received this year"
             case .allTimeTotal:
                 currentValue = dividendYears.reduce(0) { $0 + $1.total }
-                formattedGoal = dividendGoalTarget.formatted(.currency(code: "EUR"))
+                formattedGoal = dividendGoalTarget.formatted(.currency(code: targetCurrency))
                 goalDescription = "total all-time received dividends"
             }
             
@@ -708,7 +747,6 @@ class PortfolioViewModel: ObservableObject {
                     NotificationManager.shared.sendImmediateNotification(
                         title: "💸 Dividend Goal Reached!",
                         subtitle: "Passive Income Tracker",
-                        // Le texte va maintenant dire : "Congratulations! You have hit your [dividends received this year] goal of [€100.00]."
                         body: "Congratulations! You have hit your \(goalDescription) goal of \(formattedGoal)."
                     )
                     notifiedAlerts.insert(alertId)
@@ -729,16 +767,16 @@ class PortfolioViewModel: ObservableObject {
                 formattedCurrent = "\(Int(currentValue)) transactions"
             case .totalInvested:
                 currentValue = transactions.filter { $0.type == .buy }.reduce(0) { $0 + $1.amountEUR }
-                formattedGoal = transactionGoalTarget.formatted(.currency(code: "EUR"))
-                formattedCurrent = "\(currentValue.formatted(.currency(code: "EUR"))) invested"
+                formattedGoal = transactionGoalTarget.formatted(.currency(code: targetCurrency))
+                formattedCurrent = "\(currentValue.formatted(.currency(code: targetCurrency))) invested"
             case .totalSold:
                 currentValue = transactions.filter { $0.type == .sell }.reduce(0) { $0 + $1.amountEUR }
-                formattedGoal = transactionGoalTarget.formatted(.currency(code: "EUR"))
-                formattedCurrent = "\(currentValue.formatted(.currency(code: "EUR"))) sold"
+                formattedGoal = transactionGoalTarget.formatted(.currency(code: targetCurrency))
+                formattedCurrent = "\(currentValue.formatted(.currency(code: targetCurrency))) sold"
             case .totalFees:
                 currentValue = transactions.reduce(0) { $0 + $1.customFields.values.reduce(0, +) }
-                formattedGoal = transactionGoalTarget.formatted(.currency(code: "EUR"))
-                formattedCurrent = "\(currentValue.formatted(.currency(code: "EUR"))) in fees"
+                formattedGoal = transactionGoalTarget.formatted(.currency(code: targetCurrency))
+                formattedCurrent = "\(currentValue.formatted(.currency(code: targetCurrency))) in fees"
             }
             
             if currentValue >= transactionGoalTarget {
@@ -835,15 +873,15 @@ class PortfolioViewModel: ObservableObject {
             switch wealthGoalType {
             case .netWorth:
                 currentValue = trueNetWorth
-                formattedGoal = wealthGoalTarget.formatted(.currency(code: "EUR"))
+                formattedGoal = wealthGoalTarget.formatted(.currency(code: targetCurrency))
                 goalDescription = "true net worth"
             case .totalAssets:
                 currentValue = totalAssets
-                formattedGoal = wealthGoalTarget.formatted(.currency(code: "EUR"))
+                formattedGoal = wealthGoalTarget.formatted(.currency(code: targetCurrency))
                 goalDescription = "total assets"
             case .passiveIncome:
                 currentValue = fireMonthlyIncome
-                formattedGoal = wealthGoalTarget.formatted(.currency(code: "EUR"))
+                formattedGoal = wealthGoalTarget.formatted(.currency(code: targetCurrency))
                 goalDescription = "monthly passive income"
             case .debtAssetsRatio:
                 currentValue = debtToAssetRatio * 100 // <-- CORRECTION ICI : debtToAssetRatio
@@ -873,6 +911,7 @@ class PortfolioViewModel: ObservableObject {
 
     // MARK: - MÉTÉO DES DIVIDENDES (1er du mois à 9h00)
     private func scheduleDividendOutlookNotification() {
+        let targetCurrency = preferredCurrency
         let cal = Calendar.current
         let now = Date()
         
@@ -906,7 +945,7 @@ class PortfolioViewModel: ObservableObject {
         // Formater proprement les tickers (limite à 5 pour que ça reste lisible dans une notif)
         let displayTickers = payingTickers.prefix(5).joined(separator: ", ") + (payingTickers.count > 5 ? " and others" : "")
         
-        let body = "Expected: \(grossTotal.formatted(.currency(code: "EUR"))) Gross (\(netTotal.formatted(.currency(code: "EUR"))) Net) from \(displayTickers)."
+        let body = "Expected: \(grossTotal.formatted(.currency(code: targetCurrency))) Gross (\(netTotal.formatted(.currency(code: targetCurrency))) Net) from \(displayTickers)."
         
         NotificationManager.shared.scheduleMonthlyNotification(
             day: 1, hour: 9, minute: 0,
@@ -918,6 +957,7 @@ class PortfolioViewModel: ObservableObject {
 
     // MARK: - BILAN HEBDOMADAIRE (Samedi à 9h00)
     private func scheduleWeeklyRecapNotification() {
+        let targetCurrency = preferredCurrency
         let keyCapital = "start_of_week_capital"
         let keyDate = "start_of_week_date"
         
@@ -936,7 +976,7 @@ class PortfolioViewModel: ObservableObject {
         let pct = startCapital > 0 ? (diff / startCapital) : 0
         let sign = diff >= 0 ? "+" : ""
         
-        let body = "Your portfolio closed at \(currentTotalCapital.formatted(.currency(code: "EUR"))). A performance of \(sign)\(diff.formatted(.currency(code: "EUR"))) (\(sign)\(pct.formatted(.percent.precision(.fractionLength(1))))) this week."
+        let body = "Your portfolio closed at \(currentTotalCapital.formatted(.currency(code: targetCurrency))). A performance of \(sign)\(diff.formatted(.currency(code: targetCurrency))) (\(sign)\(pct.formatted(.percent.precision(.fractionLength(1))))) this week."
         
         // weekday: 7 = Samedi en Swift
         NotificationManager.shared.scheduleWeeklyNotification(
@@ -952,7 +992,7 @@ class PortfolioViewModel: ObservableObject {
             positions: self.positions,
             transactions: self.transactions,
             watchlistItems: self.watchlistItems,
-            calendarEvents: self.calendarEvents
+            calendarEvents: self.calendarEvents, preferredCurrency: self.preferredCurrency
         )
     }
     
@@ -982,6 +1022,7 @@ extension PortfolioViewModel {
         backup.wealthGoalType = wealthGoalType
         backup.wealthGoalTarget = wealthGoalTarget
         backup.safeWithdrawalRate = safeWithdrawalRate
+        backup.preferredCurrency = preferredCurrency
         
         // 2. Arrays & Data
         backup.positions = positions.map { pos in
@@ -1054,6 +1095,7 @@ extension PortfolioViewModel {
         if let v = backup.wealthGoalType { self.wealthGoalType = v }
         if let v = backup.wealthGoalTarget { self.wealthGoalTarget = v }
         if let v = backup.safeWithdrawalRate { self.safeWithdrawalRate = v }
+        if let v = backup.preferredCurrency { self.preferredCurrency = v }
         
         if let tax = backup.dividendTaxRate { self.dividendTaxRate = tax }
         if let tz = backup.userTimeZoneIdentifier { self.userTimeZoneIdentifier = tz }

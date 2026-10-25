@@ -17,6 +17,33 @@ enum AppTheme: String, CaseIterable, Identifiable {
     }
 }
 
+// NOUVEAU: Enum pour les devises supportées
+enum AppCurrency: String, CaseIterable, Identifiable {
+    case eur = "EUR"
+    case usd = "USD"
+    case gbp = "GBP"
+    case chf = "CHF"
+    case cad = "CAD"
+    case aud = "AUD"
+    case jpy = "JPY"
+    
+    var id: String { self.rawValue }
+    
+    var symbol: String {
+        switch self {
+        case .eur: return "€"
+        case .usd, .cad, .aud: return "$"
+        case .gbp: return "£"
+        case .chf: return "CHF"
+        case .jpy: return "¥"
+        }
+    }
+    
+    var displayName: String {
+        return "\(self.rawValue) (\(self.symbol))"
+    }
+}
+
 struct BackupDocument: FileDocument {
     static var readableContentTypes: [UTType] { [.json] }
     var data: Data
@@ -89,8 +116,6 @@ struct SettingsView: View {
                     .padding(.vertical, 8)
                 }
                 
-                //Divider().padding(.vertical, 4)
-                
                 // NOUVELLE SECTION : SECURITY & PRIVACY
                 Section {
                     VStack(alignment: .leading, spacing: 12) {
@@ -102,8 +127,6 @@ struct SettingsView: View {
                     }
                     .padding(.vertical, 8)
                 }
-                
-                //Divider().padding(.vertical, 4)
                 
                 Section {
                     VStack(alignment: .leading, spacing: 8) {
@@ -130,12 +153,36 @@ struct SettingsView: View {
                     .padding(.vertical, 8)
                 }
                 
-                
                 // NOUVELLE SECTION : GLOBAL PREFERENCES
                 Section {
                     VStack(alignment: .leading, spacing: 8) {
                         Text("Global Preferences")
                             .font(.headline)
+                        
+                        // NOUVEAU : Devise globale préférée (Base Currency)
+                        HStack {
+                            VStack(alignment: .leading, spacing: 2) {
+                                Text("Base Currency")
+                                    .fontWeight(.medium)
+                                Text("All portfolio values will be converted and displayed in this currency.")
+                                    .font(.caption)
+                                    .foregroundColor(.secondary)
+                            }
+                            Spacer()
+                            
+                            Picker("", selection: Binding(
+                                get: { AppCurrency(rawValue: viewModel.preferredCurrency) ?? .eur },
+                                set: { viewModel.preferredCurrency = $0.rawValue }
+                            )) {
+                                ForEach(AppCurrency.allCases) { currency in
+                                    Text(currency.displayName).tag(currency)
+                                }
+                            }
+                            .frame(width: 120)
+                            .labelsHidden()
+                        }
+                        
+                        Divider().padding(.vertical, 4)
                         
                         // 1. Taux de taxe sur les dividendes (CORRIGÉ SANS LE 15.0 FLOTTANT)
                         HStack {
@@ -362,4 +409,3 @@ struct SettingsView: View {
         }
     }
 }
-

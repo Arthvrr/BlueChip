@@ -45,11 +45,13 @@ struct GrowthView: View {
                 GrowthDashboardSection(viewModel: viewModel, privacyMode: $privacyMode)
                 
                 // 2. GOAL PROGRESS
+                let goalSym = AppCurrency(rawValue: viewModel.preferredCurrency)?.symbol ?? "€"
                 GoalProgressBar(
-                    title: viewModel.growthGoalType.rawValue,
+                    title: viewModel.growthGoalType.rawValue.replacingOccurrences(of: "€", with: goalSym),
                     currentValue: currentGoalValueForProgressBar,
                     targetValue: viewModel.growthGoalTarget,
                     privacyMode: $privacyMode,
+                    currency: $viewModel.preferredCurrency,
                     isPercentage: viewModel.growthGoalType == .targetReturnPercent || viewModel.growthGoalType == .cagr
                 )
                 .contentShape(Rectangle())
@@ -87,6 +89,8 @@ struct EditGrowthGoalView: View {
     @State private var selectedGoal: GrowthGoalType
     @State private var targetInput: Double
     
+    var currencySymbol: String { AppCurrency(rawValue: viewModel.preferredCurrency)?.symbol ?? "€" }
+    
     init(viewModel: PortfolioViewModel) {
         self.viewModel = viewModel
         _selectedGoal = State(initialValue: viewModel.growthGoalType)
@@ -108,14 +112,18 @@ struct EditGrowthGoalView: View {
                         HStack {
                             Text("Goal Type:")
                             Spacer()
-                            Picker("", selection: $selectedGoal) { ForEach(GrowthGoalType.allCases, id: \.self) { type in Text(type.rawValue).tag(type) } }
+                            Picker("", selection: $selectedGoal) {
+                                ForEach(GrowthGoalType.allCases, id: \.self) { type in
+                                    Text(type.rawValue.replacingOccurrences(of: "€", with: currencySymbol)).tag(type)
+                                }
+                            }
                             .labelsHidden().frame(width: 150)
                         }
                         Divider().opacity(0.5)
                         HStack {
                             Text("Target Amount:")
                             Spacer()
-                            TextField("e.g. 5000", value: $targetInput, format: .number).textFieldStyle(.roundedBorder).multilineTextAlignment(.trailing).frame(width: 150)
+                            TextField(currencySymbol, value: $targetInput, format: .number).textFieldStyle(.roundedBorder).multilineTextAlignment(.trailing).frame(width: 150)
                         }
                     }.padding(.vertical, 4)
                 }
@@ -159,13 +167,13 @@ struct GrowthDashboardSection: View {
         VStack(spacing: 16) {
             HStack(spacing: 16) {
                 let totalInvested = viewModel.manuallyInvested > 0 ? viewModel.manuallyInvested : viewModel.positionsInvestedSum
-                DashboardCard(title: "Current Wallet Value", value: viewModel.currentTotalCapital.formatted(.currency(code: "EUR").precision(.fractionLength(2))), privacyMode: $privacyMode)
-                DashboardCard(title: "Total Invested", value: totalInvested.formatted(.currency(code: "EUR").precision(.fractionLength(2))), privacyMode: $privacyMode)
+                DashboardCard(title: "Current Wallet Value", value: viewModel.currentTotalCapital.formatted(.currency(code: viewModel.preferredCurrency).precision(.fractionLength(2))), privacyMode: $privacyMode)
+                DashboardCard(title: "Total Invested", value: totalInvested.formatted(.currency(code: viewModel.preferredCurrency).precision(.fractionLength(2))), privacyMode: $privacyMode)
                 
                 VStack(alignment: .leading, spacing: 4) {
                     let totalPct = totalInvested > 0 ? (viewModel.allTimeReturnEUR / totalInvested) : 0
                     Text("All-Time Return").font(.subheadline).foregroundColor(.secondary).lineLimit(1)
-                    Text(viewModel.allTimeReturnEUR.formatted(.currency(code: "EUR").precision(.fractionLength(2)).sign(strategy: .always())))
+                    Text(viewModel.allTimeReturnEUR.formatted(.currency(code: viewModel.preferredCurrency).precision(.fractionLength(2)).sign(strategy: .always())))
                         .font(.title2).fontWeight(.bold)
                         .foregroundColor(viewModel.allTimeReturnEUR >= 0 ? .green : .red)
                         .blur(radius: privacyMode ? 8 : 0)
@@ -184,7 +192,8 @@ struct GrowthDashboardSection: View {
             }
             HStack(spacing: 16) {
                 let averageReturnEUR = viewModel.allTimeReturnEUR / Double(max(1, activeYearsCount))
-                DashboardCard(title: "Avg. Return / Year (€)", value: averageReturnEUR.formatted(.currency(code: "EUR").precision(.fractionLength(2)).sign(strategy: .always())), privacyMode: $privacyMode)
+                let sym = AppCurrency(rawValue: viewModel.preferredCurrency)?.symbol ?? "€"
+                DashboardCard(title: "Avg. Return / Year (\(sym))", value: averageReturnEUR.formatted(.currency(code: viewModel.preferredCurrency).precision(.fractionLength(2)).sign(strategy: .always())), privacyMode: $privacyMode)
                 DashboardCard(title: "Avg. Return / Year (%)", value: viewModel.averageReturnPercent.formatted(.percent.precision(.fractionLength(2)).sign(strategy: .always())), privacyMode: $privacyMode)
                 DashboardCard(title: "CAGR (Compound Growth)", value: viewModel.cagr.formatted(.percent.precision(.fractionLength(2))), privacyMode: $privacyMode)
                 DashboardCard(title: "Active Years Tracked", value: "\(activeYearsCount)", privacyMode: $privacyMode)
@@ -222,11 +231,12 @@ struct GrowthTableSection: View {
             Text("Capital Growth History").font(.title2).fontWeight(.bold).foregroundColor(.secondary).padding(.bottom, 4)
             VStack(spacing: 0) {
                 HStack(spacing: 8) {
+                    let sym = AppCurrency(rawValue: viewModel.preferredCurrency)?.symbol ?? "€"
                     Text("Year").fontWeight(.bold).frame(width: 50, alignment: .leading)
                     Text("Start Wallet").frame(maxWidth: .infinity, alignment: .leading)
                     Text("Invested").frame(maxWidth: .infinity, alignment: .leading)
                     Text("End Wallet").frame(maxWidth: .infinity, alignment: .leading)
-                    Text("Return €").fontWeight(.bold).frame(maxWidth: .infinity, alignment: .trailing)
+                    Text("Return \(sym)").fontWeight(.bold).frame(maxWidth: .infinity, alignment: .trailing)
                     Text("Return %").fontWeight(.bold).frame(maxWidth: .infinity, alignment: .trailing)
                     Text("TOTAL Invest").fontWeight(.bold).frame(maxWidth: .infinity, alignment: .trailing)
                 }
@@ -289,10 +299,11 @@ struct GrowthRowView: View {
                 Text("-").frame(maxWidth: .infinity, alignment: .trailing).foregroundColor(.secondary)
                 Text("-").frame(maxWidth: .infinity, alignment: .trailing).foregroundColor(.secondary)
             } else if isZeroReturn {
-                Text("0,00 €").fontWeight(.bold).foregroundColor(.secondary).frame(maxWidth: .infinity, alignment: .trailing).blur(radius: privacyMode ? 6 : 0)
+                let zeroSym = (0.0).formatted(.currency(code: viewModel.preferredCurrency))
+                Text(zeroSym).fontWeight(.bold).foregroundColor(.secondary).frame(maxWidth: .infinity, alignment: .trailing).blur(radius: privacyMode ? 6 : 0)
                 Text("0,00%").fontWeight(.bold).foregroundColor(.secondary).frame(maxWidth: .infinity, alignment: .trailing).blur(radius: privacyMode ? 6 : 0)
             } else {
-                Text(displayReturnAmount.formatted(.currency(code: "EUR").precision(.fractionLength(2)).sign(strategy: .always())))
+                Text(displayReturnAmount.formatted(.currency(code: viewModel.preferredCurrency).precision(.fractionLength(2)).sign(strategy: .always())))
                     .fontWeight(.bold).foregroundColor(displayReturnAmount > 0 ? .green : .red).frame(maxWidth: .infinity, alignment: .trailing)
                     .blur(radius: privacyMode ? 6 : 0)
                 
@@ -304,7 +315,7 @@ struct GrowthRowView: View {
                     .blur(radius: privacyMode ? 6 : 0)
             }
             
-            Text(cumulativeInvest.formatted(.currency(code: "EUR").precision(.fractionLength(2))))
+            Text(cumulativeInvest.formatted(.currency(code: viewModel.preferredCurrency).precision(.fractionLength(2))))
                 .frame(maxWidth: .infinity, alignment: .trailing)
                 .foregroundColor(cumulativeInvest == 0 ? .secondary.opacity(0.5) : .primary)
                 .blur(radius: privacyMode ? 6 : 0)
@@ -449,7 +460,7 @@ struct CashVsStocksChart: View {
                         if let value = selectedAngleValue, let item = findItem(for: value) {
                             VStack {
                                 Text(item.name).font(.headline)
-                                Text(item.value.formatted(.currency(code: "EUR").precision(.fractionLength(2)))).font(.subheadline).foregroundColor(.secondary).blur(radius: privacyMode ? 6 : 0)
+                                Text(item.value.formatted(.currency(code: viewModel.preferredCurrency).precision(.fractionLength(2)))).font(.subheadline).foregroundColor(.secondary).blur(radius: privacyMode ? 6 : 0)
                             }.position(x: geometry.frame(in: .local).midX, y: geometry.frame(in: .local).midY)
                         }
                     }
@@ -510,7 +521,7 @@ struct CapitalVsGainsChart: View {
                         if let value = selectedAngleValue, let item = findItem(for: value) {
                             VStack {
                                 Text(item.name).font(.headline)
-                                Text(item.value.formatted(.currency(code: "EUR").precision(.fractionLength(2)))).font(.subheadline).foregroundColor(.secondary).blur(radius: privacyMode ? 6 : 0)
+                                Text(item.value.formatted(.currency(code: viewModel.preferredCurrency).precision(.fractionLength(2)))).font(.subheadline).foregroundColor(.secondary).blur(radius: privacyMode ? 6 : 0)
                             }.position(x: geometry.frame(in: .local).midX, y: geometry.frame(in: .local).midY)
                         }
                     }
@@ -575,7 +586,7 @@ struct GainsProvenanceChart: View {
                         if let value = selectedAngleValue, let item = findItem(for: value) {
                             VStack {
                                 Text(item.name).font(.headline)
-                                Text(item.value.formatted(.currency(code: "EUR").precision(.fractionLength(2)))).font(.subheadline).foregroundColor(.secondary).blur(radius: privacyMode ? 6 : 0)
+                                Text(item.value.formatted(.currency(code: viewModel.preferredCurrency).precision(.fractionLength(2)))).font(.subheadline).foregroundColor(.secondary).blur(radius: privacyMode ? 6 : 0)
                             }.position(x: geometry.frame(in: .local).midX, y: geometry.frame(in: .local).midY)
                         }
                     }
@@ -599,13 +610,14 @@ struct AnnualReturnsTooltip: View {
     let showEuros: Bool
     let showPercent: Bool
     let privacyMode: Bool
+    let currency: String
     
     var body: some View {
         VStack(alignment: .center, spacing: 4) {
             Text(String(year)).font(.caption.bold())
             
             if showEuros {
-                Text(returnEUR.formatted(.currency(code: "EUR").precision(.fractionLength(2)).sign(strategy: .always())))
+                Text(returnEUR.formatted(.currency(code: currency).precision(.fractionLength(2)).sign(strategy: .always())))
                     .font(.caption2)
                     .foregroundColor(returnEUR >= 0 ? .green : .red)
                     .blur(radius: privacyMode ? 6 : 0)
@@ -672,12 +684,13 @@ struct AnnualReturnsComboChart: View {
                 if !isExpanded { Text("Annual Returns").font(.headline).foregroundColor(.secondary) }
                 Spacer()
                 HStack(spacing: 12) {
-                    Button(action: { withAnimation { toggle("Return €") } }) {
+                    Button(action: { withAnimation { toggle("Return Value") } }) {
+                        let sym = AppCurrency(rawValue: viewModel.preferredCurrency)?.symbol ?? "€"
                         HStack(spacing: 4) {
                             RoundedRectangle(cornerRadius: 2).fill(Color.blue.opacity(0.55)).frame(width: 12, height: 12)
-                            Text("Return €").font(.caption).foregroundColor(hiddenSeries.contains("Return €") ? .secondary : .primary)
+                            Text("Return \(sym)").font(.caption).foregroundColor(hiddenSeries.contains("Return Value") ? .secondary : .primary)
                         }
-                    }.buttonStyle(.plain).opacity(hiddenSeries.contains("Return €") ? 0.4 : 1.0)
+                    }.buttonStyle(.plain).opacity(hiddenSeries.contains("Return Value") ? 0.4 : 1.0)
 
                     Button(action: { withAnimation { toggle("Return %") } }) {
                         HStack(spacing: 4) {
@@ -695,9 +708,9 @@ struct AnnualReturnsComboChart: View {
                 Spacer()
             } else {
                 Chart {
-                    if !hiddenSeries.contains("Return €") {
+                    if !hiddenSeries.contains("Return Value") {
                         ForEach(data) { item in
-                            BarMark(x: .value("Year", String(item.year)), y: .value("Return €", item.returnEUR))
+                            BarMark(x: .value("Year", String(item.year)), y: .value("Return", item.returnEUR))
                                 .foregroundStyle(item.returnEUR >= 0 ? Color.blue.opacity(0.55) : Color.red.opacity(0.55)).cornerRadius(4)
                         }
                     }
@@ -732,9 +745,10 @@ struct AnnualReturnsComboChart: View {
                                     year: item.year,
                                     returnEUR: item.returnEUR,
                                     returnPercent: item.returnPercent,
-                                    showEuros: !hiddenSeries.contains("Return €"),
+                                    showEuros: !hiddenSeries.contains("Return Value"),
                                     showPercent: !hiddenSeries.contains("Return %"),
-                                    privacyMode: privacyMode
+                                    privacyMode: privacyMode,
+                                    currency: viewModel.preferredCurrency
                                 )
                                 .position(x: max(40, min(geometry.size.width - 40, xPosition)), y: 35)
                             }
@@ -743,7 +757,7 @@ struct AnnualReturnsComboChart: View {
                 }
                 .chartXSelection(value: $hoveredYear)
                 .chartYScale(domain: yMin...yMax)
-                .chartYAxis { AxisMarks(position: .leading) { value in AxisGridLine(); AxisTick(); AxisValueLabel { if let v = value.as(Double.self) { Text(v.formatted(.currency(code: "EUR").precision(.fractionLength(0)))).font(.system(size: 10)) } } } }
+                .chartYAxis { AxisMarks(position: .leading) { value in AxisGridLine(); AxisTick(); AxisValueLabel { if let v = value.as(Double.self) { Text(v.formatted(.currency(code: viewModel.preferredCurrency).precision(.fractionLength(0)))).font(.system(size: 10)) } } } }
                 .chartXAxis { AxisMarks { value in AxisValueLabel { if let s = value.as(String.self) { Text(s).font(.caption) } } } }
             }
             HStack { Text("Shows year-over-year absolute and relative portfolio performance").font(.caption2).foregroundColor(.secondary); Spacer(); BlueChipWatermark() }
@@ -760,6 +774,7 @@ struct InvestedVsValueTooltip: View {
     let iItem: InvestedVsValueChart.InvestedVsValueItem?
     let hiddenItems: Set<String>
     let privacyMode: Bool
+    let currency: String
     
     var body: some View {
         VStack(alignment: .leading, spacing: 4) {
@@ -768,20 +783,20 @@ struct InvestedVsValueTooltip: View {
             if !hiddenItems.contains("Portfolio Value"), let p = pItem {
                 HStack(spacing: 4) {
                     Circle().fill(Color.blue).frame(width: 7, height: 7)
-                    Text("Value: \(p.value.formatted(.currency(code: "EUR").precision(.fractionLength(0))))")
+                    Text("Value: \(p.value.formatted(.currency(code: currency).precision(.fractionLength(0))))")
                         .font(.caption2).foregroundColor(.blue).blur(radius: privacyMode ? 6 : 0)
                 }
             }
             if !hiddenItems.contains("Cumulative Invested"), let i = iItem {
                 HStack(spacing: 4) {
                     Circle().fill(Color.gray).frame(width: 7, height: 7)
-                    Text("Invested: \(i.value.formatted(.currency(code: "EUR").precision(.fractionLength(0))))")
+                    Text("Invested: \(i.value.formatted(.currency(code: currency).precision(.fractionLength(0))))")
                         .font(.caption2).foregroundColor(.secondary).blur(radius: privacyMode ? 6 : 0)
                 }
             }
             if let p = pItem, let i = iItem, !hiddenItems.contains("Portfolio Value"), !hiddenItems.contains("Cumulative Invested") {
                 let diff = p.value - i.value
-                Text("Diff: \(diff.formatted(.currency(code: "EUR").precision(.fractionLength(0)).sign(strategy: .always())))")
+                Text("Diff: \(diff.formatted(.currency(code: currency).precision(.fractionLength(0)).sign(strategy: .always())))")
                     .font(.caption2.bold()).foregroundColor(diff >= 0 ? .green : .red).blur(radius: privacyMode ? 6 : 0)
                     .padding(.top, 2)
             }
@@ -843,15 +858,15 @@ struct InvestedVsValueChart: View {
                 Chart {
                     if !hiddenItems.contains("Portfolio Value") {
                         ForEach(portfolioItems) { item in
-                            AreaMark(x: .value("Year", String(item.year)), y: .value("€", item.value), series: .value("Series", "portfolio"))
+                            AreaMark(x: .value("Year", String(item.year)), y: .value("Value", item.value), series: .value("Series", "portfolio"))
                                 .foregroundStyle(LinearGradient(colors: [Color.blue.opacity(0.35), Color.blue.opacity(0.05)], startPoint: .top, endPoint: .bottom)).interpolationMethod(.monotone)
-                            LineMark(x: .value("Year", String(item.year)), y: .value("€", item.value), series: .value("Series", "portfolio"))
+                            LineMark(x: .value("Year", String(item.year)), y: .value("Value", item.value), series: .value("Series", "portfolio"))
                                 .foregroundStyle(Color.blue).lineStyle(StrokeStyle(lineWidth: 2.5)).interpolationMethod(.monotone)
                         }
                     }
                     if !hiddenItems.contains("Cumulative Invested") {
                         ForEach(investedItems) { item in
-                            LineMark(x: .value("Year", String(item.year)), y: .value("€", item.value), series: .value("Series", "invested"))
+                            LineMark(x: .value("Year", String(item.year)), y: .value("Value", item.value), series: .value("Series", "invested"))
                                 .foregroundStyle(Color.gray.opacity(0.7)).lineStyle(StrokeStyle(lineWidth: 2, dash: [6, 4])).interpolationMethod(.linear)
                         }
                     }
@@ -876,7 +891,8 @@ struct InvestedVsValueChart: View {
                                     pItem: hoveredPortfolio,
                                     iItem: hoveredInvested,
                                     hiddenItems: hiddenItems,
-                                    privacyMode: privacyMode
+                                    privacyMode: privacyMode,
+                                    currency: viewModel.preferredCurrency
                                 )
                                 .position(x: max(60, min(geometry.size.width - 60, xPosition)), y: 45)
                             }
@@ -884,7 +900,7 @@ struct InvestedVsValueChart: View {
                     }
                 }
                 .chartXSelection(value: $hoveredYear)
-                .chartYAxis { AxisMarks(position: .leading) { value in AxisGridLine(); AxisTick(); AxisValueLabel { if let v = value.as(Double.self) { Text(v.formatted(.currency(code: "EUR").precision(.fractionLength(0)))).font(.system(size: 10)) } } } }
+                .chartYAxis { AxisMarks(position: .leading) { value in AxisGridLine(); AxisTick(); AxisValueLabel { if let v = value.as(Double.self) { Text(v.formatted(.currency(code: viewModel.preferredCurrency).precision(.fractionLength(0)))).font(.system(size: 10)) } } } }
                 .chartXAxis { AxisMarks { value in AxisValueLabel { if let s = value.as(String.self) { Text(s).font(.caption) } } } }
             }
             HStack { Text("Tracks the widening gap between deposited capital and total portfolio value").font(.caption2).foregroundColor(.secondary); Spacer(); BlueChipWatermark() }
@@ -897,6 +913,7 @@ struct InvestedVsValueChart: View {
 struct WaterfallTooltip: View {
     let item: WaterfallItem
     let privacyMode: Bool
+    let currency: String
     
     var body: some View {
         VStack(alignment: .center, spacing: 4) {
@@ -905,7 +922,7 @@ struct WaterfallTooltip: View {
             let diff = abs(item.end - item.start)
             let isNegative = item.name == "Capital Losses"
             
-            Text(diff.formatted(.currency(code: "EUR").precision(.fractionLength(0)).sign(strategy: .always())))
+            Text(diff.formatted(.currency(code: currency).precision(.fractionLength(0)).sign(strategy: .always())))
                 .font(.caption2)
                 .foregroundColor(isNegative ? .red : (item.name == "Capital Gains" ? .green : .primary))
                 .blur(radius: privacyMode ? 6 : 0)
@@ -999,14 +1016,14 @@ struct WealthWaterfallChart: View {
                         
                         if let hCat = hoveredCategory, let item = filteredData.first(where: { $0.name == hCat }) {
                             if let xPosition = proxy.position(forX: hCat) {
-                                WaterfallTooltip(item: item, privacyMode: privacyMode)
+                                WaterfallTooltip(item: item, privacyMode: privacyMode, currency: viewModel.preferredCurrency)
                                     .position(x: max(60, min(geometry.size.width - 60, xPosition)), y: 35)
                             }
                         }
                     }
                 }
                 .chartXSelection(value: $hoveredCategory)
-                .chartYAxis { AxisMarks(position: .leading) { value in AxisGridLine(); AxisTick(); AxisValueLabel { if let v = value.as(Double.self) { Text(v.formatted(.currency(code: "EUR").notation(.compactName))) } } } }
+                .chartYAxis { AxisMarks(position: .leading) { value in AxisGridLine(); AxisTick(); AxisValueLabel { if let v = value.as(Double.self) { Text(v.formatted(.currency(code: viewModel.preferredCurrency).notation(.compactName))) } } } }
             }
             HStack { Text("Shows the exact bridge from your initial capital to your current wealth").font(.caption2).foregroundColor(.secondary); Spacer(); BlueChipWatermark() }
         }
@@ -1148,6 +1165,7 @@ struct TippingPointTooltip: View {
     let contrib: Double
     let market: Double
     let privacyMode: Bool
+    let currency: String
     
     var body: some View {
         VStack(alignment: .leading, spacing: 4) {
@@ -1155,12 +1173,12 @@ struct TippingPointTooltip: View {
             
             HStack(spacing: 4) {
                 Circle().fill(Color.gray).frame(width: 7, height: 7)
-                Text("Saved: \(contrib.formatted(.currency(code: "EUR").precision(.fractionLength(0))))")
+                Text("Saved: \(contrib.formatted(.currency(code: currency).precision(.fractionLength(0))))")
                     .font(.caption2).foregroundColor(.secondary).blur(radius: privacyMode ? 6 : 0)
             }
             HStack(spacing: 4) {
                 Circle().fill(market >= 0 ? Color.green : Color.red).frame(width: 7, height: 7)
-                Text("Market: \(market.formatted(.currency(code: "EUR").precision(.fractionLength(0)).sign(strategy: .always())))")
+                Text("Market: \(market.formatted(.currency(code: currency).precision(.fractionLength(0)).sign(strategy: .always())))")
                     .font(.caption2).foregroundColor(market >= 0 ? .green : .red).blur(radius: privacyMode ? 6 : 0)
             }
         }
@@ -1278,7 +1296,8 @@ struct TippingPointChart: View {
                                     year: y,
                                     contrib: contrib,
                                     market: mReturn,
-                                    privacyMode: privacyMode
+                                    privacyMode: privacyMode,
+                                    currency: viewModel.preferredCurrency
                                 )
                                 .position(x: max(60, min(geometry.size.width - 60, xPosition)), y: 45)
                             }
@@ -1288,7 +1307,7 @@ struct TippingPointChart: View {
                 .chartXSelection(value: $hoveredYear)
                 .chartXScale(domain: yearsDomain)
                 .chartYScale(domain: yMin...yMax)
-                .chartYAxis { AxisMarks(position: .leading) { value in AxisGridLine(); AxisTick(); AxisValueLabel { if let v = value.as(Double.self) { Text(v.formatted(.currency(code: "EUR").notation(.compactName))) } } } }
+                .chartYAxis { AxisMarks(position: .leading) { value in AxisGridLine(); AxisTick(); AxisValueLabel { if let v = value.as(Double.self) { Text(v.formatted(.currency(code: viewModel.preferredCurrency).notation(.compactName))) } } } }
             }
             HStack { Text("Watch for the year your money works harder than you").font(.caption2).foregroundColor(.secondary); Spacer(); BlueChipWatermark() }
         }.padding().frame(minHeight: isExpanded ? 500 : 300, maxHeight: isExpanded ? .infinity : 300).background(Color(NSColor.controlBackgroundColor)).cornerRadius(12).shadow(color: Color.black.opacity(0.05), radius: 2, x: 0, y: 1)

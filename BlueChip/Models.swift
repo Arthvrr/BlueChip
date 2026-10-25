@@ -166,9 +166,13 @@ struct RevenueSegment: Identifiable, Codable {
     var dividendTaxRate: Double?
     var userTimeZoneIdentifier: String?
     
-    init(availableCash: Double = 0, manuallyInvested: Double = 0) {
+    // NOUVEAU: Devise globale préférée de l'utilisateur
+    var preferredCurrency: String?
+    
+    init(availableCash: Double = 0, manuallyInvested: Double = 0, preferredCurrency: String = "EUR") {
         self.availableCash = availableCash
         self.manuallyInvested = manuallyInvested
+        self.preferredCurrency = preferredCurrency
     }
 }
 
@@ -428,6 +432,9 @@ struct LegacyPortfolioSaveData: Codable {
     
     var dividendTaxRate: Double?
     var userTimeZoneIdentifier: String?
+    
+    // NOUVEAU: Devise globale préférée de l'utilisateur
+    var preferredCurrency: String?
 
     // UserDefaults / AppStorage Preferences
     var userPreferences: [String: String]?

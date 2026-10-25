@@ -104,13 +104,15 @@ struct TransactionsView: View {
     var body: some View {
         ScrollView(.vertical) {
             VStack(spacing: 24) {
-                TransactionsDashboardSection(tx: filteredGlobalTransactions, privacyMode: $privacyMode)
+                TransactionsDashboardSection(viewModel: viewModel, tx: filteredGlobalTransactions, privacyMode: $privacyMode)
 
+                let goalSym = AppCurrency(rawValue: viewModel.preferredCurrency)?.symbol ?? "€"
                 GoalProgressBar(
-                    title: viewModel.transactionGoalType.rawValue,
+                    title: viewModel.transactionGoalType.rawValue.replacingOccurrences(of: "€", with: goalSym),
                     currentValue: currentGoalValueForProgressBar,
                     targetValue: viewModel.transactionGoalTarget,
                     privacyMode: $privacyMode,
+                    currency: $viewModel.preferredCurrency,
                     isPercentage: false,
                     isCount: viewModel.transactionGoalType == .count
                 )
@@ -160,6 +162,7 @@ struct TransactionsView: View {
 // =========================================================================
 
 struct TransactionsDashboardSection: View {
+    @ObservedObject var viewModel: PortfolioViewModel
     let tx: [Transaction]
     @Binding var privacyMode: Bool
 
@@ -193,8 +196,8 @@ struct TransactionsDashboardSection: View {
     func txCard(_ title: String, value: Double) -> some View {
         VStack(alignment: .leading, spacing: 4) {
             Text(title).font(.subheadline).foregroundColor(.secondary).lineLimit(1).minimumScaleFactor(0.8)
-            Text(value.formatted(.currency(code: "EUR").precision(.fractionLength(2))))
-                .font(.title2).fontWeight(.bold).foregroundColor(.primary) // MODIFIÉ: Valeur en noir (.primary)
+            Text(value.formatted(.currency(code: viewModel.preferredCurrency).precision(.fractionLength(2))))
+                .font(.title2).fontWeight(.bold).foregroundColor(.primary)
                 .blur(radius: privacyMode ? 6 : 0)
         }
         .padding().frame(maxWidth: .infinity, alignment: .leading).frame(height: 110)
@@ -306,7 +309,7 @@ struct TransactionsTableSection: View {
             GeometryReader { geo in
                 ScrollView(.horizontal, showsIndicators: true) {
                     VStack(spacing: 0) {
-                        txHeaderRow().background(Color(NSColor.windowBackgroundColor).opacity(0.6)) // En-tête plus léger
+                        txHeaderRow().background(Color(NSColor.windowBackgroundColor).opacity(0.6))
                         Divider()
                         
                         if filtered.isEmpty {
@@ -319,18 +322,18 @@ struct TransactionsTableSection: View {
                         } else {
                             ScrollView(.vertical) {
                                 LazyVStack(spacing: 0) {
-                                    // Utilisation de enumerated pour le zebra striping
                                     ForEach(Array(filtered.enumerated()), id: \.element.id) { index, tx in
                                         TransactionRowView(
+                                            viewModel: viewModel,
                                             tx: tx,
                                             columns: columns,
                                             privacyMode: privacyMode,
                                             dateFormatter: dateFormatter,
-                                            isEvenRow: index % 2 == 0, // Zebra striping
+                                            isEvenRow: index % 2 == 0,
                                             onEdit: { editingTransaction = tx },
                                             onDelete: { viewModel.deleteTransaction(id: tx.id) }
                                         )
-                                        Divider().opacity(0.5) // Ligne de séparation plus douce
+                                        Divider().opacity(0.5)
                                     }
                                 }
                             }
@@ -350,18 +353,19 @@ struct TransactionsTableSection: View {
 
     @ViewBuilder
     func txHeaderRow() -> some View {
+        let sym = AppCurrency(rawValue: viewModel.preferredCurrency)?.symbol ?? "€"
         HStack(spacing: 12) {
             Text("Date").frame(width: 120, alignment: .leading)
             Text("Type").frame(width: 100, alignment: .center)
             Text("Ticker").frame(width: 80, alignment: .center)
             Text("Qty").frame(maxWidth: .infinity, alignment: .center)
-            Text("Amount €").frame(maxWidth: .infinity, alignment: .center)
+            Text("Amount \(sym)").frame(maxWidth: .infinity, alignment: .center)
             ForEach(columns, id: \.self) { col in
                 Text(col).frame(maxWidth: .infinity, alignment: .center)
             }
             Text("Note").frame(maxWidth: .infinity, alignment: .leading)
         }
-        .font(.caption).foregroundColor(.secondary) // Police plus moderne
+        .font(.caption).foregroundColor(.secondary)
         .padding(.vertical, 12).padding(.horizontal, 16)
     }
 
@@ -379,11 +383,12 @@ struct TransactionsTableSection: View {
 }
 
 struct TransactionRowView: View {
+    @ObservedObject var viewModel: PortfolioViewModel
     let tx: Transaction
     let columns: [String]
     let privacyMode: Bool
     let dateFormatter: DateFormatter
-    let isEvenRow: Bool // NOUVEAU
+    let isEvenRow: Bool
     let onEdit: () -> Void
     let onDelete: () -> Void
 
@@ -394,7 +399,6 @@ struct TransactionRowView: View {
                 .foregroundColor(.secondary)
                 .frame(width: 120, alignment: .leading)
 
-            // Pill de statut centré
             HStack(spacing: 4) {
                 Image(systemName: tx.type.icon).font(.caption2)
                 Text(tx.type.rawValue).font(.caption).fontWeight(.bold)
@@ -414,16 +418,16 @@ struct TransactionRowView: View {
                 .blur(radius: privacyMode ? 6 : 0)
                 .frame(maxWidth: .infinity, alignment: .center)
 
-            Text(tx.amountEUR.formatted(.currency(code: "EUR").precision(.fractionLength(2))))
+            Text(tx.amountEUR.formatted(.currency(code: viewModel.preferredCurrency).precision(.fractionLength(2))))
                 .fontWeight(.bold)
-                .foregroundColor(tx.type == .withdrawal || tx.type == .sell ? .primary : .primary) // Tout en noir pour rester clean
+                .foregroundColor(.primary)
                 .font(.system(size: 13))
                 .blur(radius: privacyMode ? 6 : 0)
                 .frame(maxWidth: .infinity, alignment: .center)
 
             ForEach(columns, id: \.self) { col in
                 let val = tx.customFields[col] ?? 0
-                Text(val == 0 ? "—" : val.formatted(.currency(code: "EUR").precision(.fractionLength(2))))
+                Text(val == 0 ? "—" : val.formatted(.currency(code: viewModel.preferredCurrency).precision(.fractionLength(2))))
                     .font(.system(size: 13))
                     .foregroundColor(val > 0 ? .red.opacity(0.8) : .secondary)
                     .blur(radius: privacyMode ? 6 : 0)
@@ -435,7 +439,7 @@ struct TransactionRowView: View {
                 .frame(maxWidth: .infinity, alignment: .leading)
         }
         .padding(.vertical, 14).padding(.horizontal, 16)
-        .background(isEvenRow ? Color.gray.opacity(0.03) : Color.clear) // Lignes alternées
+        .background(isEvenRow ? Color.gray.opacity(0.03) : Color.clear)
         .contentShape(Rectangle())
         .onTapGesture(count: 2) { onEdit() }
         .contextMenu {
@@ -480,10 +484,10 @@ struct TransactionsYearlySummarySection: View {
                             
                             VStack(spacing: 0) {
                                 ForEach(years, id: \.self) { year in
-                                    YearlySummaryRowView(year: year, transactions: txForYear(year), columns: viewModel.transactionCustomColumns, privacyMode: privacyMode)
+                                    YearlySummaryRowView(viewModel: viewModel, year: year, transactions: txForYear(year), columns: viewModel.transactionCustomColumns, privacyMode: privacyMode)
                                     Divider()
                                 }
-                                YearlyTotalsRowView(transactions: tx, columns: viewModel.transactionCustomColumns, privacyMode: privacyMode)
+                                YearlyTotalsRowView(viewModel: viewModel, transactions: tx, columns: viewModel.transactionCustomColumns, privacyMode: privacyMode)
                             }
                         }
                         .frame(minWidth: geo.size.width)
@@ -500,6 +504,7 @@ struct TransactionsYearlySummarySection: View {
 
     @ViewBuilder
     func summaryHeaderRow() -> some View {
+        let sym = AppCurrency(rawValue: viewModel.preferredCurrency)?.symbol ?? "€"
         HStack(spacing: 12) {
             Text("Year").frame(width: 50, alignment: .leading)
             Text("Count").frame(maxWidth: .infinity, alignment: .trailing)
@@ -507,9 +512,9 @@ struct TransactionsYearlySummarySection: View {
             Text("Sells").frame(maxWidth: .infinity, alignment: .trailing)
             Text("Deposits").frame(maxWidth: .infinity, alignment: .trailing)
             Text("Withdrawals").frame(maxWidth: .infinity, alignment: .trailing)
-            Text("Invested €").frame(maxWidth: .infinity, alignment: .trailing)
-            Text("Sold €").frame(maxWidth: .infinity, alignment: .trailing)
-            Text("Deposited €").frame(maxWidth: .infinity, alignment: .trailing)
+            Text("Invested \(sym)").frame(maxWidth: .infinity, alignment: .trailing)
+            Text("Sold \(sym)").frame(maxWidth: .infinity, alignment: .trailing)
+            Text("Deposited \(sym)").frame(maxWidth: .infinity, alignment: .trailing)
             Text("Fees & Taxes").frame(maxWidth: .infinity, alignment: .trailing)
             ForEach(viewModel.transactionCustomColumns, id: \.self) { col in
                 Text(col).frame(maxWidth: .infinity, alignment: .trailing)
@@ -521,6 +526,7 @@ struct TransactionsYearlySummarySection: View {
 }
 
 struct YearlySummaryRowView: View {
+    @ObservedObject var viewModel: PortfolioViewModel
     let year: Int; let transactions: [Transaction]; let columns: [String]; let privacyMode: Bool
 
     var buys:        Int    { transactions.filter { $0.type == .buy        }.count }
@@ -557,7 +563,7 @@ struct YearlySummaryRowView: View {
             .frame(maxWidth: .infinity, alignment: .trailing)
     }
     @ViewBuilder func ec(_ v: Double, color: Color) -> some View {
-        Text(v == 0 ? "—" : v.formatted(.currency(code: "EUR").precision(.fractionLength(2))))
+        Text(v == 0 ? "—" : v.formatted(.currency(code: viewModel.preferredCurrency).precision(.fractionLength(2))))
             .foregroundColor(v == 0 ? .secondary : color).fontWeight(v == 0 ? .regular : .semibold)
             .font(.system(size: 12))
             .blur(radius: privacyMode ? 6 : 0)
@@ -566,6 +572,7 @@ struct YearlySummaryRowView: View {
 }
 
 struct YearlyTotalsRowView: View {
+    @ObservedObject var viewModel: PortfolioViewModel
     let transactions: [Transaction]; let columns: [String]; let privacyMode: Bool
 
     var totalBuys:        Int    { transactions.filter { $0.type == .buy        }.count }
@@ -603,7 +610,7 @@ struct YearlyTotalsRowView: View {
             .frame(maxWidth: .infinity, alignment: .trailing)
     }
     @ViewBuilder func ec(_ v: Double) -> some View {
-        Text(v == 0 ? "—" : v.formatted(.currency(code: "EUR").precision(.fractionLength(2))))
+        Text(v == 0 ? "—" : v.formatted(.currency(code: viewModel.preferredCurrency).precision(.fractionLength(2))))
             .fontWeight(.bold).font(.system(size: 12))
             .blur(radius: privacyMode ? 6 : 0)
             .frame(maxWidth: .infinity, alignment: .trailing)
@@ -822,6 +829,7 @@ struct TxTotalByTypeChart: View {
     @State private var hoveredType: String? = nil
 
     var body: some View {
+        let sym = AppCurrency(rawValue: viewModel.preferredCurrency)?.symbol ?? "€"
         VStack(alignment: .leading, spacing: 8) {
             HStack {
                 if !isExpanded { Text("Summary by Type").font(.headline).foregroundColor(.secondary) }
@@ -830,7 +838,7 @@ struct TxTotalByTypeChart: View {
                     Button(action: { withAnimation { toggleHidden("Amount") } }) {
                         HStack(spacing: 4) {
                             RoundedRectangle(cornerRadius: 2).fill(Color.blue.opacity(0.6)).frame(width: 12, height: 12)
-                            Text("Amount €").font(.caption).foregroundColor(hiddenSeries.contains("Amount") ? .secondary : .primary)
+                            Text("Amount \(sym)").font(.caption).foregroundColor(hiddenSeries.contains("Amount") ? .secondary : .primary)
                         }
                     }.buttonStyle(.plain).opacity(hiddenSeries.contains("Amount") ? 0.4 : 1)
 
@@ -852,7 +860,7 @@ struct TxTotalByTypeChart: View {
                         ForEach(data) { item in
                             BarMark(
                                 x: .value("Type", item.type.rawValue),
-                                y: .value("Amount €", item.amount)
+                                y: .value("Amount", item.amount)
                             )
                             .foregroundStyle(Color.forTransactionType(item.type).opacity(0.75))
                             .cornerRadius(4)
@@ -893,7 +901,7 @@ struct TxTotalByTypeChart: View {
                                 VStack(alignment: .leading, spacing: 4) {
                                     Text(h).font(.caption.bold()).foregroundColor(.primary)
                                     Divider()
-                                    Text("Amount: \(item.amount.formatted(.currency(code: "EUR").precision(.fractionLength(0))))")
+                                    Text("Amount: \(item.amount.formatted(.currency(code: viewModel.preferredCurrency).precision(.fractionLength(0))))")
                                         .font(.caption2).foregroundColor(Color.forTransactionType(item.type))
                                         .blur(radius: privacyMode ? 6 : 0)
                                     Text("Count: \(item.count)")
@@ -915,7 +923,7 @@ struct TxTotalByTypeChart: View {
                         AxisGridLine(); AxisTick()
                         AxisValueLabel {
                             if let d = v.as(Double.self) {
-                                Text(d.formatted(.currency(code: "EUR").precision(.fractionLength(0)))).font(.system(size: 10))
+                                Text(d.formatted(.currency(code: viewModel.preferredCurrency).precision(.fractionLength(0)))).font(.system(size: 10))
                             }
                         }
                     }
@@ -989,18 +997,19 @@ struct TxBuysOverTimeChart: View {
     @State private var hiddenSeries: Set<String> = []
 
     var body: some View {
+        let sym = AppCurrency(rawValue: viewModel.preferredCurrency)?.symbol ?? "€"
         VStack(alignment: .leading, spacing: 8) {
             HStack {
                 if !isExpanded { Text("Buys over Time").font(.headline).foregroundColor(.secondary) }
                 Spacer()
                 
                 HStack(spacing: 12) {
-                    Button(action: { withAnimation { toggleHidden("Amount €") } }) {
+                    Button(action: { withAnimation { toggleHidden("Amount") } }) {
                         HStack(spacing: 4) {
                             RoundedRectangle(cornerRadius: 2).fill(Color.blue.opacity(0.8)).frame(width: 12, height: 12)
-                            Text("Amount €").font(.caption).foregroundColor(hiddenSeries.contains("Amount €") ? .secondary : .primary)
+                            Text("Amount \(sym)").font(.caption).foregroundColor(hiddenSeries.contains("Amount") ? .secondary : .primary)
                         }
-                    }.buttonStyle(.plain).opacity(hiddenSeries.contains("Amount €") ? 0.4 : 1)
+                    }.buttonStyle(.plain).opacity(hiddenSeries.contains("Amount") ? 0.4 : 1)
 
                     Button(action: { withAnimation { toggleHidden("Trend") } }) {
                         HStack(spacing: 4) {
@@ -1017,11 +1026,11 @@ struct TxBuysOverTimeChart: View {
                 emptyState("No buy transactions in this period.")
             } else {
                 Chart {
-                    if !hiddenSeries.contains("Amount €") {
+                    if !hiddenSeries.contains("Amount") {
                         ForEach(buys) { buy in
                             BarMark(
                                 x: .value("Tx", buy.index),
-                                y: .value("Amount €", buy.amount)
+                                y: .value("Amount", buy.amount)
                             )
                             .foregroundStyle(Color.blue.opacity(0.8))
                             .cornerRadius(2)
@@ -1063,7 +1072,7 @@ struct TxBuysOverTimeChart: View {
                                     Text(dateFmt.string(from: buy.date)).font(.caption.bold()).foregroundColor(.primary)
                                     Divider()
                                     Text("\(buy.ticker)").font(.caption2.bold()).foregroundColor(.blue)
-                                    Text("\(buy.amount.formatted(.currency(code: "EUR").precision(.fractionLength(0))))")
+                                    Text("\(buy.amount.formatted(.currency(code: viewModel.preferredCurrency).precision(.fractionLength(0))))")
                                         .font(.caption2)
                                         .blur(radius: privacyMode ? 6 : 0)
                                 }
@@ -1080,7 +1089,7 @@ struct TxBuysOverTimeChart: View {
                 .chartYAxis {
                     AxisMarks(position: .leading) { v in
                         AxisGridLine(); AxisTick()
-                        AxisValueLabel { if let d = v.as(Double.self) { Text(d.formatted(.currency(code: "EUR").precision(.fractionLength(0)))).font(.system(size: 10)) } }
+                        AxisValueLabel { if let d = v.as(Double.self) { Text(d.formatted(.currency(code: viewModel.preferredCurrency).precision(.fractionLength(0)))).font(.system(size: 10)) } }
                     }
                 }
                 .chartXAxis {
@@ -1188,7 +1197,7 @@ struct TxTaxBreakdownChart: View {
                         if let s = selectedAngleValue, let slice = getSelectedSlice(for: s) {
                             VStack {
                                 Text(slice.name).font(.headline).foregroundColor(slice.color)
-                                Text(slice.amount.formatted(.currency(code: "EUR").precision(.fractionLength(2))))
+                                Text(slice.amount.formatted(.currency(code: viewModel.preferredCurrency).precision(.fractionLength(2))))
                                     .font(.title3).fontWeight(.bold)
                                     .blur(radius: privacyMode ? 6 : 0)
                             }.position(x: geometry.frame(in: .local).midX, y: geometry.frame(in: .local).midY)
@@ -1196,7 +1205,7 @@ struct TxTaxBreakdownChart: View {
                             let displayedTotal = filteredSlices.reduce(0) { $0 + $1.amount }
                             VStack {
                                 Text("Total").font(.subheadline).foregroundColor(.secondary)
-                                Text(displayedTotal.formatted(.currency(code: "EUR").precision(.fractionLength(2))))
+                                Text(displayedTotal.formatted(.currency(code: viewModel.preferredCurrency).precision(.fractionLength(2))))
                                     .font(.title2).fontWeight(.bold)
                                     .blur(radius: privacyMode ? 6 : 0)
                             }.position(x: geometry.frame(in: .local).midX, y: geometry.frame(in: .local).midY)
@@ -1306,7 +1315,7 @@ struct TxCapitalAllocationChart: View {
                         if let s = selectedAngleValue, let slice = getSelectedSlice(for: s) {
                             VStack {
                                 Text(slice.ticker).font(.headline).foregroundColor(color(for: slice.ticker))
-                                Text(slice.amount.formatted(.currency(code: "EUR").precision(.fractionLength(0))))
+                                Text(slice.amount.formatted(.currency(code: viewModel.preferredCurrency).precision(.fractionLength(0))))
                                     .font(.title3).fontWeight(.bold)
                                     .blur(radius: privacyMode ? 6 : 0)
                             }.position(x: geometry.frame(in: .local).midX, y: geometry.frame(in: .local).midY)
@@ -1314,7 +1323,7 @@ struct TxCapitalAllocationChart: View {
                             let displayedTotal = filteredSlices.reduce(0) { $0 + $1.amount }
                             VStack {
                                 Text("Total Spent").font(.subheadline).foregroundColor(.secondary)
-                                Text(displayedTotal.formatted(.currency(code: "EUR").precision(.fractionLength(0))))
+                                Text(displayedTotal.formatted(.currency(code: viewModel.preferredCurrency).precision(.fractionLength(0))))
                                     .font(.title2).fontWeight(.bold)
                                     .blur(radius: privacyMode ? 6 : 0)
                             }.position(x: geometry.frame(in: .local).midX, y: geometry.frame(in: .local).midY)
@@ -1573,10 +1582,10 @@ struct TxTradeBalanceChart: View {
                                 Text(h).font(.caption.bold())
                                 Divider()
                                 if !hiddenTypes.contains("Buy") {
-                                    HStack { Circle().fill(Color.blue).frame(width: 6, height: 6); Text("Buys:").font(.caption2); Spacer(); Text(b.formatted(.currency(code: "EUR").precision(.fractionLength(0)))).font(.caption2.bold()).blur(radius: privacyMode ? 6 : 0) }
+                                    HStack { Circle().fill(Color.blue).frame(width: 6, height: 6); Text("Buys:").font(.caption2); Spacer(); Text(b.formatted(.currency(code: viewModel.preferredCurrency).precision(.fractionLength(0)))).font(.caption2.bold()).blur(radius: privacyMode ? 6 : 0) }
                                 }
                                 if !hiddenTypes.contains("Sell") {
-                                    HStack { Circle().fill(Color.orange).frame(width: 6, height: 6); Text("Sells:").font(.caption2); Spacer(); Text(s.formatted(.currency(code: "EUR").precision(.fractionLength(0)))).font(.caption2.bold()).blur(radius: privacyMode ? 6 : 0) }
+                                    HStack { Circle().fill(Color.orange).frame(width: 6, height: 6); Text("Sells:").font(.caption2); Spacer(); Text(s.formatted(.currency(code: viewModel.preferredCurrency).precision(.fractionLength(0)))).font(.caption2.bold()).blur(radius: privacyMode ? 6 : 0) }
                                 }
                             }
                             .frame(width: 140).padding(8).background(Color(NSColor.windowBackgroundColor).opacity(0.95)).cornerRadius(8).shadow(radius: 4).overlay(RoundedRectangle(cornerRadius: 8).stroke(Color.gray.opacity(0.2), lineWidth: 1))
@@ -1584,7 +1593,7 @@ struct TxTradeBalanceChart: View {
                         }
                     }
                 }
-                .chartLegend(.hidden).chartYAxis { AxisMarks(position: .leading) { v in AxisGridLine(); AxisTick(); AxisValueLabel { if let d = v.as(Double.self) { Text(d.formatted(.currency(code: "EUR").notation(.compactName))) } } } }
+                .chartLegend(.hidden).chartYAxis { AxisMarks(position: .leading) { v in AxisGridLine(); AxisTick(); AxisValueLabel { if let d = v.as(Double.self) { Text(d.formatted(.currency(code: viewModel.preferredCurrency).notation(.compactName))) } } } }
             }
             HStack { Text("Shows your net accumulation vs distribution phases").font(.caption2).foregroundColor(.secondary); Spacer(); BlueChipWatermark() }
         }.padding().frame(minHeight: isExpanded ? 500 : 360, maxHeight: isExpanded ? .infinity : 360).background(Color(NSColor.controlBackgroundColor)).cornerRadius(12).shadow(color: Color.black.opacity(0.05), radius: 2, x: 0, y: 1)
@@ -1669,7 +1678,7 @@ struct TxCumulativeCapitalChart: View {
                         if let item = hoveredItem, let xPosition = proxy.position(forX: item.date) {
                             VStack(alignment: .leading, spacing: 2) {
                                 Text(item.date.formatted(date: .abbreviated, time: .omitted)).font(.caption.bold())
-                                Text(item.total.formatted(.currency(code: "EUR"))).font(.caption2.bold()).foregroundColor(.green).blur(radius: privacyMode ? 6 : 0)
+                                Text(item.total.formatted(.currency(code: viewModel.preferredCurrency))).font(.caption2.bold()).foregroundColor(.green).blur(radius: privacyMode ? 6 : 0)
                             }
                             .padding(6).background(Color(NSColor.windowBackgroundColor).opacity(0.95)).cornerRadius(6).shadow(radius: 3)
                             .position(x: max(60, min(geometry.size.width - 60, xPosition)), y: 50)
@@ -1678,7 +1687,7 @@ struct TxCumulativeCapitalChart: View {
                 }
                 .chartLegend(.hidden).chartXSelection(value: $hoveredDate)
                 .chartYScale(domain: 0...(maxAmount * 1.2))
-                .chartYAxis { AxisMarks(position: .leading) { v in AxisGridLine(); AxisTick(); AxisValueLabel { if let d = v.as(Double.self) { Text(d.formatted(.currency(code: "EUR").notation(.compactName))) } } } }
+                .chartYAxis { AxisMarks(position: .leading) { v in AxisGridLine(); AxisTick(); AxisValueLabel { if let d = v.as(Double.self) { Text(d.formatted(.currency(code: viewModel.preferredCurrency).notation(.compactName))) } } } }
             }
             HStack { Text("Total deposits minus withdrawals over time (Dry Powder)").font(.caption2).foregroundColor(.secondary); Spacer(); BlueChipWatermark() }
         }.padding().frame(minHeight: isExpanded ? 500 : 360, maxHeight: isExpanded ? .infinity : 360).background(Color(NSColor.controlBackgroundColor)).cornerRadius(12).shadow(color: Color.black.opacity(0.05), radius: 2, x: 0, y: 1)
@@ -1803,7 +1812,7 @@ struct TxTaxDragChart: View {
                                 if !hiddenSeries.contains("Tax Drag") {
                                     Text(item.percent.formatted(.percent.precision(.fractionLength(2)))).font(.caption2.bold()).foregroundColor(.red)
                                 }
-                                Text("Cost: \(item.totalFees.formatted(.currency(code: "EUR").precision(.fractionLength(0))))").font(.system(size: 8)).foregroundColor(.secondary).blur(radius: privacyMode ? 6 : 0)
+                                Text("Cost: \(item.totalFees.formatted(.currency(code: viewModel.preferredCurrency).precision(.fractionLength(0))))").font(.system(size: 8)).foregroundColor(.secondary).blur(radius: privacyMode ? 6 : 0)
                             }
                             .padding(6).background(Color(NSColor.windowBackgroundColor).opacity(0.95)).cornerRadius(6).shadow(radius: 3)
                             .position(x: max(60, min(geometry.size.width - 60, xPosition)), y: 50)
@@ -2047,7 +2056,8 @@ struct AddEditTransactionView: View {
                             }
                         }
                     }
-                    GroupBox("Amount (€)") {
+                    let sym = AppCurrency(rawValue: viewModel.preferredCurrency)?.symbol ?? "€"
+                    GroupBox("Amount (\(sym))") {
                         TextField("0.00", text: $amountEUR).textFieldStyle(.roundedBorder)
                     }
                     if !viewModel.transactionCustomColumns.isEmpty {
@@ -2151,7 +2161,8 @@ struct EditTransactionGoalView: View {
                             Text("Goal Type:")
                             Spacer()
                             Picker("", selection: $selectedGoal) {
-                                ForEach(TransactionGoalType.allCases, id: \.self) { type in Text(type.rawValue).tag(type) }
+                                let goalSym = AppCurrency(rawValue: viewModel.preferredCurrency)?.symbol ?? "€"
+                                ForEach(TransactionGoalType.allCases, id: \.self) { type in Text(type.rawValue.replacingOccurrences(of: "€", with: goalSym)).tag(type) }
                             }
                             .labelsHidden()
                             .frame(width: 250)
@@ -2162,7 +2173,8 @@ struct EditTransactionGoalView: View {
                         HStack {
                             Text("Target Amount:")
                             Spacer()
-                            TextField("e.g. 50", value: $targetInput, format: .number)
+                            let sym = AppCurrency(rawValue: viewModel.preferredCurrency)?.symbol ?? "€"
+                            TextField(sym, value: $targetInput, format: .number)
                                 .textFieldStyle(.roundedBorder)
                                 .multilineTextAlignment(.trailing)
                                 .frame(width: 150)

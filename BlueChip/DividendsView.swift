@@ -40,11 +40,13 @@ struct DividendsView: View {
             VStack(spacing: 24) {
                 DividendsDashboardSection(viewModel: viewModel, privacyMode: $privacyMode)
                 
+                let goalSym = AppCurrency(rawValue: viewModel.preferredCurrency)?.symbol ?? "€"
                 GoalProgressBar(
-                    title: viewModel.dividendGoalType.rawValue ?? DividendGoalType.dividendsAnnual.rawValue,
+                    title: viewModel.wealthGoalType.rawValue.replacingOccurrences(of: "€", with: goalSym),
                     currentValue: currentGoalValueForProgressBar,
                     targetValue: viewModel.dividendGoalTarget ?? 0.0,
                     privacyMode: $privacyMode,
+                    currency: $viewModel.preferredCurrency,
                     isPercentage: viewModel.dividendGoalType == .portfolioYield
                 )
                 .contentShape(Rectangle())
@@ -80,6 +82,8 @@ struct EditDividendGoalView: View {
     @State private var selectedGoal: DividendGoalType
     @State private var targetInput: Double
     
+    var currencySymbol: String { AppCurrency(rawValue: viewModel.preferredCurrency)?.symbol ?? "€" }
+    
     init(viewModel: PortfolioViewModel) {
         self.viewModel = viewModel
         _selectedGoal = State(initialValue: viewModel.dividendGoalType ?? .dividendsAnnual)
@@ -106,7 +110,9 @@ struct EditDividendGoalView: View {
                             Text("Goal Type:")
                             Spacer()
                             Picker("", selection: $selectedGoal) {
-                                ForEach(DividendGoalType.allCases, id: \.self) { type in Text(type.rawValue).tag(type) }
+                                ForEach(DividendGoalType.allCases, id: \.self) { type in
+                                    Text(type.rawValue.replacingOccurrences(of: "€", with: currencySymbol)).tag(type)
+                                }
                             }
                             .labelsHidden()
                             .frame(width: 250)
@@ -117,7 +123,7 @@ struct EditDividendGoalView: View {
                         HStack {
                             Text("Target Amount:")
                             Spacer()
-                            TextField("e.g. 500", value: $targetInput, format: .number)
+                            TextField(currencySymbol, value: $targetInput, format: .number)
                                 .textFieldStyle(.roundedBorder)
                                 .multilineTextAlignment(.trailing)
                                 .frame(width: 150)
@@ -174,16 +180,16 @@ struct DividendsDashboardSection: View {
     var body: some View {
         VStack(spacing: 16) {
             HStack(spacing: 16) {
-                DashboardCard(title: "Total Received (All Time)", value: totalReceivedAllTime.formatted(.currency(code: "EUR").precision(.fractionLength(2))), privacyMode: $privacyMode)
-                DashboardCard(title: "Received This Year", value: receivedThisYear.formatted(.currency(code: "EUR").precision(.fractionLength(2))), privacyMode: $privacyMode)
-                DashboardCard(title: "Received This Month", value: receivedThisMonth.formatted(.currency(code: "EUR").precision(.fractionLength(2))), privacyMode: $privacyMode)
-                DashboardCard(title: "Avg. Monthly (This Year)", value: averageMonthlyThisYear.formatted(.currency(code: "EUR").precision(.fractionLength(2))) + "/mo", privacyMode: $privacyMode)
+                DashboardCard(title: "Total Received (All Time)", value: totalReceivedAllTime.formatted(.currency(code: viewModel.preferredCurrency).precision(.fractionLength(2))), privacyMode: $privacyMode)
+                DashboardCard(title: "Received This Year", value: receivedThisYear.formatted(.currency(code: viewModel.preferredCurrency).precision(.fractionLength(2))), privacyMode: $privacyMode)
+                DashboardCard(title: "Received This Month", value: receivedThisMonth.formatted(.currency(code: viewModel.preferredCurrency).precision(.fractionLength(2))), privacyMode: $privacyMode)
+                DashboardCard(title: "Avg. Monthly (This Year)", value: averageMonthlyThisYear.formatted(.currency(code: viewModel.preferredCurrency).precision(.fractionLength(2))) + "/mo", privacyMode: $privacyMode)
             }
             HStack(spacing: 16) {
-                DashboardCard(title: "Best Year", value: bestYear.formatted(.currency(code: "EUR").precision(.fractionLength(2))), privacyMode: $privacyMode)
+                DashboardCard(title: "Best Year", value: bestYear.formatted(.currency(code: viewModel.preferredCurrency).precision(.fractionLength(2))), privacyMode: $privacyMode)
                 YoYCard(yoyGrowth: yoyGrowth, privacyMode: $privacyMode)
                 DashboardCard(title: "Projected Annual Yield", value: viewModel.portfolioYield.formatted(.percent.precision(.fractionLength(2))), privacyMode: $privacyMode)
-                DashboardCard(title: "Projected Annual Income", value: viewModel.totalDividends.formatted(.currency(code: "EUR").precision(.fractionLength(2))), privacyMode: $privacyMode)
+                DashboardCard(title: "Projected Annual Income", value: viewModel.totalDividends.formatted(.currency(code: viewModel.preferredCurrency).precision(.fractionLength(2))), privacyMode: $privacyMode)
             }
         }
     }
@@ -241,7 +247,8 @@ struct DividendsTableSection: View {
                     Text("Year").fontWeight(.bold).frame(width: 50, alignment: .leading)
                     Group { Text("Jan").frame(maxWidth: .infinity, alignment: .leading); Text("Feb").frame(maxWidth: .infinity, alignment: .leading); Text("Mar").frame(maxWidth: .infinity, alignment: .leading); Text("Apr").frame(maxWidth: .infinity, alignment: .leading); Text("May").frame(maxWidth: .infinity, alignment: .leading); Text("Jun").frame(maxWidth: .infinity, alignment: .leading) }.font(.subheadline).foregroundColor(.secondary)
                     Group { Text("Jul").frame(maxWidth: .infinity, alignment: .leading); Text("Aug").frame(maxWidth: .infinity, alignment: .leading); Text("Sep").frame(maxWidth: .infinity, alignment: .leading); Text("Oct").frame(maxWidth: .infinity, alignment: .leading); Text("Nov").frame(maxWidth: .infinity, alignment: .leading); Text("Dec").frame(maxWidth: .infinity, alignment: .leading) }.font(.subheadline).foregroundColor(.secondary)
-                    Text("Total").fontWeight(.bold).frame(width: 80, alignment: .trailing)
+                    let sym = AppCurrency(rawValue: viewModel.preferredCurrency)?.symbol ?? "€"
+                    Text("Total (\(sym))").fontWeight(.bold).frame(width: 80, alignment: .trailing)
                 }.padding(.horizontal, 16).padding(.vertical, 12).background(Color(NSColor.windowBackgroundColor)); Divider()
                 
                 VStack(spacing: 0) {
@@ -272,7 +279,7 @@ struct SpreadsheetRowView: View {
             Group {
                 MonthField(value: $yearData.jul, privacyMode: privacyMode, viewModel: viewModel); MonthField(value: $yearData.aug, privacyMode: privacyMode, viewModel: viewModel); MonthField(value: $yearData.sep, privacyMode: privacyMode, viewModel: viewModel)
                 MonthField(value: $yearData.oct, privacyMode: privacyMode, viewModel: viewModel); MonthField(value: $yearData.nov, privacyMode: privacyMode, viewModel: viewModel); MonthField(value: $yearData.dec, privacyMode: privacyMode, viewModel: viewModel)
-                Text(yearData.total.formatted(.currency(code: "EUR").precision(.fractionLength(2))))
+                Text(yearData.total.formatted(.currency(code: viewModel.preferredCurrency).precision(.fractionLength(2))))
                     .fontWeight(.bold).foregroundColor(.green).frame(width: 80, alignment: .trailing)
                     .blur(radius: privacyMode ? 6 : 0)
             }
@@ -402,7 +409,6 @@ struct ExpectedMonthlyDividendChart: View {
         aggregatedData.filter { !hiddenTypes.contains($0.type) }
     }
     
-    // NOUVEAU : Calcul des moyennes mensuelles
     var averageGross: Double {
         let allGross = aggregatedData.filter { $0.type == "Gross" }.map { $0.amount }
         return allGross.reduce(0, +) / 12.0
@@ -426,7 +432,6 @@ struct ExpectedMonthlyDividendChart: View {
                 if !isExpanded { Button(action: { expandedChart = .expectedMonthly }) { Image(systemName: "plus.magnifyingglass").foregroundColor(.secondary) }.buttonStyle(.plain) }
             }.padding(.bottom, 4)
             
-            // NOUVEAU : Légende interactive à 4 éléments
             HStack(spacing: 16) {
                 Button(action: { toggle("Gross") }) {
                     HStack(spacing: 4) { Circle().fill(Color.green).frame(width: 8, height: 8); Text("Gross").font(.caption).foregroundColor(hiddenTypes.contains("Gross") ? .secondary : .primary) }
@@ -454,7 +459,7 @@ struct ExpectedMonthlyDividendChart: View {
                             .cornerRadius(4)
                             .annotation(position: .top) {
                                 if hoveredMonth == item.month && item.amount > 0 {
-                                    Text(item.amount.formatted(.currency(code: "EUR").precision(.fractionLength(2))))
+                                    Text(item.amount.formatted(.currency(code: viewModel.preferredCurrency).precision(.fractionLength(2))))
                                         .font(.system(size: 8, weight: .bold))
                                         .foregroundColor(.secondary)
                                         .blur(radius: privacyMode ? 6 : 0)
@@ -462,7 +467,6 @@ struct ExpectedMonthlyDividendChart: View {
                             }
                     }
                     
-                    // NOUVEAU : Dessin des lignes de moyenne
                     if !hiddenTypes.contains("Avg Gross") {
                         RuleMark(y: .value("Avg Gross", averageGross))
                             .foregroundStyle(Color.green.opacity(0.8))
@@ -478,7 +482,7 @@ struct ExpectedMonthlyDividendChart: View {
                 .chartLegend(.hidden)
                 .chartXScale(domain: allMonths)
                 .chartYScale(domain: 0...yMaxStatic)
-                .chartYAxis { AxisMarks(position: .leading) { value in AxisGridLine(); AxisTick(); if let v = value.as(Double.self) { AxisValueLabel(v.formatted(.currency(code: "EUR").precision(.fractionLength(0)))) } } }
+                .chartYAxis { AxisMarks(position: .leading) { value in AxisGridLine(); AxisTick(); if let v = value.as(Double.self) { AxisValueLabel(v.formatted(.currency(code: viewModel.preferredCurrency).precision(.fractionLength(0)))) } } }
                 .chartXSelection(value: $hoveredMonth)
             }
             HStack { Text("Compares expected gross and net dividend income by month").font(.caption2).foregroundColor(.secondary); Spacer(); BlueChipWatermark() }
@@ -518,10 +522,9 @@ struct StockYieldChart: View {
     @Binding var expandedChart: DividendChartZoomType?
     
     @State private var hoveredTicker: String? = nil
-    @State private var hiddenMetrics: Set<String> = [] // Gère le masquage de la ligne de moyenne
-    @State private var hiddenTickers: Set<String> = [] // NOUVEAU : Gère le masquage des positions individuelles
+    @State private var hiddenMetrics: Set<String> = []
+    @State private var hiddenTickers: Set<String> = []
     
-    // NOUVEAU : Calcul du rendement moyen pondéré (ajusté selon les positions visibles)
     var portfolioAverageYield: Double {
         let visiblePositions = viewModel.positions.filter { !hiddenTickers.contains($0.ticker) }
         let totalValue = visiblePositions.reduce(0) { $0 + $1.currentValueEUR }
@@ -537,7 +540,6 @@ struct StockYieldChart: View {
         viewModel.stockYieldsData.map { $0.ticker }.sorted()
     }
     
-    // Ajustement dynamique de l'échelle Y
     var yMax: Double {
         let maxYield = filteredData.map { $0.yield }.max() ?? 10
         let maxTotal = max(maxYield, portfolioAverageYield)
@@ -550,7 +552,6 @@ struct StockYieldChart: View {
                 if !isExpanded { Text("Current Stock Yield (by Ticker)").font(.headline).foregroundColor(.secondary) }
                 Spacer()
                 
-                // Légende interactive pour masquer la moyenne
                 HStack(spacing: 12) {
                     Button(action: { withAnimation { if hiddenMetrics.contains("Average") { hiddenMetrics.remove("Average") } else { hiddenMetrics.insert("Average") } } }) {
                         HStack(spacing: 6) {
@@ -563,7 +564,6 @@ struct StockYieldChart: View {
                 if !isExpanded { Button(action: { expandedChart = .stockYield }) { Image(systemName: "plus.magnifyingglass").foregroundColor(.secondary) }.buttonStyle(.plain).padding(.leading, 8) }
             }.padding(.bottom, 4)
             
-            // NOUVEAU : Légende interactive pour afficher/masquer les tickers
             InteractiveLegendView(items: uniqueTickers, colorMap: { viewModel.color(for: $0) }, hiddenItems: $hiddenTickers)
                 .padding(.bottom, 8)
             
@@ -571,7 +571,6 @@ struct StockYieldChart: View {
                 Spacer(); Text("No data").foregroundColor(.secondary); Spacer()
             } else {
                 Chart {
-                    // Ligne pointillée de la moyenne globale pondérée
                     if !hiddenMetrics.contains("Average") {
                         RuleMark(y: .value("Average Yield", portfolioAverageYield))
                             .foregroundStyle(Color.gray.opacity(0.5))
@@ -652,11 +651,11 @@ struct MonthlyDividendChart: View {
             if monthlyData.isEmpty { Spacer(); Text("No data").foregroundColor(.secondary); Spacer() } else {
                 Chart(monthlyData, id: \.0) { item in
                     BarMark(x: .value("Month", item.0), y: .value("Amount", item.1)).foregroundStyle(Color.orange.opacity(0.8)).cornerRadius(4)
-                        .annotation(position: .top) { if hoveredMonth == item.0 && item.1 > 0 { Text(item.1.formatted(.currency(code: "EUR").precision(.fractionLength(2)))).font(.system(size: 9, weight: .bold)).foregroundColor(.secondary).blur(radius: privacyMode ? 6 : 0) } }
+                        .annotation(position: .top) { if hoveredMonth == item.0 && item.1 > 0 { Text(item.1.formatted(.currency(code: viewModel.preferredCurrency).precision(.fractionLength(2)))).font(.system(size: 9, weight: .bold)).foregroundColor(.secondary).blur(radius: privacyMode ? 6 : 0) } }
                 }
                 .chartXScale(domain: allMonths)
                 .chartYScale(domain: 0...yMaxStatic)
-                .chartYAxis { AxisMarks { value in if let v = value.as(Double.self) { AxisValueLabel(v.formatted(.currency(code: "EUR").precision(.fractionLength(0)))) } } }
+                .chartYAxis { AxisMarks { value in if let v = value.as(Double.self) { AxisValueLabel(v.formatted(.currency(code: viewModel.preferredCurrency).precision(.fractionLength(0)))) } } }
                 .chartXSelection(value: $hoveredMonth)
             }
             HStack { Text("Actual dividend income received per month in the current year").font(.caption2).foregroundColor(.secondary); Spacer(); BlueChipWatermark() }
@@ -673,13 +672,12 @@ struct YearlyDividendChart: View {
     @Binding var expandedChart: DividendChartZoomType?
     
     @State private var hoveredYear: String? = nil
-    @State private var hiddenSeries: Set<String> = [] // NOUVEAU : Gère la légende interactive
+    @State private var hiddenSeries: Set<String> = []
     
     var activeYears: [DividendYear] {
         viewModel.dividendYears.filter { $0.total > 0 || $0.year == currentYear }
     }
     
-    // NOUVEAU : Calcul de la ligne de tendance (Moindres carrés)
     var trendPoints: [(year: String, value: Double)] {
         guard activeYears.count >= 2 else { return [] }
         let xs = activeYears.map { Double($0.year) }
@@ -695,14 +693,12 @@ struct YearlyDividendChart: View {
         let slope = (n * sumXY - sumX * sumY) / denom
         let intercept = (sumY - slope * sumX) / n
         
-        // On ne génère que 2 points (le premier et le dernier) pour tracer une ligne droite parfaite
         return [activeYears.first!, activeYears.last!].map { pt in
             let y = slope * Double(pt.year) + intercept
             return (year: String(pt.year), value: max(0, y))
         }
     }
     
-    // NOUVEAU : L'échelle s'adapte si la tendance dépasse la plus grande barre
     var yMaxStatic: Double {
         let maxTotal = activeYears.map { $0.total }.max() ?? 10
         let maxTrend = trendPoints.map { $0.value }.max() ?? 10
@@ -715,14 +711,14 @@ struct YearlyDividendChart: View {
                 if !isExpanded { Text("Spreadsheet: Annual Received History").font(.headline).foregroundColor(.secondary) }
                 Spacer()
                 
-                // NOUVEAU : Légende interactive avec boutons Toggle
+                let sym = AppCurrency(rawValue: viewModel.preferredCurrency)?.symbol ?? "€"
                 HStack(spacing: 12) {
-                    Button(action: { toggle("Total €") }) {
+                    Button(action: { toggle("Total \(sym)") }) {
                         HStack(spacing: 4) {
                             RoundedRectangle(cornerRadius: 2).fill(Color.green.opacity(0.8)).frame(width: 12, height: 12)
-                            Text("Total €").font(.caption).foregroundColor(hiddenSeries.contains("Total €") ? .secondary : .primary)
+                            Text("Total \(sym)").font(.caption).foregroundColor(hiddenSeries.contains("Total \(sym)") ? .secondary : .primary)
                         }
-                    }.buttonStyle(.plain).opacity(hiddenSeries.contains("Total €") ? 0.4 : 1.0)
+                    }.buttonStyle(.plain).opacity(hiddenSeries.contains("Total \(sym)") ? 0.4 : 1.0)
 
                     Button(action: { toggle("Trend") }) {
                         HStack(spacing: 4) {
@@ -735,9 +731,11 @@ struct YearlyDividendChart: View {
                 if !isExpanded { Button(action: { expandedChart = .yearly }) { Image(systemName: "plus.magnifyingglass").foregroundColor(.secondary) }.buttonStyle(.plain).padding(.leading, 8) }
             }.padding(.bottom, 8)
             
+            let sym = AppCurrency(rawValue: viewModel.preferredCurrency)?.symbol ?? "€"
+            
             if activeYears.isEmpty { Spacer(); Text("No data").foregroundColor(.secondary); Spacer() } else {
                 Chart {
-                    if !hiddenSeries.contains("Total €") {
+                    if !hiddenSeries.contains("Total \(sym)") {
                         ForEach(activeYears) { yearData in
                             let yearStr = String(yearData.year)
                             BarMark(x: .value("Year", yearStr), y: .value("Total", yearData.total))
@@ -745,7 +743,7 @@ struct YearlyDividendChart: View {
                                 .cornerRadius(4)
                                 .annotation(position: .top) {
                                     if hoveredYear == yearStr {
-                                        Text(yearData.total.formatted(.currency(code: "EUR").precision(.fractionLength(2))))
+                                        Text(yearData.total.formatted(.currency(code: viewModel.preferredCurrency).precision(.fractionLength(2))))
                                             .font(.system(size: 9, weight: .bold))
                                             .foregroundColor(.secondary)
                                             .blur(radius: privacyMode ? 6 : 0)
@@ -754,7 +752,6 @@ struct YearlyDividendChart: View {
                         }
                     }
                     
-                    // NOUVEAU : Dessin de la ligne de tendance
                     if !hiddenSeries.contains("Trend") {
                         ForEach(trendPoints, id: \.year) { pt in
                             LineMark(
@@ -767,14 +764,13 @@ struct YearlyDividendChart: View {
                     }
                 }
                 .chartYScale(domain: 0...yMaxStatic)
-                .chartYAxis { AxisMarks { value in if let v = value.as(Double.self) { AxisValueLabel(v.formatted(.currency(code: "EUR").precision(.fractionLength(0)))) } } }
+                .chartYAxis { AxisMarks { value in if let v = value.as(Double.self) { AxisValueLabel(v.formatted(.currency(code: viewModel.preferredCurrency).precision(.fractionLength(0)))) } } }
                 .chartXSelection(value: $hoveredYear)
             }
             HStack { Text("Historical total annual dividend income received").font(.caption2).foregroundColor(.secondary); Spacer(); BlueChipWatermark() }
         }.padding().frame(minHeight: 360, maxHeight: isExpanded ? .infinity : 360).background(Color(NSColor.controlBackgroundColor)).cornerRadius(12).shadow(color: Color.black.opacity(0.05), radius: 2, x: 0, y: 1)
     }
     
-    // NOUVEAU : Fonction de gestion de la légende
     func toggle(_ key: String) {
         withAnimation {
             if hiddenSeries.contains(key) { hiddenSeries.remove(key) } else { hiddenSeries.insert(key) }
@@ -805,7 +801,7 @@ struct TotalDividendsDonutChart: View {
                     GeometryReader { geometry in
                         if let value = selectedAngleValue {
                             let item = findItem(for: value)
-                            VStack { Text(item.name).font(.headline); Text(item.value.formatted(.currency(code: "EUR").precision(.fractionLength(2)))).font(.subheadline).foregroundColor(.secondary).blur(radius: privacyMode ? 6 : 0) }.position(x: geometry.frame(in: .local).midX, y: geometry.frame(in: .local).midY)
+                            VStack { Text(item.name).font(.headline); Text(item.value.formatted(.currency(code: viewModel.preferredCurrency).precision(.fractionLength(2)))).font(.subheadline).foregroundColor(.secondary).blur(radius: privacyMode ? 6 : 0) }.position(x: geometry.frame(in: .local).midX, y: geometry.frame(in: .local).midY)
                         }
                     }
                 }.animation(.easeInOut(duration: 0.2), value: selectedAngleValue)
@@ -849,7 +845,6 @@ struct YieldOnCostChart: View {
     @State private var hiddenMetrics: Set<String> = []
     @State private var hiddenTickers: Set<String> = []
     
-    // Positions valides (avec investissement et dividendes) non masquées
     var visiblePositions: [Position] {
         viewModel.positions.filter { $0.investedAmountEUR > 0 && $0.totalDividendEUR > 0 && !hiddenTickers.contains($0.ticker) }
     }
@@ -858,7 +853,6 @@ struct YieldOnCostChart: View {
         viewModel.positions.filter { $0.investedAmountEUR > 0 && $0.totalDividendEUR > 0 }.map { $0.ticker }.sorted()
     }
     
-    // Calcul de la moyenne pondérée (Weighted Average YOC)
     var portfolioAverageYOC: Double {
         let totalInvested = visiblePositions.reduce(0) { $0 + $1.investedAmountEUR }
         let totalDivs = visiblePositions.reduce(0) { $0 + $1.totalDividendEUR }
@@ -896,7 +890,6 @@ struct YieldOnCostChart: View {
                 Spacer(); Text("No data").foregroundColor(.secondary); Spacer()
             } else {
                 Chart {
-                    // 1. Les barres en arrière-plan
                     ForEach(visiblePositions) { pos in
                         let yoc = (pos.totalDividendEUR / pos.investedAmountEUR) * 100.0
                         BarMark(x: .value("Ticker", pos.ticker), y: .value("YOC", yoc))
@@ -910,12 +903,11 @@ struct YieldOnCostChart: View {
                         }
                     }
                     
-                    // 2. MODIFIÉ : La ligne de moyenne placée APRES les barres + zIndex(10)
                     if !hiddenMetrics.contains("Average") {
                         RuleMark(y: .value("Average YOC", portfolioAverageYOC))
-                            .foregroundStyle(Color.primary.opacity(0.7)) // Couleur plus visible
+                            .foregroundStyle(Color.primary.opacity(0.7))
                             .lineStyle(StrokeStyle(lineWidth: 1.5, dash: [4, 4]))
-                            .zIndex(10) // Force le placement par-dessus les barres
+                            .zIndex(10)
                             .annotation(position: .top, alignment: .leading) {
                                 Text("Avg: \(portfolioAverageYOC.formatted(.number.precision(.fractionLength(1))))%")
                                     .font(.caption2.bold())
@@ -1051,7 +1043,7 @@ struct AllTimeHistoryChart: View {
                                 .annotation(position: .top, alignment: .center) {
                                     VStack(alignment: .leading, spacing: 2) {
                                         Text(item.date.formatted(.dateTime.month(.abbreviated).year())).font(.system(size: 9, weight: .bold))
-                                        Text(item.amount.formatted(.currency(code: "EUR").precision(.fractionLength(2)))).font(.system(size: 9)).foregroundColor(.green).blur(radius: privacyMode ? 6 : 0)
+                                        Text(item.amount.formatted(.currency(code: viewModel.preferredCurrency).precision(.fractionLength(2)))).font(.system(size: 9)).foregroundColor(.green).blur(radius: privacyMode ? 6 : 0)
                                     }.padding(4).background(Color(NSColor.windowBackgroundColor).opacity(0.8)).cornerRadius(4)
                                 }
                         }
@@ -1059,7 +1051,7 @@ struct AllTimeHistoryChart: View {
                 }
                 .chartLegend(.hidden)
                 .chartYScale(domain: 0...yMaxStatic)
-                .chartYAxis { AxisMarks(position: .leading) { value in AxisGridLine(); AxisTick(); if let v = value.as(Double.self) { AxisValueLabel(v.formatted(.currency(code: "EUR").precision(.fractionLength(0)))) } } }
+                .chartYAxis { AxisMarks(position: .leading) { value in AxisGridLine(); AxisTick(); if let v = value.as(Double.self) { AxisValueLabel(v.formatted(.currency(code: viewModel.preferredCurrency).precision(.fractionLength(0)))) } } }
                 .chartXAxis { AxisMarks(preset: .aligned, values: .stride(by: .month, count: 6)) { value in AxisGridLine(); AxisTick(); AxisValueLabel(format: .dateTime.month().year()) } }
                 .chartXSelection(value: $hoveredDate)
             }
@@ -1120,8 +1112,8 @@ struct ExpectedDividendHeatmapChart: View {
                                         Text("\(item.ticker) in \(item.monthName)").font(.caption.bold())
                                     }
                                     Divider()
-                                    Text("Net: \(item.amount.formatted(.currency(code: "EUR").precision(.fractionLength(2))))").font(.caption2.bold()).foregroundColor(.primary).blur(radius: privacyMode ? 6 : 0)
-                                    Text("Gross: \((item.amount / 0.85).formatted(.currency(code: "EUR").precision(.fractionLength(2))))").font(.caption2).foregroundColor(.secondary).blur(radius: privacyMode ? 6 : 0)
+                                    Text("Net: \(item.amount.formatted(.currency(code: viewModel.preferredCurrency).precision(.fractionLength(2))))").font(.caption2.bold()).foregroundColor(.primary).blur(radius: privacyMode ? 6 : 0)
+                                    Text("Gross: \((item.amount / 0.85).formatted(.currency(code: viewModel.preferredCurrency).precision(.fractionLength(2))))").font(.caption2).foregroundColor(.secondary).blur(radius: privacyMode ? 6 : 0)
                                 }
                                 .padding(8).background(Color(NSColor.windowBackgroundColor).opacity(0.95)).cornerRadius(8).shadow(radius: 4)
                                 .position(x: geometry.frame(in: .local).midX, y: geometry.frame(in: .local).midY)
@@ -1200,7 +1192,7 @@ struct TotalMonthlySeasonalityChart: View {
                     .cornerRadius(4)
                     .annotation(position: .top) {
                         if hoveredMonth == item.month && item.total > 0 {
-                            Text(item.total.formatted(.currency(code: "EUR").precision(.fractionLength(2))))
+                            Text(item.total.formatted(.currency(code: viewModel.preferredCurrency).precision(.fractionLength(2))))
                                 .font(.system(size: 9, weight: .bold))
                                 .foregroundColor(.secondary)
                                 .blur(radius: privacyMode ? 6 : 0)
@@ -1208,7 +1200,7 @@ struct TotalMonthlySeasonalityChart: View {
                     }
                 }
                 .chartXScale(domain: allMonths)
-                .chartYAxis { AxisMarks(position: .leading) { value in AxisGridLine(); AxisTick(); if let v = value.as(Double.self) { AxisValueLabel(v.formatted(.currency(code: "EUR").notation(.compactName))) } } }
+                .chartYAxis { AxisMarks(position: .leading) { value in AxisGridLine(); AxisTick(); if let v = value.as(Double.self) { AxisValueLabel(v.formatted(.currency(code: viewModel.preferredCurrency).notation(.compactName))) } } }
                 .chartXSelection(value: $hoveredMonth)
             }
             HStack { Text("Total aggregated dividends per month since portfolio inception").font(.caption2).foregroundColor(.secondary); Spacer(); BlueChipWatermark() }
@@ -1412,10 +1404,6 @@ struct DividendFullScreenChartView: View {
 // MARK: - THIS MONTH'S DIVIDEND TRACKER
 // =========================================================================
 
-// =========================================================================
-// MARK: - THIS MONTH'S DIVIDEND TRACKER
-// =========================================================================
-
 struct DividendsThisMonthSection: View {
     @ObservedObject var viewModel: PortfolioViewModel
     @Binding var privacyMode: Bool
@@ -1500,12 +1488,12 @@ struct DividendsThisMonthSection: View {
                                     if let value = selectedAngleValue, let item = findItem(for: value) {
                                         VStack {
                                             Text(item.name).font(.headline)
-                                            Text(item.value.formatted(.currency(code: "EUR"))).font(.subheadline).foregroundColor(.secondary).blur(radius: privacyMode ? 6 : 0)
+                                            Text(item.value.formatted(.currency(code: viewModel.preferredCurrency))).font(.subheadline).foregroundColor(.secondary).blur(radius: privacyMode ? 6 : 0)
                                         }.position(x: geometry.frame(in: .local).midX, y: geometry.frame(in: .local).midY)
                                     } else {
                                         VStack {
                                             Text("Received").font(.caption).foregroundColor(.secondary)
-                                            Text(totalReceived.formatted(.currency(code: "EUR").precision(.fractionLength(2)))).font(.title3).fontWeight(.bold).blur(radius: privacyMode ? 6 : 0)
+                                            Text(totalReceived.formatted(.currency(code: viewModel.preferredCurrency).precision(.fractionLength(2)))).font(.title3).fontWeight(.bold).blur(radius: privacyMode ? 6 : 0)
                                         }.position(x: geometry.frame(in: .local).midX, y: geometry.frame(in: .local).midY)
                                     }
                                 }
@@ -1522,13 +1510,13 @@ struct DividendsThisMonthSection: View {
                         HStack(spacing: 20) {
                             VStack(alignment: .leading) {
                                 Text("Expected Total").font(.caption).foregroundColor(.secondary)
-                                Text(totalExpected.formatted(.currency(code: "EUR"))).font(.title3).fontWeight(.bold).blur(radius: privacyMode ? 6 : 0)
+                                Text(totalExpected.formatted(.currency(code: viewModel.preferredCurrency))).font(.title3).fontWeight(.bold).blur(radius: privacyMode ? 6 : 0)
                             }
                             Divider().frame(height: 30)
                             VStack(alignment: .leading) {
                                 Text("Remaining").font(.caption).foregroundColor(.secondary)
                                 let remaining = max(0, totalExpected - totalReceived)
-                                Text(remaining.formatted(.currency(code: "EUR"))).font(.title3).fontWeight(.bold).foregroundColor(.orange).blur(radius: privacyMode ? 6 : 0)
+                                Text(remaining.formatted(.currency(code: viewModel.preferredCurrency))).font(.title3).fontWeight(.bold).foregroundColor(.orange).blur(radius: privacyMode ? 6 : 0)
                             }
                             Divider().frame(height: 30)
                             VStack(alignment: .leading) {
@@ -1563,7 +1551,7 @@ struct DividendsThisMonthSection: View {
                                                 Text(pos.ticker).fontWeight(.bold)
                                             }.frame(width: 60, alignment: .leading)
                                             
-                                            Text(expectedNetAmountEUR.formatted(.currency(code: "EUR"))).foregroundColor(.secondary).blur(radius: privacyMode ? 6 : 0).frame(maxWidth: .infinity, alignment: .trailing)
+                                            Text(expectedNetAmountEUR.formatted(.currency(code: viewModel.preferredCurrency))).foregroundColor(.secondary).blur(radius: privacyMode ? 6 : 0).frame(maxWidth: .infinity, alignment: .trailing)
                                             
                                             TickerMonthField(ticker: pos.ticker, value: binding(for: pos.ticker), privacyMode: privacyMode)
                                                 .frame(width: 100, alignment: .trailing)

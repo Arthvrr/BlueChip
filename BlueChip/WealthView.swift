@@ -40,6 +40,7 @@ struct WealthView: View {
     
     var body: some View {
         let isPrivate = privacyMode
+        let currency = viewModel.preferredCurrency
         
         ScrollView {
             VStack(spacing: 24) {
@@ -47,14 +48,14 @@ struct WealthView: View {
                 // 1. DASHBOARD: 8 SUMMARY CARDS
                 VStack(spacing: 16) {
                     HStack(spacing: 16) {
-                        DashboardCard(title: "True Net Worth", value: viewModel.trueNetWorth.formatted(.currency(code: "EUR")), privacyMode: $privacyMode)
-                        DashboardCard(title: "Total Assets", value: viewModel.totalAssets.formatted(.currency(code: "EUR")), privacyMode: $privacyMode)
-                        DashboardCard(title: "Total Liabilities", value: viewModel.totalLiabilities.formatted(.currency(code: "EUR")), privacyMode: $privacyMode)
+                        DashboardCard(title: "True Net Worth", value: viewModel.trueNetWorth.formatted(.currency(code: currency)), privacyMode: $privacyMode)
+                        DashboardCard(title: "Total Assets", value: viewModel.totalAssets.formatted(.currency(code: currency)), privacyMode: $privacyMode)
+                        DashboardCard(title: "Total Liabilities", value: viewModel.totalLiabilities.formatted(.currency(code: currency)), privacyMode: $privacyMode)
                         
                         // Net P/L (Assets) - Modifié en noir (.primary)
                         VStack(alignment: .leading, spacing: 6) {
                             Text("Net P/L (Assets)").font(.subheadline).foregroundColor(.secondary).lineLimit(1)
-                            Text(viewModel.totalWealthVariationEUR.formatted(.currency(code: "EUR").sign(strategy: .always())))
+                            Text(viewModel.totalWealthVariationEUR.formatted(.currency(code: currency).sign(strategy: .always())))
                                 .font(.title2).fontWeight(.bold)
                                 .foregroundColor(.primary)
                                 .blur(radius: isPrivate ? 8 : 0)
@@ -62,7 +63,7 @@ struct WealthView: View {
                     }
                     
                     HStack(spacing: 16) {
-                        DashboardCard(title: "Wealth Goal", value: viewModel.wealthGoalTarget.formatted(.currency(code: "EUR")), privacyMode: $privacyMode)
+                        DashboardCard(title: "Wealth Goal", value: viewModel.wealthGoalTarget.formatted(.currency(code: currency)), privacyMode: $privacyMode)
                         
                         // Overall Assets ROI - Modifié en noir (.primary)
                         VStack(alignment: .leading, spacing: 6) {
@@ -86,11 +87,13 @@ struct WealthView: View {
                     }
                 }
                 
+                let goalSym = AppCurrency(rawValue: currency)?.symbol ?? "€"
                 GoalProgressBar(
-                    title: viewModel.wealthGoalType.rawValue,
+                    title: viewModel.wealthGoalType.rawValue.replacingOccurrences(of: "€", with: goalSym),
                     currentValue: currentGoalValueForProgressBar,
                     targetValue: viewModel.wealthGoalTarget,
                     privacyMode: $privacyMode,
+                    currency: $viewModel.preferredCurrency,
                     isPercentage: viewModel.wealthGoalType == .debtAssetsRatio
                 )
                 .contentShape(Rectangle())
@@ -105,6 +108,7 @@ struct WealthView: View {
                     )
                     
                     WealthAddAssetSection(
+                        viewModel: viewModel,
                         newAssetName: $newAssetName,
                         newAssetInvested: $newAssetInvested,
                         newAssetCurrent: $newAssetCurrent,
@@ -176,10 +180,12 @@ struct EditWealthGoalView: View {
     @ObservedObject var viewModel: PortfolioViewModel
     @State private var selectedGoal: WealthGoalType
     @State private var targetInput: Double
+    
+    var currencySymbol: String { AppCurrency(rawValue: viewModel.preferredCurrency)?.symbol ?? "€" }
 
     init(viewModel: PortfolioViewModel) {
         self.viewModel = viewModel
-        _selectedGoal = State(initialValue: viewModel.wealthGoalType)
+        _selectedGoal = State(initialValue: viewModel.wealthGoalType ?? .netWorth)
         _targetInput = State(initialValue: viewModel.wealthGoalTarget)
     }
 
@@ -203,7 +209,9 @@ struct EditWealthGoalView: View {
                             Text("Goal Type:")
                             Spacer()
                             Picker("", selection: $selectedGoal) {
-                                ForEach(WealthGoalType.allCases, id: \.self) { type in Text(type.rawValue).tag(type) }
+                                ForEach(WealthGoalType.allCases, id: \.self) { type in
+                                    Text(type.rawValue.replacingOccurrences(of: "€", with: currencySymbol)).tag(type)
+                                }
                             }
                             .labelsHidden()
                             .frame(width: 200)
@@ -214,7 +222,7 @@ struct EditWealthGoalView: View {
                         HStack {
                             Text("Target Amount:")
                             Spacer()
-                            TextField("e.g. 500000", value: $targetInput, format: .number)
+                            TextField(currencySymbol, value: $targetInput, format: .number)
                                 .textFieldStyle(.roundedBorder)
                                 .multilineTextAlignment(.trailing)
                                 .frame(width: 150)
@@ -254,6 +262,8 @@ struct WealthAssetsTableSection: View {
     
     var body: some View {
         let isPrivate = privacyMode
+        let currency = viewModel.preferredCurrency
+        let sym = AppCurrency(rawValue: currency)?.symbol ?? "€"
         
         VStack(alignment: .leading, spacing: 8) {
             HStack {
@@ -268,7 +278,7 @@ struct WealthAssetsTableSection: View {
                     Text("Asset").fontWeight(.bold).frame(maxWidth: .infinity, alignment: .leading)
                     Text("Current Value").fontWeight(.bold).frame(maxWidth: .infinity, alignment: .trailing)
                     Text("Invested").fontWeight(.bold).frame(maxWidth: .infinity, alignment: .trailing)
-                    Text("P/L €").fontWeight(.bold).frame(maxWidth: .infinity, alignment: .trailing)
+                    Text("P/L \(sym)").fontWeight(.bold).frame(maxWidth: .infinity, alignment: .trailing)
                     Text("P/L %").fontWeight(.bold).frame(maxWidth: .infinity, alignment: .trailing)
                     Text("% of Assets").fontWeight(.bold).frame(maxWidth: .infinity, alignment: .trailing)
                 }
@@ -288,9 +298,9 @@ struct WealthAssetsTableSection: View {
                         }
                         .frame(maxWidth: .infinity, alignment: .leading)
                         
-                        Text(asset.current.formatted(.currency(code: "EUR"))).fontWeight(.semibold).blur(radius: isPrivate ? 6 : 0).frame(maxWidth: .infinity, alignment: .trailing)
-                        Text(asset.invested.formatted(.currency(code: "EUR"))).blur(radius: isPrivate ? 6 : 0).frame(maxWidth: .infinity, alignment: .trailing)
-                        Text(asset.variationEUR.formatted(.currency(code: "EUR").sign(strategy: .always()))).fontWeight(.semibold).foregroundColor(asset.variationEUR >= 0 ? .green : .red).blur(radius: isPrivate ? 6 : 0).frame(maxWidth: .infinity, alignment: .trailing)
+                        Text(asset.current.formatted(.currency(code: currency))).fontWeight(.semibold).blur(radius: isPrivate ? 6 : 0).frame(maxWidth: .infinity, alignment: .trailing)
+                        Text(asset.invested.formatted(.currency(code: currency))).blur(radius: isPrivate ? 6 : 0).frame(maxWidth: .infinity, alignment: .trailing)
+                        Text(asset.variationEUR.formatted(.currency(code: currency).sign(strategy: .always()))).fontWeight(.semibold).foregroundColor(asset.variationEUR >= 0 ? .green : .red).blur(radius: isPrivate ? 6 : 0).frame(maxWidth: .infinity, alignment: .trailing)
                         Text(asset.variationPercent.formatted(.percent.precision(.fractionLength(2)).sign(strategy: .always()))).fontWeight(.bold).padding(.horizontal, 6).padding(.vertical, 2).background((asset.variationPercent >= 0 ? Color.green : Color.red).opacity(0.15)).foregroundColor(asset.variationPercent >= 0 ? .green : .red).cornerRadius(4).blur(radius: isPrivate ? 6 : 0).frame(maxWidth: .infinity, alignment: .trailing)
                         
                         let pctTotal = viewModel.totalAssets > 0 ? (asset.current / viewModel.totalAssets) : 0
@@ -322,6 +332,7 @@ struct WealthLiabilitiesTableSection: View {
     
     var body: some View {
         let isPrivate = privacyMode
+        let currency = viewModel.preferredCurrency
         
         VStack(alignment: .leading, spacing: 8) {
             HStack {
@@ -356,14 +367,14 @@ struct WealthLiabilitiesTableSection: View {
                             Text(liability.name).fontWeight(.bold).frame(maxWidth: .infinity, alignment: .leading)
                             
                             // Borrowed
-                            Text(liability.initialAmount.formatted(.currency(code: "EUR"))).blur(radius: isPrivate ? 6 : 0).frame(maxWidth: .infinity, alignment: .trailing)
+                            Text(liability.initialAmount.formatted(.currency(code: currency))).blur(radius: isPrivate ? 6 : 0).frame(maxWidth: .infinity, alignment: .trailing)
                             
                             // Already Refund
                             let reimbursed = max(0, liability.initialAmount - liability.amount)
-                            Text(reimbursed.formatted(.currency(code: "EUR"))).fontWeight(.semibold).foregroundColor(.green).blur(radius: isPrivate ? 6 : 0).frame(maxWidth: .infinity, alignment: .trailing)
+                            Text(reimbursed.formatted(.currency(code: currency))).fontWeight(.semibold).foregroundColor(.green).blur(radius: isPrivate ? 6 : 0).frame(maxWidth: .infinity, alignment: .trailing)
                             
                             // Amount Owed
-                            Text(liability.amount.formatted(.currency(code: "EUR"))).fontWeight(.bold).foregroundColor(.red).blur(radius: isPrivate ? 6 : 0).frame(maxWidth: .infinity, alignment: .trailing)
+                            Text(liability.amount.formatted(.currency(code: currency))).fontWeight(.bold).foregroundColor(.red).blur(radius: isPrivate ? 6 : 0).frame(maxWidth: .infinity, alignment: .trailing)
                             
                             // Left (%)
                             let leftPct = liability.initialAmount > 0 ? (liability.amount / liability.initialAmount) : 0
@@ -392,16 +403,18 @@ struct WealthLiabilitiesTableSection: View {
 // =========================================================================
 
 struct WealthAddAssetSection: View {
+    @ObservedObject var viewModel: PortfolioViewModel
     @Binding var newAssetName: String
     @Binding var newAssetInvested: Double?
     @Binding var newAssetCurrent: Double?
     let onAdd: () -> Void
     
     var body: some View {
+        let sym = AppCurrency(rawValue: viewModel.preferredCurrency)?.symbol ?? "€"
         HStack(spacing: 16) {
             TextField("Asset Name (e.g. Real Estate, Crypto...)", text: $newAssetName).textFieldStyle(.roundedBorder)
-            TextField("Invested Amount (€)", value: $newAssetInvested, format: .number).textFieldStyle(.roundedBorder).frame(width: 160)
-            TextField("Current Value (€)", value: $newAssetCurrent, format: .number).textFieldStyle(.roundedBorder).frame(width: 160)
+            TextField("Invested Amount (\(sym))", value: $newAssetInvested, format: .number).textFieldStyle(.roundedBorder).frame(width: 160)
+            TextField("Current Value (\(sym))", value: $newAssetCurrent, format: .number).textFieldStyle(.roundedBorder).frame(width: 160)
             Button(action: onAdd) { Label("Add Asset", systemImage: "plus") }.buttonStyle(.borderedProminent).disabled(newAssetName.isEmpty || newAssetInvested == nil || newAssetCurrent == nil)
         }
         .padding().background(Color(NSColor.controlBackgroundColor)).cornerRadius(12).shadow(color: Color.black.opacity(0.05), radius: 2, x: 0, y: 1)
@@ -411,9 +424,10 @@ struct WealthAddAssetSection: View {
 struct WealthAddLiabilitySection: View {
     @ObservedObject var viewModel: PortfolioViewModel
     var body: some View {
+        let sym = AppCurrency(rawValue: viewModel.preferredCurrency)?.symbol ?? "€"
         HStack(spacing: 16) {
             TextField("Liability Name (e.g. Mortgage)", text: $viewModel.newLiabilityName).textFieldStyle(.roundedBorder)
-            TextField("Amount Owed (€)", value: $viewModel.newLiabilityAmount, format: .number).textFieldStyle(.roundedBorder).frame(width: 160)
+            TextField("Amount Owed (\(sym))", value: $viewModel.newLiabilityAmount, format: .number).textFieldStyle(.roundedBorder).frame(width: 160)
             Button(action: viewModel.addNewLiability) { Label("Add Liability", systemImage: "plus") }.buttonStyle(.borderedProminent).tint(.red).disabled(viewModel.newLiabilityName.isEmpty || viewModel.newLiabilityAmount == nil)
         }
         .padding().background(Color(NSColor.controlBackgroundColor)).cornerRadius(12).shadow(color: Color.black.opacity(0.05), radius: 2, x: 0, y: 1)
@@ -430,6 +444,7 @@ struct WealthFIRESimulatorSection: View {
     @Binding var privacyMode: Bool
     
     var body: some View {
+        let currency = viewModel.preferredCurrency
         VStack(alignment: .leading, spacing: 16) {
             Text("Financial Independence (FIRE) Simulator").font(.title2).fontWeight(.bold).foregroundColor(.secondary)
             
@@ -454,14 +469,14 @@ struct WealthFIRESimulatorSection: View {
                     
                     HStack(alignment: .firstTextBaseline, spacing: 20) {
                         VStack(alignment: .leading) {
-                            Text(viewModel.fireMonthlyIncome.formatted(.currency(code: "EUR"))).font(.system(size: 32, weight: .bold)).foregroundColor(.teal).blur(radius: privacyMode ? 8 : 0)
+                            Text(viewModel.fireMonthlyIncome.formatted(.currency(code: currency))).font(.system(size: 32, weight: .bold)).foregroundColor(.teal).blur(radius: privacyMode ? 8 : 0)
                             Text("/ month").font(.subheadline).foregroundColor(.secondary)
                         }
                         
                         Text("=").font(.title).foregroundColor(.secondary)
                         
                         VStack(alignment: .leading) {
-                            Text(viewModel.fireAnnualIncome.formatted(.currency(code: "EUR"))).font(.title2).fontWeight(.bold).foregroundColor(.primary).blur(radius: privacyMode ? 8 : 0)
+                            Text(viewModel.fireAnnualIncome.formatted(.currency(code: currency))).font(.title2).fontWeight(.bold).foregroundColor(.primary).blur(radius: privacyMode ? 8 : 0)
                             Text("/ year").font(.subheadline).foregroundColor(.secondary)
                         }
                     }
@@ -672,14 +687,15 @@ struct EditWealthAssetSheet: View {
     @State private var current: Double = 0.0
     
     var body: some View {
+        let sym = AppCurrency(rawValue: viewModel.preferredCurrency)?.symbol ?? "€"
         VStack(spacing: 0) {
             HStack { Text("Edit Asset").font(.title2).fontWeight(.bold); Spacer(); Button(action: { dismiss() }) { Image(systemName: "xmark.circle.fill").foregroundColor(.secondary) }.buttonStyle(.plain) }.padding()
             Divider()
             
             Form {
                 TextField("Asset Name", text: $name)
-                TextField("Invested Amount (€)", value: $invested, format: .number)
-                TextField("Current Value (€)", value: $current, format: .number)
+                TextField("Invested Amount (\(sym))", value: $invested, format: .number)
+                TextField("Current Value (\(sym))", value: $current, format: .number)
             }.padding()
             
             Divider()
@@ -715,14 +731,15 @@ struct EditWealthLiabilitySheet: View {
     @State private var alreadyRefund: Double = 0.0
     
     var body: some View {
+        let sym = AppCurrency(rawValue: viewModel.preferredCurrency)?.symbol ?? "€"
         VStack(spacing: 0) {
             HStack { Text("Edit Liability").font(.title2).fontWeight(.bold); Spacer(); Button(action: { dismiss() }) { Image(systemName: "xmark.circle.fill").foregroundColor(.secondary) }.buttonStyle(.plain) }.padding()
             Divider()
             
             Form {
                 TextField("Liability Name", text: $name)
-                TextField("Amount Borrowed (€)", value: $initialAmount, format: .number)
-                TextField("Already Refund (€)", value: $alreadyRefund, format: .number)
+                TextField("Amount Borrowed (\(sym))", value: $initialAmount, format: .number)
+                TextField("Already Refund (\(sym))", value: $alreadyRefund, format: .number)
             }.padding()
             
             Divider()

@@ -45,6 +45,8 @@ struct GlobalSearchView: View {
                    matchesQuery(dfNumUS.string(from: date))
         }
         
+        let sym = AppCurrency(rawValue: viewModel.preferredCurrency)?.symbol ?? "€"
+        
         let uiElements: [(title: String, subtitle: String, keywords: String, icon: String, color: Color, tab: AppTab)] = [
             
             // ================= COMPOSITION =================
@@ -93,7 +95,7 @@ struct GlobalSearchView: View {
             ("Total Invested", "Dashboard Metric • Growth", "deposits capital out of pocket growth", "arrow.down.circle.fill", .blue, .growth),
             ("All-Time Return", "Dashboard Metric • Growth", "total gain profit loss growth", "chart.line.uptrend.xyaxis", .green, .growth),
             ("Best Year Return", "Dashboard Metric • Growth", "highest gain maximum growth", "trophy.fill", .yellow, .growth),
-            ("Avg. Return / Year (€)", "Dashboard Metric • Growth", "average absolute gain growth", "eurosign.circle.fill", .teal, .growth),
+            ("Avg. Return / Year (\(sym))", "Dashboard Metric • Growth", "average absolute gain growth", "eurosign.circle.fill", .teal, .growth),
             ("Avg. Return / Year (%)", "Dashboard Metric • Growth", "average percentage gain growth", "percent", .teal, .growth),
             ("CAGR (Compound Growth)", "Dashboard Metric • Growth", "annualized return cagr growth", "arrow.up.right.circle.fill", .blue, .growth),
             ("Active Years Tracked", "Dashboard Metric • Growth", "time horizon duration years growth", "clock.fill", .gray, .growth),
@@ -262,12 +264,12 @@ struct GlobalSearchView: View {
             ("vs Best Index (Avg.)", "Dashboard Metric • Benchmark", "alpha ahead behind outperformance benchmark", "arrow.up.right.circle.fill", .green, .benchmark),
             ("Indices Tracked", "Dashboard Metric • Benchmark", "count markets tracked benchmark", "list.number", .gray, .benchmark),
             ("Years Tracked", "Dashboard Metric • Benchmark", "duration time horizon benchmark", "clock.fill", .gray, .benchmark),
-            ("Portfolio 10k€ Simulation", "Dashboard Metric • Benchmark", "simulated wealth compounding benchmark", "banknote.fill", .blue, .benchmark),
-            ("Best Index 10k€", "Dashboard Metric • Benchmark", "simulated index wealth opportunity cost benchmark", "banknote", .purple, .benchmark),
+            ("Portfolio 10k\(sym) Simulation", "Dashboard Metric • Benchmark", "simulated wealth compounding benchmark", "banknote.fill", .blue, .benchmark),
+            ("Best Index 10k\(sym)", "Dashboard Metric • Benchmark", "simulated index wealth opportunity cost benchmark", "banknote", .purple, .benchmark),
             ("Alpha Goal", "Target Tracking • Benchmark", "outperform best index alpha target benchmark", "target", .purple, .benchmark),
             ("Performance Comparison", "Data Table • Benchmark", "annual returns list spreadsheet index benchmark", "tablecells.fill", .gray, .benchmark),
             ("Annual Return (%)", "Chart • Benchmark", "yearly comparison bar chart benchmark", "chart.bar.fill", .blue, .benchmark),
-            ("€10,000 Simulated Growth", "Chart • Benchmark", "compounding opportunity cost line chart benchmark", "chart.xyaxis.line", .purple, .benchmark),
+            ("\(sym)10,000 Simulated Growth", "Chart • Benchmark", "compounding opportunity cost line chart benchmark", "chart.xyaxis.line", .purple, .benchmark),
             
             // ================= CALENDAR =================
             ("Next Upcoming Events", "Dashboard Section • Calendar", "schedule timeline upcoming agenda calendar", "bell.fill", .blue, .calendar),

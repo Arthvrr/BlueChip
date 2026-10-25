@@ -166,6 +166,7 @@ struct ProjectionView: View {
                 
                 // Nouvelle section de contrôles améliorée
                 ProjectionControlsSection(
+                    viewModel: viewModel,
                     timeHorizonYears: $timeHorizonYears,
                     customCAGR: $customCAGR,
                     customDivGrowth: $customDivGrowth,
@@ -179,18 +180,21 @@ struct ProjectionView: View {
                 )
                 
                 ProjectionChartsSection(
+                    viewModel: viewModel,
                     series: projectionSeries,
                     chartToZoom: $chartToZoom,
                     privacyMode: $privacyMode
                 )
                 
                 ProjectionAdvancedChartsSection(
+                    viewModel: viewModel,
                     series: projectionSeries,
                     chartToZoom: $chartToZoom,
                     privacyMode: $privacyMode
                 )
                 
                 ProjectionTableSection(
+                    viewModel: viewModel,
                     series: projectionSeries,
                     privacyMode: $privacyMode
                 )
@@ -201,6 +205,7 @@ struct ProjectionView: View {
         .sheet(item: $chartToZoom) { type in
             ProjectionFullScreenChartView(
                 zoomType: type,
+                viewModel: viewModel,
                 series: projectionSeries,
                 privacyMode: $privacyMode
             )
@@ -230,15 +235,16 @@ struct ProjectionDashboardSection: View {
     var endDiv: Double { series.last?.annualDividend ?? 0 }
 
     var body: some View {
-        let startCapStr = startCap.formatted(.currency(code: "EUR").precision(.fractionLength(2)))
-        let endCapStr = endCap.formatted(.currency(code: "EUR").precision(.fractionLength(0)))
+        let currency = viewModel.preferredCurrency
+        let startCapStr = startCap.formatted(.currency(code: currency).precision(.fractionLength(2)))
+        let endCapStr = endCap.formatted(.currency(code: currency).precision(.fractionLength(0)))
         let cagrStr = effectiveCAGR.formatted(.percent.precision(.fractionLength(2)))
-        let gainStr = (endCap - startCap).formatted(.currency(code: "EUR").precision(.fractionLength(0)).sign(strategy: .always()))
+        let gainStr = (endCap - startCap).formatted(.currency(code: currency).precision(.fractionLength(0)).sign(strategy: .always()))
         
-        let startDivStr = startDiv.formatted(.currency(code: "EUR").precision(.fractionLength(2)))
-        let endDivStr = endDiv.formatted(.currency(code: "EUR").precision(.fractionLength(0)))
+        let startDivStr = startDiv.formatted(.currency(code: currency).precision(.fractionLength(2)))
+        let endDivStr = endDiv.formatted(.currency(code: currency).precision(.fractionLength(0)))
         let divGrowthStr = effectiveDivGrowth.formatted(.percent.precision(.fractionLength(2)))
-        let monthlyDivStr = (endDiv / 12.0).formatted(.currency(code: "EUR").precision(.fractionLength(0)))
+        let monthlyDivStr = (endDiv / 12.0).formatted(.currency(code: currency).precision(.fractionLength(0)))
 
         VStack(spacing: 16) {
             HStack(spacing: 16) {
@@ -262,6 +268,7 @@ struct ProjectionDashboardSection: View {
 // =========================================================================
 
 struct ProjectionControlsSection: View {
+    @ObservedObject var viewModel: PortfolioViewModel
     @Binding var timeHorizonYears: Double
     @Binding var customCAGR: Double?
     @Binding var customDivGrowth: Double?
@@ -277,6 +284,7 @@ struct ProjectionControlsSection: View {
     let defaultWeightedDivGrowth: Double
     
     var body: some View {
+        let sym = AppCurrency(rawValue: viewModel.preferredCurrency)?.symbol ?? "€"
         VStack(alignment: .leading, spacing: 16) {
             Text("Projection Parameters & Assumptions").font(.headline).foregroundColor(.secondary)
             
@@ -340,7 +348,7 @@ struct ProjectionControlsSection: View {
                         HStack {
                             TextField("Amount", value: $monthlyContributionAmount, format: .number)
                                 .textFieldStyle(.roundedBorder).frame(width: 80)
-                            Text("€ / month").font(.caption).foregroundColor(.secondary)
+                            Text("\(sym) / month").font(.caption).foregroundColor(.secondary)
                         }
                     } else {
                         Text("Inject fresh cash every month").font(.caption).foregroundColor(.secondary)
@@ -391,6 +399,7 @@ struct ProjectionControlsSection: View {
 // =========================================================================
 
 struct ProjectionChartsSection: View {
+    @ObservedObject var viewModel: PortfolioViewModel
     let series: [ProjectionYearData]
     @Binding var chartToZoom: ProjectionChartZoomType?
     @Binding var privacyMode: Bool
@@ -399,14 +408,15 @@ struct ProjectionChartsSection: View {
         VStack(alignment: .leading, spacing: 12) {
             Text("Long-Term Projections").font(.title2).fontWeight(.bold).foregroundColor(.secondary)
             HStack(spacing: 24) {
-                CapitalProjectionChart(series: series, privacyMode: $privacyMode, expandedChart: $chartToZoom)
-                DividendProjectionChart(series: series, privacyMode: $privacyMode, expandedChart: $chartToZoom)
+                CapitalProjectionChart(viewModel: viewModel, series: series, privacyMode: $privacyMode, expandedChart: $chartToZoom)
+                DividendProjectionChart(viewModel: viewModel, series: series, privacyMode: $privacyMode, expandedChart: $chartToZoom)
             }
         }
     }
 }
 
 struct ProjectionAdvancedChartsSection: View {
+    @ObservedObject var viewModel: PortfolioViewModel
     let series: [ProjectionYearData]
     @Binding var chartToZoom: ProjectionChartZoomType?
     @Binding var privacyMode: Bool
@@ -415,7 +425,7 @@ struct ProjectionAdvancedChartsSection: View {
         VStack(alignment: .leading, spacing: 12) {
             Text("Advanced Compounding Analytics").font(.title2).fontWeight(.bold).foregroundColor(.secondary)
             HStack(spacing: 24) {
-                CumulativeDividendsChart(series: series, privacyMode: $privacyMode, expandedChart: $chartToZoom)
+                CumulativeDividendsChart(viewModel: viewModel, series: series, privacyMode: $privacyMode, expandedChart: $chartToZoom)
                 ProjectedYOCChart(series: series, privacyMode: $privacyMode, expandedChart: $chartToZoom)
             }
         }
@@ -424,6 +434,7 @@ struct ProjectionAdvancedChartsSection: View {
 
 // GRAPHE 1 : Capital Growth Projection
 struct CapitalProjectionChart: View {
+    @ObservedObject var viewModel: PortfolioViewModel
     let series: [ProjectionYearData]
     @Binding var privacyMode: Bool
     var isExpanded: Bool = false
@@ -438,6 +449,7 @@ struct CapitalProjectionChart: View {
 
     var body: some View {
         let isPrivate = privacyMode
+        let currency = viewModel.preferredCurrency
         
         VStack(alignment: .leading, spacing: 8) {
             HStack {
@@ -453,12 +465,12 @@ struct CapitalProjectionChart: View {
                     Text("Year \(item.yearIndex) (\(String(item.calendarYear)))").fontWeight(.bold)
                     HStack(spacing: 4) {
                         Circle().fill(Color.blue).frame(width: 7, height: 7)
-                        Text("Portfolio: \(item.portfolioValue.formatted(.currency(code: "EUR").precision(.fractionLength(0))))")
+                        Text("Portfolio: \(item.portfolioValue.formatted(.currency(code: currency).precision(.fractionLength(0))))")
                             .foregroundColor(.blue).fontWeight(.semibold).blur(radius: isPrivate ? 6 : 0)
                     }
                     HStack(spacing: 4) {
                         Circle().fill(Color.green).frame(width: 7, height: 7)
-                        Text("Gain: \(item.capitalGain.formatted(.currency(code: "EUR").precision(.fractionLength(0)).sign(strategy: .always())))")
+                        Text("Gain: \(item.capitalGain.formatted(.currency(code: currency).precision(.fractionLength(0)).sign(strategy: .always())))")
                             .foregroundColor(item.capitalGain >= 0 ? .green : .red).fontWeight(.semibold).blur(radius: isPrivate ? 6 : 0)
                     }
                 }
@@ -496,7 +508,7 @@ struct CapitalProjectionChart: View {
             .chartYAxis {
                 AxisMarks(position: .leading) { value in
                     AxisGridLine(); AxisTick()
-                    if let val = value.as(Double.self) { AxisValueLabel(val.formatted(.currency(code: "EUR").notation(.compactName))) }
+                    if let val = value.as(Double.self) { AxisValueLabel(val.formatted(.currency(code: currency).notation(.compactName))) }
                 }
             }
             .chartXAxis {
@@ -505,8 +517,9 @@ struct CapitalProjectionChart: View {
                 }
             }
             
+            let sym = AppCurrency(rawValue: currency)?.symbol ?? "€"
             HStack {
-                HStack(spacing: 4) { RoundedRectangle(cornerRadius: 2).fill(Color.blue).frame(width: 12, height: 12); Text("Projected Capital (€)").font(.caption).foregroundColor(.secondary) }
+                HStack(spacing: 4) { RoundedRectangle(cornerRadius: 2).fill(Color.blue).frame(width: 12, height: 12); Text("Projected Capital (\(sym))").font(.caption).foregroundColor(.secondary) }
                 Spacer()
                 BlueChipWatermark()
             }
@@ -517,6 +530,7 @@ struct CapitalProjectionChart: View {
 
 // GRAPHE 2 : Dividend Growth Projection
 struct DividendProjectionChart: View {
+    @ObservedObject var viewModel: PortfolioViewModel
     let series: [ProjectionYearData]
     @Binding var privacyMode: Bool
     var isExpanded: Bool = false
@@ -531,6 +545,7 @@ struct DividendProjectionChart: View {
 
     var body: some View {
         let isPrivate = privacyMode
+        let currency = viewModel.preferredCurrency
         
         VStack(alignment: .leading, spacing: 8) {
             HStack {
@@ -546,12 +561,12 @@ struct DividendProjectionChart: View {
                     Text("Year \(item.yearIndex) (\(String(item.calendarYear)))").fontWeight(.bold)
                     HStack(spacing: 4) {
                         Circle().fill(Color.green).frame(width: 7, height: 7)
-                        Text("Annual Div.: \(item.annualDividend.formatted(.currency(code: "EUR").precision(.fractionLength(0))))")
+                        Text("Annual Div.: \(item.annualDividend.formatted(.currency(code: currency).precision(.fractionLength(0))))")
                             .foregroundColor(.green).fontWeight(.semibold).blur(radius: isPrivate ? 6 : 0)
                     }
                     HStack(spacing: 4) {
                         Circle().fill(Color.mint).frame(width: 7, height: 7)
-                        Text("Monthly Div.: \(item.monthlyDividend.formatted(.currency(code: "EUR").precision(.fractionLength(0))))/mo")
+                        Text("Monthly Div.: \(item.monthlyDividend.formatted(.currency(code: currency).precision(.fractionLength(0))))/mo")
                             .foregroundColor(.mint).fontWeight(.semibold).blur(radius: isPrivate ? 6 : 0)
                     }
                 }
@@ -589,7 +604,7 @@ struct DividendProjectionChart: View {
             .chartYAxis {
                 AxisMarks(position: .leading) { value in
                     AxisGridLine(); AxisTick()
-                    if let val = value.as(Double.self) { AxisValueLabel(val.formatted(.currency(code: "EUR").notation(.compactName))) }
+                    if let val = value.as(Double.self) { AxisValueLabel(val.formatted(.currency(code: currency).notation(.compactName))) }
                 }
             }
             .chartXAxis {
@@ -598,8 +613,9 @@ struct DividendProjectionChart: View {
                 }
             }
             
+            let sym = AppCurrency(rawValue: currency)?.symbol ?? "€"
             HStack {
-                HStack(spacing: 4) { RoundedRectangle(cornerRadius: 2).fill(Color.green.opacity(0.7)).frame(width: 12, height: 12); Text("Gross Annual Dividends (€)").font(.caption).foregroundColor(.secondary) }
+                HStack(spacing: 4) { RoundedRectangle(cornerRadius: 2).fill(Color.green.opacity(0.7)).frame(width: 12, height: 12); Text("Gross Annual Dividends (\(sym))").font(.caption).foregroundColor(.secondary) }
                 Spacer()
                 BlueChipWatermark()
             }
@@ -610,6 +626,7 @@ struct DividendProjectionChart: View {
 
 // GRAPHE 3 : Cumulative Dividends Area
 struct CumulativeDividendsChart: View {
+    @ObservedObject var viewModel: PortfolioViewModel
     let series: [ProjectionYearData]
     @Binding var privacyMode: Bool
     var isExpanded: Bool = false
@@ -624,6 +641,7 @@ struct CumulativeDividendsChart: View {
 
     var body: some View {
         let isPrivate = privacyMode
+        let currency = viewModel.preferredCurrency
         
         VStack(alignment: .leading, spacing: 8) {
             HStack {
@@ -637,7 +655,7 @@ struct CumulativeDividendsChart: View {
                     Text("Year \(item.yearIndex) (\(String(item.calendarYear)))").fontWeight(.bold)
                     HStack(spacing: 4) {
                         Circle().fill(Color.purple).frame(width: 7, height: 7)
-                        Text("Total Collected: \(item.cumulativeDividends.formatted(.currency(code: "EUR").precision(.fractionLength(0))))")
+                        Text("Total Collected: \(item.cumulativeDividends.formatted(.currency(code: currency).precision(.fractionLength(0))))")
                             .foregroundColor(.purple).fontWeight(.semibold).blur(radius: isPrivate ? 6 : 0)
                     }
                 }
@@ -672,7 +690,7 @@ struct CumulativeDividendsChart: View {
             }
             .chartLegend(.hidden)
             .chartXSelection(value: $hoveredYearIndex)
-            .chartYAxis { AxisMarks(position: .leading) { value in AxisGridLine(); AxisTick(); if let val = value.as(Double.self) { AxisValueLabel(val.formatted(.currency(code: "EUR").notation(.compactName))) } } }
+            .chartYAxis { AxisMarks(position: .leading) { value in AxisGridLine(); AxisTick(); if let val = value.as(Double.self) { AxisValueLabel(val.formatted(.currency(code: currency).notation(.compactName))) } } }
             .chartXAxis { AxisMarks(values: .automatic) { value in if let intVal = value.as(Int.self) { AxisValueLabel { Text("\(intVal)").font(.caption) } } } }
             
             HStack { Text("The snowball effect: sum of all cash generated").font(.caption2).foregroundColor(.secondary); Spacer(); BlueChipWatermark() }
@@ -757,11 +775,14 @@ struct ProjectedYOCChart: View {
 // =========================================================================
 
 struct ProjectionTableSection: View {
+    @ObservedObject var viewModel: PortfolioViewModel
     let series: [ProjectionYearData]
     @Binding var privacyMode: Bool
     
     var body: some View {
         let isPrivate = privacyMode
+        let currency = viewModel.preferredCurrency
+        let sym = AppCurrency(rawValue: currency)?.symbol ?? "€"
         
         VStack(alignment: .leading, spacing: 8) {
             Text("Year-by-Year Projection Schedule").font(.title2).fontWeight(.bold).foregroundColor(.secondary).padding(.bottom, 4)
@@ -771,10 +792,10 @@ struct ProjectionTableSection: View {
                 HStack(spacing: 8) {
                     Text("Year #").fontWeight(.bold).frame(width: 60, alignment: .leading)
                     Text("Calendar").fontWeight(.bold).frame(width: 80, alignment: .leading)
-                    Text("Portfolio Value (€)").fontWeight(.bold).frame(maxWidth: .infinity, alignment: .trailing)
-                    Text("Cumulative Gain (€)").fontWeight(.bold).frame(maxWidth: .infinity, alignment: .trailing)
-                    Text("Annual Dividend (€)").fontWeight(.bold).frame(maxWidth: .infinity, alignment: .trailing)
-                    Text("Monthly Equivalent (€)").fontWeight(.bold).frame(maxWidth: .infinity, alignment: .trailing)
+                    Text("Portfolio Value (\(sym))").fontWeight(.bold).frame(maxWidth: .infinity, alignment: .trailing)
+                    Text("Cumulative Gain (\(sym))").fontWeight(.bold).frame(maxWidth: .infinity, alignment: .trailing)
+                    Text("Annual Dividend (\(sym))").fontWeight(.bold).frame(maxWidth: .infinity, alignment: .trailing)
+                    Text("Monthly Equivalent (\(sym))").fontWeight(.bold).frame(maxWidth: .infinity, alignment: .trailing)
                 }
                 .font(.subheadline)
                 .foregroundColor(.secondary)
@@ -792,23 +813,23 @@ struct ProjectionTableSection: View {
                                 Text("Yr \(item.yearIndex)").fontWeight(.semibold).frame(width: 60, alignment: .leading)
                                 Text(String(item.calendarYear)).foregroundColor(.secondary).frame(width: 80, alignment: .leading)
                                 
-                                Text(item.portfolioValue.formatted(.currency(code: "EUR").precision(.fractionLength(2))))
+                                Text(item.portfolioValue.formatted(.currency(code: currency).precision(.fractionLength(2))))
                                     .fontWeight(.bold)
                                     .blur(radius: isPrivate ? 6 : 0)
                                     .frame(maxWidth: .infinity, alignment: .trailing)
                                 
-                                Text(item.capitalGain.formatted(.currency(code: "EUR").precision(.fractionLength(2)).sign(strategy: .always())))
+                                Text(item.capitalGain.formatted(.currency(code: currency).precision(.fractionLength(2)).sign(strategy: .always())))
                                     .foregroundColor(item.capitalGain >= 0 ? .green : .red)
                                     .blur(radius: isPrivate ? 6 : 0)
                                     .frame(maxWidth: .infinity, alignment: .trailing)
                                 
-                                Text(item.annualDividend.formatted(.currency(code: "EUR").precision(.fractionLength(2))))
+                                Text(item.annualDividend.formatted(.currency(code: currency).precision(.fractionLength(2))))
                                     .fontWeight(.semibold)
                                     .foregroundColor(.green)
                                     .blur(radius: isPrivate ? 6 : 0)
                                     .frame(maxWidth: .infinity, alignment: .trailing)
                                 
-                                Text(item.monthlyDividend.formatted(.currency(code: "EUR").precision(.fractionLength(2))))
+                                Text(item.monthlyDividend.formatted(.currency(code: currency).precision(.fractionLength(2))))
                                     .foregroundColor(.mint)
                                     .blur(radius: isPrivate ? 6 : 0)
                                     .frame(maxWidth: .infinity, alignment: .trailing)
@@ -840,6 +861,7 @@ struct ProjectionTableSection: View {
 struct ProjectionFullScreenChartView: View {
     @Environment(\.dismiss) var dismiss
     let zoomType: ProjectionChartZoomType
+    @ObservedObject var viewModel: PortfolioViewModel
     let series: [ProjectionYearData]
     @Binding var privacyMode: Bool
 
@@ -855,11 +877,11 @@ struct ProjectionFullScreenChartView: View {
             
             switch zoomType {
             case .capitalProjection:
-                CapitalProjectionChart(series: series, privacyMode: $privacyMode, isExpanded: true, expandedChart: .constant(nil))
+                CapitalProjectionChart(viewModel: viewModel, series: series, privacyMode: $privacyMode, isExpanded: true, expandedChart: .constant(nil))
             case .dividendProjection:
-                DividendProjectionChart(series: series, privacyMode: $privacyMode, isExpanded: true, expandedChart: .constant(nil))
+                DividendProjectionChart(viewModel: viewModel, series: series, privacyMode: $privacyMode, isExpanded: true, expandedChart: .constant(nil))
             case .cumulativeDividends:
-                CumulativeDividendsChart(series: series, privacyMode: $privacyMode, isExpanded: true, expandedChart: .constant(nil))
+                CumulativeDividendsChart(viewModel: viewModel, series: series, privacyMode: $privacyMode, isExpanded: true, expandedChart: .constant(nil))
             case .projectedYOC:
                 ProjectedYOCChart(series: series, privacyMode: $privacyMode, isExpanded: true, expandedChart: .constant(nil))
             }

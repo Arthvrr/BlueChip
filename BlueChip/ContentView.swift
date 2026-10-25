@@ -216,7 +216,7 @@ struct ContentView: View {
 
         .sheet(isPresented: $showCheatSheet) { CheatSheetView() }
         .sheet(isPresented: $showAbout) { AboutBlueChipView() }
-        .sheet(isPresented: $showTutorial) { TutorialView(currentTab: selectedTab) }
+        .sheet(isPresented: $showTutorial) { TutorialView(viewModel: viewModel, currentTab: selectedTab) }
         
         .sheet(isPresented: $showAICopilot) {
             AICopilotView(viewModel: viewModel, currentTab: selectedTab, resumeChat: resumeAIChat)
@@ -262,13 +262,25 @@ struct ContentView: View {
         Task {
             await viewModel.refreshPrices()
             let service = YahooFinanceService()
-            if let fxData = await service.fetchStockData(for: "EUR=X") {
+            let targetCurrency = await MainActor.run { viewModel.preferredCurrency }
+            
+            // MODIFIÉ : On adapte dynamiquement la requête de taux d'échange en fonction de la devise préférée
+            if targetCurrency.uppercased() == "USD" {
                 await MainActor.run {
                     for pos in viewModel.positions {
-                        if pos.currency.uppercased() == "USD" { pos.usdToEurRate = fxData.price }
-                        else if pos.currency.uppercased() == "EUR" { pos.usdToEurRate = 1.0 }
+                        if pos.currency.uppercased() == "USD" { pos.usdToEurRate = 1.0 }
                     }
                     viewModel.objectWillChange.send()
+                }
+            } else {
+                if let fxData = await service.fetchStockData(for: "\(targetCurrency.uppercased())=X") {
+                    await MainActor.run {
+                        for pos in viewModel.positions {
+                            if pos.currency.uppercased() == "USD" { pos.usdToEurRate = fxData.price }
+                            else if pos.currency.uppercased() == targetCurrency.uppercased() { pos.usdToEurRate = 1.0 }
+                        }
+                        viewModel.objectWillChange.send()
+                    }
                 }
             }
         }
@@ -297,4 +309,3 @@ struct ContentView: View {
         }
     }
 }
-

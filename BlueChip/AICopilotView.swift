@@ -279,6 +279,8 @@ struct AICopilotView: View {
     }
     
     private func generateSystemPrompt() -> String {
+        let currency = viewModel.preferredCurrency
+        
         var prompt = """
         You are a highly skilled, professional financial analyst and wealth manager integrated into the macOS application 'BlueChip'.
         The user has just opened the 'AI Insights' window. Your job is to analyze the data provided below and give a crisp, actionable, and insightful financial summary.
@@ -292,8 +294,8 @@ struct AICopilotView: View {
         
         --- CURRENT PORTFOLIO CONTEXT ---
         Current Tab Being Viewed: \(currentTab.rawValue)
-        Total Portfolio Value: \(viewModel.currentTotalCapital) EUR
-        Total Cash Available: \(viewModel.availableCash) EUR
+        Total Portfolio Value: \(viewModel.currentTotalCapital) \(currency)
+        Total Cash Available: \(viewModel.availableCash) \(currency)
         Total Positions: \(viewModel.positions.count)
         
         """
@@ -307,9 +309,9 @@ struct AICopilotView: View {
             let cashWeight = viewModel.currentTotalCapital > 0 ? (viewModel.availableCash / viewModel.currentTotalCapital) * 100 : 0
             
             prompt += "\n--- COMPOSITION & PERFORMANCE OVERVIEW ---\n"
-            prompt += "Total Invested: \(totalInvested.formatted(.currency(code: "EUR")))\n"
-            prompt += "Unrealized P/L: \(trueROIValue.formatted(.currency(code: "EUR"))) (\(trueROIPercent.formatted(.number.precision(.fractionLength(2))))%)\n"
-            prompt += "Available Cash: \(viewModel.availableCash.formatted(.currency(code: "EUR"))) (Cash Drag Weight: \(cashWeight.formatted(.number.precision(.fractionLength(1))))%)\n"
+            prompt += "Total Invested: \(totalInvested.formatted(.currency(code: currency)))\n"
+            prompt += "Unrealized P/L: \(trueROIValue.formatted(.currency(code: currency))) (\(trueROIPercent.formatted(.number.precision(.fractionLength(2))))%)\n"
+            prompt += "Available Cash: \(viewModel.availableCash.formatted(.currency(code: currency))) (Cash Drag Weight: \(cashWeight.formatted(.number.precision(.fractionLength(1))))%)\n"
             
             prompt += "\n--- TOP HOLDINGS (By Weight) ---\n"
             let sortedPositions = viewModel.positions.sorted { $0.currentValueEUR > $1.currentValueEUR }
@@ -443,9 +445,9 @@ struct AICopilotView: View {
             let pureCapitalGain = max(0, totalGain - totalDividends)
             
             prompt += "\n--- GROWTH & PERFORMANCE OVERVIEW ---\n"
-            prompt += "Total Capital Invested (Net Deposits): \(totalInvested.formatted(.currency(code: "EUR")))\n"
-            prompt += "Current Portfolio Value: \(currentWallet.formatted(.currency(code: "EUR")))\n"
-            prompt += "All-Time Unrealized Return: \(totalGain.formatted(.currency(code: "EUR").sign(strategy: .always()))) (\(allTimeReturnPercent.formatted(.number.precision(.fractionLength(2))))%)\n"
+            prompt += "Total Capital Invested (Net Deposits): \(totalInvested.formatted(.currency(code: currency)))\n"
+            prompt += "Current Portfolio Value: \(currentWallet.formatted(.currency(code: currency)))\n"
+            prompt += "All-Time Unrealized Return: \(totalGain.formatted(.currency(code: currency).sign(strategy: .always()))) (\(allTimeReturnPercent.formatted(.number.precision(.fractionLength(2))))%)\n"
             prompt += "Tracking Period: \(activeYearsCount) active years\n"
             
             prompt += "\n--- ADVANCED COMPOUNDING METRICS ---\n"
@@ -453,15 +455,15 @@ struct AICopilotView: View {
             prompt += "MoIC (Multiple on Invested Capital): \(moic.formatted(.number.precision(.fractionLength(2))))x\n"
             
             prompt += "\n--- GAINS PROVENANCE (VALUE SOURCE) ---\n"
-            prompt += "Total Wealth Generated: \(totalGain.formatted(.currency(code: "EUR")))\n"
-            prompt += "- From Dividends (Cash Flow): \(totalDividends.formatted(.currency(code: "EUR")))\n"
-            prompt += "- From Capital Appreciation (Price ROI): \(pureCapitalGain.formatted(.currency(code: "EUR")))\n"
+            prompt += "Total Wealth Generated: \(totalGain.formatted(.currency(code: currency)))\n"
+            prompt += "- From Dividends (Cash Flow): \(totalDividends.formatted(.currency(code: currency)))\n"
+            prompt += "- From Capital Appreciation (Price ROI): \(pureCapitalGain.formatted(.currency(code: currency)))\n"
             
             prompt += "\n--- GROWTH GOALS ---\n"
             if viewModel.growthGoalType == .targetReturnPercent {
                 prompt += "User Target Annual Return: \(viewModel.growthGoalTarget)%\n"
             } else {
-                prompt += "User Target Annual Return: \(viewModel.growthGoalTarget) EUR\n"
+                prompt += "User Target Annual Return: \(viewModel.growthGoalTarget) \(currency)\n"
             }
             
             prompt += """
@@ -500,23 +502,23 @@ struct AICopilotView: View {
             let goalProgress = viewModel.dividendGoalTarget > 0 ? (isYieldGoal ? (viewModel.portfolioYield / (viewModel.dividendGoalTarget / 100.0)) : (viewModel.totalDividends / viewModel.dividendGoalTarget)) * 100 : 0
             
             prompt += "\n--- DIVIDEND PORTFOLIO OVERVIEW ---\n"
-            prompt += "Projected Annual Dividends: \(viewModel.totalDividends.formatted(.currency(code: "EUR")))\n"
+            prompt += "Projected Annual Dividends: \(viewModel.totalDividends.formatted(.currency(code: currency)))\n"
             prompt += "Projected Portfolio Yield: \((viewModel.portfolioYield * 100).formatted(.number.precision(.fractionLength(2))))%\n"
             prompt += "Dividend-Paying Stocks: \(payingCount) out of \(viewModel.positions.count)\n"
             
             prompt += "\n--- HISTORICAL PERFORMANCE ---\n"
-            prompt += "All-Time Dividends Collected: \(totalReceivedAllTime.formatted(.currency(code: "EUR")))\n"
-            prompt += "Dividends Received This Year (\(currentYear)): \(receivedThisYear.formatted(.currency(code: "EUR")))\n"
+            prompt += "All-Time Dividends Collected: \(totalReceivedAllTime.formatted(.currency(code: currency)))\n"
+            prompt += "Dividends Received This Year (\(currentYear)): \(receivedThisYear.formatted(.currency(code: currency)))\n"
             prompt += "YoY Growth (vs Last Year): \(yoyGrowth.formatted(.number.precision(.fractionLength(2))))%\n"
-            prompt += "Best Year on Record: \(bestYear.formatted(.currency(code: "EUR")))\n"
+            prompt += "Best Year on Record: \(bestYear.formatted(.currency(code: currency)))\n"
             
             prompt += "\n--- THIS MONTH (\(currentMonthName)) PAYOUT RADAR ---\n"
-            prompt += "Expected Income This Month: \(expectedThisMonth.formatted(.currency(code: "EUR")))\n"
+            prompt += "Expected Income This Month: \(expectedThisMonth.formatted(.currency(code: currency)))\n"
             prompt += "Stocks Paying This Month: \(payingStocksThisMonth.isEmpty ? "None" : payingStocksThisMonth.map { $0.ticker }.joined(separator: ", "))\n"
             
             prompt += "\n--- GOALS & TARGETS ---\n"
             let goalTypeStr = isYieldGoal ? "Portfolio Yield" : "Annual Expected Dividends"
-            let targetStr = isYieldGoal ? "\(viewModel.dividendGoalTarget)%" : "\(viewModel.dividendGoalTarget) EUR"
+            let targetStr = isYieldGoal ? "\(viewModel.dividendGoalTarget)%" : "\(viewModel.dividendGoalTarget) \(currency)"
             prompt += "User Goal: \(goalTypeStr) target of \(targetStr)\n"
             prompt += "Current Goal Progress: \(min(goalProgress, 100).formatted(.number.precision(.fractionLength(1))))%\n"
             
@@ -656,16 +658,16 @@ struct AICopilotView: View {
             prompt += "Time Horizon: \(Int(horizon)) Years (Target Year: \(currentYear + Int(horizon)))\n"
             prompt += "Base Capital CAGR: \((defaultCAGR * 100).formatted(.number.precision(.fractionLength(2))))%\n"
             prompt += "Base Dividend Growth (Weighted 5Y): \((defaultWeightedDivGrowth * 100).formatted(.number.precision(.fractionLength(2))))%\n"
-            prompt += "Monthly Contributions: \(enableContrib ? "\(contribAmount.formatted(.currency(code: "EUR")))/month" : "Disabled")\n"
+            prompt += "Monthly Contributions: \(enableContrib ? "\(contribAmount.formatted(.currency(code: currency)))/month" : "Disabled")\n"
             prompt += "DRIP (Dividend Reinvestment): \(enableDRIP ? "Enabled" : "Disabled")\n"
             prompt += "Inflation Adjustment: \(enableInflation ? "Enabled (\(inflationRate)% per year)" : "Disabled (Nominal Values)")\n"
             
             prompt += "\n--- END OF PERIOD PROJECTIONS (YEAR \(currentYear + Int(horizon))) ---\n"
-            prompt += "Projected Portfolio Value: \(finalCap.formatted(.currency(code: "EUR")))\n"
-            prompt += "Total Out-of-Pocket Invested: \(outOfPocketInvested.formatted(.currency(code: "EUR")))\n"
-            prompt += "Projected Capital Gain: \(finalGain.formatted(.currency(code: "EUR")))\n"
-            prompt += "Projected Annual Dividend Income: \(finalDiv.formatted(.currency(code: "EUR")))\n"
-            prompt += "Cumulative Dividends Collected over \(Int(horizon))Y: \(finalCumulDiv.formatted(.currency(code: "EUR")))\n"
+            prompt += "Projected Portfolio Value: \(finalCap.formatted(.currency(code: currency)))\n"
+            prompt += "Total Out-of-Pocket Invested: \(outOfPocketInvested.formatted(.currency(code: currency)))\n"
+            prompt += "Projected Capital Gain: \(finalGain.formatted(.currency(code: currency)))\n"
+            prompt += "Projected Annual Dividend Income: \(finalDiv.formatted(.currency(code: currency)))\n"
+            prompt += "Cumulative Dividends Collected over \(Int(horizon))Y: \(finalCumulDiv.formatted(.currency(code: currency)))\n"
             prompt += "Projected Yield on Cost (YOC): \(finalYOC.formatted(.number.precision(.fractionLength(2))))%\n"
             
             prompt += """
@@ -682,9 +684,9 @@ struct AICopilotView: View {
             
             // 1. Comparaison Globale (Current vs Simulated)
             prompt += "CURRENT PORTFOLIO:\n"
-            prompt += "- Total Value: \(viewModel.currentTotalCapital.formatted(.currency(code: "EUR")))\n"
-            prompt += "- Current Cash: \(viewModel.availableCash.formatted(.currency(code: "EUR")))\n"
-            prompt += "- Annual Dividends: \(viewModel.totalDividends.formatted(.currency(code: "EUR")))\n"
+            prompt += "- Total Value: \(viewModel.currentTotalCapital.formatted(.currency(code: currency)))\n"
+            prompt += "- Current Cash: \(viewModel.availableCash.formatted(.currency(code: currency)))\n"
+            prompt += "- Annual Dividends: \(viewModel.totalDividends.formatted(.currency(code: currency)))\n"
             prompt += "- Portfolio Yield: \((viewModel.portfolioYield * 100).formatted(.number.precision(.fractionLength(2))))%\n"
             
             // Récupération des données simulées (on suppose ici qu'elles sont stockées/sauvegardées, sinon l'IA fera l'analyse sur base des logs).
@@ -693,7 +695,7 @@ struct AICopilotView: View {
             prompt += "The user has tested the following trades in the Sandbox environment:\n"
             // On peut injecter ici une description textuelle si tu passes les logs à l'AICopilotView, mais sinon on force l'IA à analyser la logique de rebalancement
             prompt += "Task: Perform a comparative analysis of a portfolio rebalancing strategy.\n"
-            prompt += "1. Evaluate the impact of rebalancing a \(viewModel.currentTotalCapital.formatted(.currency(code: "EUR"))) portfolio. If the user were to deploy their \(viewModel.availableCash.formatted(.currency(code: "EUR"))) in cash, which sectors or stocks should they prioritize based on the current composition?\n"
+            prompt += "1. Evaluate the impact of rebalancing a \(viewModel.currentTotalCapital.formatted(.currency(code: currency))) portfolio. If the user were to deploy their \(viewModel.availableCash.formatted(.currency(code: currency))) in cash, which sectors or stocks should they prioritize based on the current composition?\n"
             prompt += "2. Discuss the trade-offs between increasing Dividend Yield versus chasing Capital Growth in the current market environment.\n"
             prompt += "3. What are the primary risks of holding too much cash (Cash Drag) versus being 100% deployed? Provide a verdict on the current cash level.\n"
             prompt += "Provide actionable, institutional-grade advice on how to optimally deploy capital or trim existing positions to improve the risk/reward ratio. Use professional terms like 'rebalancing alpha', 'cash drag', and 'opportunity cost'."
@@ -834,21 +836,21 @@ struct AICopilotView: View {
             let feeDragRatio = totalBought > 0 ? (totalFees / totalBought) * 100 : 0
             
             prompt += "\n--- CASH FLOW & CAPITAL DEPLOYMENT ---\n"
-            prompt += "Lifetime Deposits: \(totalDeposited.formatted(.currency(code: "EUR")))\n"
-            prompt += "Lifetime Withdrawals: \(totalWithdrawn.formatted(.currency(code: "EUR")))\n"
-            prompt += "Net Cash Flow (Capital injected by user): \(netCashFlow.formatted(.currency(code: "EUR")))\n"
-            prompt += "Total Assets Bought: \(totalBought.formatted(.currency(code: "EUR")))\n"
-            prompt += "Total Assets Sold: \(totalSold.formatted(.currency(code: "EUR")))\n"
-            prompt += "Net Capital Deployed in Markets: \(netInvested.formatted(.currency(code: "EUR")))\n"
+            prompt += "Lifetime Deposits: \(totalDeposited.formatted(.currency(code: currency)))\n"
+            prompt += "Lifetime Withdrawals: \(totalWithdrawn.formatted(.currency(code: currency)))\n"
+            prompt += "Net Cash Flow (Capital injected by user): \(netCashFlow.formatted(.currency(code: currency)))\n"
+            prompt += "Total Assets Bought: \(totalBought.formatted(.currency(code: currency)))\n"
+            prompt += "Total Assets Sold: \(totalSold.formatted(.currency(code: currency)))\n"
+            prompt += "Net Capital Deployed in Markets: \(netInvested.formatted(.currency(code: currency)))\n"
             
             prompt += "\n--- TRADING FRICTION (TAXES & FEES) ---\n"
-            prompt += "Total Frictional Costs: \(totalFees.formatted(.currency(code: "EUR")))\n"
+            prompt += "Total Frictional Costs: \(totalFees.formatted(.currency(code: currency)))\n"
             prompt += "Fee Drag Ratio (Fees / Total Bought): \(feeDragRatio.formatted(.number.precision(.fractionLength(2))))%\n"
             if !viewModel.transactionCustomColumns.isEmpty {
                 prompt += "Fee Breakdown:\n"
                 for col in viewModel.transactionCustomColumns {
                     let colTotal = txs.reduce(0) { $0 + ($1.customFields[col] ?? 0) }
-                    prompt += "- \(col): \(colTotal.formatted(.currency(code: "EUR")))\n"
+                    prompt += "- \(col): \(colTotal.formatted(.currency(code: currency)))\n"
                 }
             }
             
@@ -862,7 +864,7 @@ struct AICopilotView: View {
                 prompt += "\n--- RECENT ACTIVITY (LAST 5 TRANSACTIONS) ---\n"
                 let df = DateFormatter(); df.dateStyle = .short
                 for tx in sortedTx.prefix(5) {
-                    prompt += "- \(df.string(from: tx.date)): \(tx.type.rawValue.uppercased()) \(tx.ticker.isEmpty ? "CASH" : tx.ticker) | \(tx.amountEUR.formatted(.currency(code: "EUR")))\n"
+                    prompt += "- \(df.string(from: tx.date)): \(tx.type.rawValue.uppercased()) \(tx.ticker.isEmpty ? "CASH" : tx.ticker) | \(tx.amountEUR.formatted(.currency(code: currency)))\n"
                 }
             }
             
@@ -925,12 +927,12 @@ struct AICopilotView: View {
                 prompt += "No benchmarks defined yet.\n"
             }
             
-            prompt += "\n--- 10,000 EUR SIMULATION (COMPOUNDING IMPACT) ---\n"
-            prompt += "Portfolio Final Value: \(portfolio10k.formatted(.currency(code: "EUR")))\n"
+            prompt += "\n--- 10,000 \(currency) SIMULATION (COMPOUNDING IMPACT) ---\n"
+            prompt += "Portfolio Final Value: \(portfolio10k.formatted(.currency(code: currency)))\n"
             if bestIndex != nil {
-                prompt += "Best Benchmark Final Value: \(best10k.formatted(.currency(code: "EUR")))\n"
+                prompt += "Best Benchmark Final Value: \(best10k.formatted(.currency(code: currency)))\n"
                 let opportunityCost = portfolio10k - best10k
-                prompt += "Opportunity Cost (vs Index): \(opportunityCost.formatted(.currency(code: "EUR").sign(strategy: .always())))\n"
+                prompt += "Opportunity Cost (vs Index): \(opportunityCost.formatted(.currency(code: currency).sign(strategy: .always())))\n"
             }
             
             prompt += "\n--- USER GOALS ---\n"
@@ -939,7 +941,7 @@ struct AICopilotView: View {
             prompt += """
             \nTask: Act as an institutional Portfolio Manager evaluating 'Active Risk' and 'Alpha Generation'.
             1. Analyze the portfolio's relative performance against its benchmarks. Is the active management strategy actually adding value (positive Alpha) or destroying wealth (negative Alpha) compared to a passive index?
-            2. Evaluate the compounding effect using the 10,000 EUR simulation data. Discuss the absolute 'Opportunity Cost' if the portfolio is lagging behind the best index.
+            2. Evaluate the compounding effect using the 10,000 \(currency) simulation data. Discuss the absolute 'Opportunity Cost' if the portfolio is lagging behind the best index.
             3. Assess the user's progress towards their Target Alpha goal.
             4. Provide 2-3 actionable, professional recommendations. Should the user index a larger core portion of their portfolio? Re-evaluate their stock picking? Adjust their active risk profile?
             Be highly analytical, objective, and use professional performance measurement terminology (e.g., 'alpha generation', 'opportunity cost', 'active management drag', 'relative outperformance'). Use bolding for metrics.
@@ -1020,9 +1022,9 @@ struct AICopilotView: View {
             let wealthProgress = viewModel.wealthGoalProgress * 100
             
             prompt += "\n--- BALANCE SHEET OVERVIEW ---\n"
-            prompt += "Total Assets: \(totalAssets.formatted(.currency(code: "EUR")))\n"
-            prompt += "Total Liabilities (Debt): \(totalLiabilities.formatted(.currency(code: "EUR")))\n"
-            prompt += "True Net Worth: \(trueNetWorth.formatted(.currency(code: "EUR")))\n"
+            prompt += "Total Assets: \(totalAssets.formatted(.currency(code: currency)))\n"
+            prompt += "Total Liabilities (Debt): \(totalLiabilities.formatted(.currency(code: currency)))\n"
+            prompt += "True Net Worth: \(trueNetWorth.formatted(.currency(code: currency)))\n"
             prompt += "Debt-to-Asset Ratio (Leverage): \(debtToAssetRatio.formatted(.number.precision(.fractionLength(1))))%\n"
             
             prompt += "\n--- ASSET ALLOCATION (MACRO) ---\n"
@@ -1032,7 +1034,7 @@ struct AICopilotView: View {
             let sortedAssets = viewModel.allWealthAssets.sorted { $0.current > $1.current }.prefix(5)
             for asset in sortedAssets {
                 let weight = totalAssets > 0 ? (asset.current / totalAssets) * 100 : 0
-                prompt += "- \(asset.name): \(asset.current.formatted(.currency(code: "EUR"))) (\(weight.formatted(.number.precision(.fractionLength(1))))% weight) | ROI: \(asset.variationPercent.formatted(.percent.precision(.fractionLength(1))))\n"
+                prompt += "- \(asset.name): \(asset.current.formatted(.currency(code: currency))) (\(weight.formatted(.number.precision(.fractionLength(1))))% weight) | ROI: \(asset.variationPercent.formatted(.percent.precision(.fractionLength(1))))\n"
             }
             
             prompt += "\n--- LIABILITIES & DEBT STRUCTURE ---\n"
@@ -1040,7 +1042,7 @@ struct AICopilotView: View {
                 let sortedLiabilities = viewModel.manualWealthLiabilities.sorted { $0.amount > $1.amount }.prefix(5)
                 for liab in sortedLiabilities {
                     let leftPct = liab.initialAmount > 0 ? (liab.amount / liab.initialAmount) * 100 : 0
-                    prompt += "- \(liab.name): Owed \(liab.amount.formatted(.currency(code: "EUR"))) (\(leftPct.formatted(.number.precision(.fractionLength(1))))% of principal left to pay)\n"
+                    prompt += "- \(liab.name): Owed \(liab.amount.formatted(.currency(code: currency))) (\(leftPct.formatted(.number.precision(.fractionLength(1))))% of principal left to pay)\n"
                 }
             } else {
                 prompt += "No liabilities recorded. The user is currently 100% debt-free.\n"
@@ -1048,10 +1050,10 @@ struct AICopilotView: View {
             
             prompt += "\n--- FIRE (FINANCIAL INDEPENDENCE) SIMULATOR ---\n"
             prompt += "Safe Withdrawal Rate (SWR) Assumption: \(viewModel.safeWithdrawalRate.formatted(.number.precision(.fractionLength(1))))%\n"
-            prompt += "Estimated Passive Income: \(viewModel.fireAnnualIncome.formatted(.currency(code: "EUR")))/year (\(viewModel.fireMonthlyIncome.formatted(.currency(code: "EUR")))/month)\n"
+            prompt += "Estimated Passive Income: \(viewModel.fireAnnualIncome.formatted(.currency(code: currency)))/year (\(viewModel.fireMonthlyIncome.formatted(.currency(code: currency)))/month)\n"
             
             prompt += "\n--- WEALTH TARGETS ---\n"
-            prompt += "Target Net Worth: \(viewModel.wealthGoalTarget.formatted(.currency(code: "EUR")))\n"
+            prompt += "Target Net Worth: \(viewModel.wealthGoalTarget.formatted(.currency(code: currency)))\n"
             prompt += "Current Goal Progress: \(min(wealthProgress, 100).formatted(.number.precision(.fractionLength(1))))%\n"
             
             prompt += """
@@ -1195,4 +1197,3 @@ struct ChatBubble: View {
         }
     }
 }
-

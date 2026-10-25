@@ -25,8 +25,8 @@ struct ModernDonutChart: View {
     
     var sortedData: [ChartDataItem] {
         data.sorted { a, b in
-            if a.name == "Cash" { return false }
-            if b.name == "Cash" { return true }
+            if a.name == "Cash" || a.name == "Remaining Cash" { return false }
+            if b.name == "Cash" || b.name == "Remaining Cash" { return true }
             return a.name < b.name
         }
     }
@@ -64,7 +64,8 @@ struct ModernDonutChart: View {
                             let item = findItem(for: value)
                             VStack {
                                 Text(item.name).font(.headline)
-                                Text(item.value.formatted(.currency(code: "EUR"))).font(.subheadline).foregroundColor(.secondary).blur(radius: privacyMode ? 6 : 0)
+                                let currency = viewModel?.preferredCurrency ?? "EUR"
+                                Text(item.value.formatted(.currency(code: currency))).font(.subheadline).foregroundColor(.secondary).blur(radius: privacyMode ? 6 : 0)
                             }.position(x: geometry.frame(in: .local).midX, y: geometry.frame(in: .local).midY)
                         }
                     }
@@ -122,7 +123,7 @@ struct PRUPriceChart: View {
                     BarMark(x: .value("Ticker", item.ticker), y: .value("Price", item.value)).foregroundStyle(viewModel.color(for: item.ticker).opacity(item.category == "Avg Cost" ? 0.4 : 1.0)).position(by: .value("Category", item.category)).cornerRadius(4)
                         .annotation(position: .top) {
                             if hoveredTicker == item.ticker {
-                                Text(item.value.formatted(.currency(code: "USD")))
+                                Text(item.value.formatted(.currency(code: viewModel.preferredCurrency)))
                                     .font(.system(size: 9, weight: .bold)).foregroundColor(.secondary).blur(radius: privacyMode ? 6 : 0)
                             }
                         }
@@ -141,13 +142,14 @@ struct ROIComboTooltip: View {
     let showEuros: Bool
     let showPercent: Bool
     let privacyMode: Bool
+    let currency: String
     
     var body: some View {
         VStack(alignment: .center, spacing: 4) {
             Text(ticker).font(.caption.bold())
             
             if showEuros {
-                Text(roiValue.formatted(.currency(code: "EUR")))
+                Text(roiValue.formatted(.currency(code: currency)))
                     .font(.caption2)
                     .foregroundColor(roiValue >= 0 ? .green : .red)
                     .blur(radius: privacyMode ? 6 : 0)
@@ -201,7 +203,8 @@ struct ROIComboChart: View {
             VStack(spacing: 4) {
                 HStack(spacing: 16) {
                     Button(action: { withAnimation { if hiddenMetrics.contains("Euros") { hiddenMetrics.remove("Euros") } else { hiddenMetrics.insert("Euros") } } }) {
-                        HStack(spacing: 6) { Rectangle().fill(Color.gray.opacity(hiddenMetrics.contains("Euros") ? 0.3 : 0.6)).frame(width: 12, height: 10).cornerRadius(2); Text("P/L (€)").font(.caption).foregroundColor(hiddenMetrics.contains("Euros") ? .secondary : .primary) }
+                        let sym = AppCurrency(rawValue: viewModel.preferredCurrency)?.symbol ?? "€"
+                        HStack(spacing: 6) { Rectangle().fill(Color.gray.opacity(hiddenMetrics.contains("Euros") ? 0.3 : 0.6)).frame(width: 12, height: 10).cornerRadius(2); Text("P/L (\(sym))").font(.caption).foregroundColor(hiddenMetrics.contains("Euros") ? .secondary : .primary) }
                     }.buttonStyle(.plain)
                     
                     Button(action: { withAnimation { if hiddenMetrics.contains("Percent") { hiddenMetrics.remove("Percent") } else { hiddenMetrics.insert("Percent") } } }) {
@@ -209,7 +212,8 @@ struct ROIComboChart: View {
                     }.buttonStyle(.plain).opacity(hiddenMetrics.contains("Percent") ? 0.4 : 1.0)
                     
                     Button(action: { withAnimation { if hiddenMetrics.contains("Average") { hiddenMetrics.remove("Average") } else { hiddenMetrics.insert("Average") } } }) {
-                        HStack(spacing: 6) { Rectangle().fill(Color.gray.opacity(0.5)).frame(width: 12, height: 2); Text("Avg (€)").font(.caption).foregroundColor(hiddenMetrics.contains("Average") ? .secondary : .primary) }
+                        let sym = AppCurrency(rawValue: viewModel.preferredCurrency)?.symbol ?? "€"
+                        HStack(spacing: 6) { Rectangle().fill(Color.gray.opacity(0.5)).frame(width: 12, height: 2); Text("Avg (\(sym))").font(.caption).foregroundColor(hiddenMetrics.contains("Average") ? .secondary : .primary) }
                     }.buttonStyle(.plain).opacity(hiddenMetrics.contains("Average") ? 0.4 : 1.0)
                 }
                 InteractiveLegendView(items: uniqueTickers, colorMap: { viewModel.color(for: $0) }, hiddenItems: $hiddenTickers)
@@ -223,7 +227,7 @@ struct ROIComboChart: View {
                             .foregroundStyle(Color.gray.opacity(0.5))
                             .lineStyle(StrokeStyle(lineWidth: 1.5, dash: [4, 4]))
                             .annotation(position: .top, alignment: .leading) {
-                                Text("Avg: \(avgROI.formatted(.currency(code: "EUR").precision(.fractionLength(0))))")
+                                Text("Avg: \(avgROI.formatted(.currency(code: viewModel.preferredCurrency).precision(.fractionLength(0))))")
                                     .font(.caption2).foregroundColor(.gray)
                                     .blur(radius: privacyMode ? 6 : 0)
                             }
@@ -231,7 +235,7 @@ struct ROIComboChart: View {
                     
                     ForEach(filteredPositions) { pos in
                         if !hiddenMetrics.contains("Euros") {
-                            BarMark(x: .value("Ticker", pos.ticker), y: .value("P/L (€)", pos.roiValue))
+                            BarMark(x: .value("Ticker", pos.ticker), y: .value("P/L Value", pos.roiValue))
                                 .foregroundStyle(pos.roiValue >= 0 ? Color.green.opacity(0.7) : Color.red.opacity(0.7))
                                 .cornerRadius(4)
                         }
@@ -244,14 +248,12 @@ struct ROIComboChart: View {
                         }
                     }
                     
-                    // Ligne verticale grise de survol uniquement
                     if let hTicker = hoveredTicker, filteredPositions.contains(where: { $0.ticker == hTicker }) {
                         RuleMark(x: .value("Ticker", hTicker))
                             .foregroundStyle(Color.secondary.opacity(0.3))
                             .zIndex(-1)
                     }
                 }
-                // NOUVEAU : On gère le survol et l'infobulle avec chartOverlay
                 .chartOverlay { proxy in
                     GeometryReader { geometry in
                         Rectangle().fill(.clear).contentShape(Rectangle())
@@ -264,7 +266,6 @@ struct ROIComboChart: View {
                                 }
                             }
                         
-                        // Dessin de l'infobulle
                         if let hTicker = hoveredTicker, let pos = filteredPositions.first(where: { $0.ticker == hTicker }) {
                             if let xPosition = proxy.position(forX: hTicker) {
                                 ROIComboTooltip(
@@ -273,9 +274,9 @@ struct ROIComboChart: View {
                                     roiPercent: pos.roiPercent,
                                     showEuros: !hiddenMetrics.contains("Euros"),
                                     showPercent: !hiddenMetrics.contains("Percent"),
-                                    privacyMode: privacyMode
+                                    privacyMode: privacyMode,
+                                    currency: viewModel.preferredCurrency
                                 )
-                                // Force l'infobulle à rester en dessous du plafond
                                 .position(x: max(40, min(geometry.size.width - 40, xPosition)), y: 35)
                             }
                         }
@@ -285,7 +286,8 @@ struct ROIComboChart: View {
                 .chartXSelection(value: $hoveredTicker)
                 .chartYScale(domain: yMin...yMax)
             }
-            HStack { Text("Displays absolute (€) and relative (%) unrealized gains or losses").font(.caption2).foregroundColor(.secondary); Spacer(); BlueChipWatermark() }
+            let sym = AppCurrency(rawValue: viewModel.preferredCurrency)?.symbol ?? "€"
+            HStack { Text("Displays absolute (\(sym)) and relative (%) unrealized gains or losses").font(.caption2).foregroundColor(.secondary); Spacer(); BlueChipWatermark() }
         }.padding().frame(minHeight: 360, maxHeight: isExpanded ? .infinity : 360).background(Color(NSColor.controlBackgroundColor)).cornerRadius(12).shadow(color: Color.black.opacity(0.05), radius: 2, x: 0, y: 1)
     }
 }
@@ -343,6 +345,7 @@ struct CapitalStatusChart: View {
     var isExpanded: Bool = false
     @Binding var expandedChart: ChartZoomType?
     @Binding var privacyMode: Bool
+    let currency: String
     
     @State private var selectedAngleValue: Double? = nil
     @State private var hiddenItems: Set<String> = []
@@ -367,13 +370,13 @@ struct CapitalStatusChart: View {
                             let item = findItem(for: value)
                             VStack {
                                 Text(item.name).font(.headline).foregroundColor(color(for: item.name))
-                                Text(item.value.formatted(.currency(code: "EUR").precision(.fractionLength(0)))).font(.title3).fontWeight(.bold).blur(radius: privacyMode ? 6 : 0)
+                                Text(item.value.formatted(.currency(code: currency).precision(.fractionLength(0)))).font(.title3).fontWeight(.bold).blur(radius: privacyMode ? 6 : 0)
                             }.position(x: geometry.frame(in: .local).midX, y: geometry.frame(in: .local).midY)
                         } else {
                             let total = filteredData.reduce(0) { $0 + $1.value }
                             VStack {
                                 Text("Invested Capital").font(.subheadline).foregroundColor(.secondary)
-                                Text(total.formatted(.currency(code: "EUR").precision(.fractionLength(0)))).font(.title2).fontWeight(.bold).blur(radius: privacyMode ? 6 : 0)
+                                Text(total.formatted(.currency(code: currency).precision(.fractionLength(0)))).font(.title2).fontWeight(.bold).blur(radius: privacyMode ? 6 : 0)
                             }.position(x: geometry.frame(in: .local).midX, y: geometry.frame(in: .local).midY)
                         }
                     }
@@ -389,6 +392,7 @@ struct HeatmapNodeView: View {
     let node: TreemapNode
     @Binding var hoveredTicker: String?
     @Binding var privacyMode: Bool
+    let currency: String
     
     func color(for roi: Double) -> Color {
         if roi == 0 { return Color.gray.opacity(0.4) }
@@ -407,8 +411,8 @@ struct HeatmapNodeView: View {
             if isHovered {
                 VStack {
                     Text(node.position.ticker).font(.caption.bold())
-                    Text(node.position.currentValueEUR.formatted(.currency(code: "EUR"))).font(.caption2).blur(radius: privacyMode ? 6 : 0)
-                    Text("Daily: \(node.position.dailyROIValue.formatted(.currency(code: "EUR").sign(strategy: .always())))").font(.caption2).blur(radius: privacyMode ? 6 : 0)
+                    Text(node.position.currentValueEUR.formatted(.currency(code: currency))).font(.caption2).blur(radius: privacyMode ? 6 : 0)
+                    Text("Daily: \(node.position.dailyROIValue.formatted(.currency(code: currency).sign(strategy: .always())))").font(.caption2).blur(radius: privacyMode ? 6 : 0)
                 }.padding(6).background(Color(NSColor.windowBackgroundColor).opacity(0.95)).cornerRadius(6).shadow(radius: 4).zIndex(10)
             }
         }.frame(width: node.rect.width, height: node.rect.height).offset(x: node.rect.minX, y: node.rect.minY).scaleEffect(isHovered ? 1.02 : 1.0).zIndex(isHovered ? 1 : 0).onContinuousHover { phase in
@@ -422,6 +426,7 @@ struct PerformanceHeatmap: View {
     var isExpanded: Bool = false
     @Binding var expandedChart: ChartZoomType?
     @Binding var privacyMode: Bool
+    let currency: String
     
     @State private var hoveredTicker: String? = nil
     
@@ -455,7 +460,7 @@ struct PerformanceHeatmap: View {
                 if !isExpanded { Button(action: { expandedChart = .heatmap }) { Image(systemName: "plus.magnifyingglass").foregroundColor(.secondary) }.buttonStyle(.plain) }
             }.padding(.bottom, 8)
             if positions.isEmpty { Spacer(); Text("No data").foregroundColor(.secondary); Spacer() } else {
-                GeometryReader { geo in ZStack(alignment: .topLeading) { ForEach(layoutNodes(in: CGRect(origin: .zero, size: geo.size))) { node in HeatmapNodeView(node: node, hoveredTicker: $hoveredTicker, privacyMode: $privacyMode) } } }
+                GeometryReader { geo in ZStack(alignment: .topLeading) { ForEach(layoutNodes(in: CGRect(origin: .zero, size: geo.size))) { node in HeatmapNodeView(node: node, hoveredTicker: $hoveredTicker, privacyMode: $privacyMode, currency: currency) } } }
             }
             HStack { Text("Area represents position value, color intensity represents P/L (%)").font(.caption2).foregroundColor(.secondary); Spacer(); BlueChipWatermark() }
         }.padding().frame(minHeight: 360, maxHeight: isExpanded ? .infinity : 360).background(Color(NSColor.controlBackgroundColor)).cornerRadius(12).shadow(color: Color.black.opacity(0.05), radius: 2, x: 0, y: 1)
@@ -475,7 +480,6 @@ struct DailyROIChart: View {
     var uniqueTickers: [String] { positions.map { $0.ticker }.sorted() }
     var filteredPositions: [Position] { positions.filter { !hiddenTickers.contains($0.ticker) } }
     
-    // Conserve les marges dynamiques pour que les barres ne touchent pas le plafond
     var yMax: Double {
         let maxVal = filteredPositions.map { $0.dailyROIValue }.max() ?? 10
         return maxVal > 0 ? maxVal * 1.25 : 10
@@ -502,7 +506,6 @@ struct DailyROIChart: View {
                             .foregroundStyle(pos.dailyROIValue >= 0 ? Color.green.opacity(0.7) : Color.red.opacity(0.7))
                             .cornerRadius(4)
                         
-                        // Ligne verticale grise de survol uniquement
                         if let hTicker = hoveredTicker, pos.ticker == hTicker {
                             RuleMark(x: .value("Ticker", hTicker))
                                 .foregroundStyle(Color.secondary.opacity(0.3))
@@ -510,7 +513,6 @@ struct DailyROIChart: View {
                         }
                     }
                 }
-                // NOUVEAU : On gère le survol et l'infobulle de manière totalement indépendante avec chartOverlay
                 .chartOverlay { proxy in
                     GeometryReader { geometry in
                         Rectangle().fill(.clear).contentShape(Rectangle())
@@ -523,12 +525,11 @@ struct DailyROIChart: View {
                                 }
                             }
                         
-                        // L'infobulle est dessinée manuellement aux coordonnées parfaites
                         if let hTicker = hoveredTicker, let pos = filteredPositions.first(where: { $0.ticker == hTicker }) {
                             if let xPosition = proxy.position(forX: hTicker) {
                                 VStack(alignment: .center, spacing: 4) {
                                     Text(hTicker).font(.caption.bold())
-                                    Text(pos.dailyROIValue.formatted(.currency(code: "EUR").sign(strategy: .always())))
+                                    Text(pos.dailyROIValue.formatted(.currency(code: viewModel.preferredCurrency).sign(strategy: .always())))
                                         .font(.caption2)
                                         .foregroundColor(pos.dailyROIValue >= 0 ? .green : .red)
                                         .blur(radius: privacyMode ? 6 : 0)
@@ -537,7 +538,6 @@ struct DailyROIChart: View {
                                 .background(Color(NSColor.windowBackgroundColor).opacity(0.95))
                                 .cornerRadius(6)
                                 .shadow(radius: 4)
-                                // Le y: 35 force l'infobulle à rester en dessous du plafond pour ne jamais être coupée !
                                 .position(x: max(40, min(geometry.size.width - 40, xPosition)), y: 35)
                             }
                         }
@@ -646,10 +646,10 @@ struct FullScreenChartView: View {
     var allocationByCurrency: [ChartDataItem] {
         var dict: [String: Double] = [:]
         for pos in viewModel.positions {
-            let cur = pos.currency.isEmpty ? "EUR" : pos.currency.uppercased()
+            let cur = pos.currency.isEmpty ? viewModel.preferredCurrency : pos.currency.uppercased()
             dict[cur, default: 0] += pos.currentValueEUR
         }
-        if viewModel.availableCash > 0 { dict["EUR", default: 0] += viewModel.availableCash }
+        if viewModel.availableCash > 0 { dict[viewModel.preferredCurrency, default: 0] += viewModel.availableCash }
         return dict.map { ChartDataItem(name: $0.key, value: $0.value) }.sorted { $0.value > $1.value }
     }
     
@@ -662,17 +662,17 @@ struct FullScreenChartView: View {
         VStack(spacing: 20) {
             HStack { Text(titleForZoom).font(.title).fontWeight(.bold); Spacer(); Button(action: { dismiss() }) { Image(systemName: "xmark.circle.fill").font(.title).foregroundColor(.secondary) }.buttonStyle(.plain) }
             switch zoomType {
-            case .positions: ModernDonutChart(data: viewModel.allocationByPosition, title: "Weight by Position", zoomType: zoomType, palette: positionColors, isExpanded: true, expandedChart: .constant(nil), privacyMode: $privacyMode)
-            case .countries: ModernDonutChart(data: viewModel.allocationByCountry, title: "Geographic Exposure", zoomType: zoomType, palette: geographicColors, isExpanded: true, expandedChart: .constant(nil), privacyMode: $privacyMode)
-            case .sectors: ModernDonutChart(data: viewModel.allocationBySector, title: "Sector Allocation", zoomType: zoomType, palette: sectorColors, isExpanded: true, expandedChart: .constant(nil), privacyMode: $privacyMode)
-            case .marketCaps: ModernDonutChart(data: viewModel.allocationByMarketCap, title: "Market Cap Allocation", zoomType: zoomType, palette: marketCapColors, isExpanded: true, expandedChart: .constant(nil), privacyMode: $privacyMode)
+            case .positions: ModernDonutChart(data: viewModel.allocationByPosition, title: "Weight by Position", zoomType: zoomType, palette: positionColors, isExpanded: true, expandedChart: .constant(nil), privacyMode: $privacyMode, viewModel: viewModel)
+            case .countries: ModernDonutChart(data: viewModel.allocationByCountry, title: "Geographic Exposure", zoomType: zoomType, palette: geographicColors, isExpanded: true, expandedChart: .constant(nil), privacyMode: $privacyMode, viewModel: viewModel)
+            case .sectors: ModernDonutChart(data: viewModel.allocationBySector, title: "Sector Allocation", zoomType: zoomType, palette: sectorColors, isExpanded: true, expandedChart: .constant(nil), privacyMode: $privacyMode, viewModel: viewModel)
+            case .marketCaps: ModernDonutChart(data: viewModel.allocationByMarketCap, title: "Market Cap Allocation", zoomType: zoomType, palette: marketCapColors, isExpanded: true, expandedChart: .constant(nil), privacyMode: $privacyMode, viewModel: viewModel)
             case .priceCompare: PRUPriceChart(viewModel: viewModel, data: viewModel.priceComparisonData, isExpanded: true, expandedChart: .constant(nil), privacyMode: $privacyMode)
             case .roiCombo: ROIComboChart(viewModel: viewModel, positions: viewModel.positions, trueROIValue: trueROIValue, isExpanded: true, expandedChart: .constant(nil), privacyMode: $privacyMode)
             case .scatter: ModernScatterPlotChart(viewModel: viewModel, data: viewModel.scatterData, isExpanded: true, expandedChart: .constant(nil), privacyMode: $privacyMode)
-            case .capitalStatus: CapitalStatusChart(data: viewModel.capitalStatusData, isExpanded: true, expandedChart: .constant(nil), privacyMode: $privacyMode)
-            case .heatmap: PerformanceHeatmap(positions: viewModel.positions, isExpanded: true, expandedChart: .constant(nil), privacyMode: $privacyMode)
+            case .capitalStatus: CapitalStatusChart(data: viewModel.capitalStatusData, isExpanded: true, expandedChart: .constant(nil), privacyMode: $privacyMode, currency: viewModel.preferredCurrency)
+            case .heatmap: PerformanceHeatmap(positions: viewModel.positions, isExpanded: true, expandedChart: .constant(nil), privacyMode: $privacyMode, currency: viewModel.preferredCurrency)
             case .dailyRoi: DailyROIChart(viewModel: viewModel, positions: viewModel.positions, isExpanded: true, expandedChart: .constant(nil), privacyMode: $privacyMode)
-            case .currencies: ModernDonutChart(data: allocationByCurrency, title: "Currency Exposure", zoomType: zoomType, palette: [.blue, .green, .orange, .purple, .teal, .indigo, .pink], isExpanded: true, expandedChart: .constant(nil), privacyMode: $privacyMode)
+            case .currencies: ModernDonutChart(data: allocationByCurrency, title: "Currency Exposure", zoomType: zoomType, palette: [.blue, .green, .orange, .purple, .teal, .indigo, .pink], isExpanded: true, expandedChart: .constant(nil), privacyMode: $privacyMode, viewModel: viewModel)
             case .correlation: CorrelationMatrixChart(viewModel: viewModel, isExpanded: true, expandedChart: .constant(nil), privacyMode: $privacyMode)
             }
         }.padding(30).frame(minWidth: 900, minHeight: 700)
@@ -713,7 +713,6 @@ struct CompositionTabView: View {
     
     @State private var chartToZoom: ChartZoomType? = nil
     
-    // --- NOUVEAUX CALCULS GLOBAUX DE RENTABILITÉ ---
     var totalInvested: Double {
         viewModel.manuallyInvested > 0 ? viewModel.manuallyInvested : viewModel.positionsInvestedSum
     }
@@ -726,18 +725,16 @@ struct CompositionTabView: View {
         totalInvested > 0 ? (trueROIValue / totalInvested) : 0
     }
     
-    // Calcul de l'allocation par devise pour le nouveau graphique
     var allocationByCurrency: [ChartDataItem] {
         var dict: [String: Double] = [:]
         for pos in viewModel.positions {
-            let cur = pos.currency.isEmpty ? "EUR" : pos.currency.uppercased()
+            let cur = pos.currency.isEmpty ? viewModel.preferredCurrency : pos.currency.uppercased()
             dict[cur, default: 0] += pos.currentValueEUR
         }
-        if viewModel.availableCash > 0 { dict["EUR", default: 0] += viewModel.availableCash }
+        if viewModel.availableCash > 0 { dict[viewModel.preferredCurrency, default: 0] += viewModel.availableCash }
         return dict.map { ChartDataItem(name: $0.key, value: $0.value) }.sorted { $0.value > $1.value }
     }
     
-    // HAUTEUR DYNAMIQUE RESPONSIVE
     var dynamicTableHeight: CGFloat {
         let rowHeight: CGFloat = 36
         let headerHeight: CGFloat = 40
@@ -753,25 +750,26 @@ struct CompositionTabView: View {
                 // --- DASHBOARD ---
                 VStack(spacing: 16) {
                     HStack(spacing: 16) {
-                        Button(action: { showCashSheet = true }) { DashboardCard(title: "Cash", value: viewModel.availableCash.formatted(.currency(code: "EUR")), privacyMode: $privacyMode) }.buttonStyle(.plain)
-                        Button(action: { showInvestedSheet = true }) { DashboardCard(title: "Initial Investment", value: viewModel.manuallyInvested.formatted(.currency(code: "EUR")), privacyMode: $privacyMode) }.buttonStyle(.plain)
-                        DashboardCard(title: "Total (Current + Cash)", value: viewModel.currentTotalCapital.formatted(.currency(code: "EUR")), privacyMode: $privacyMode)
-                        DashboardCard(title: "Stock Value", value: viewModel.totalValue.formatted(.currency(code: "EUR")), privacyMode: $privacyMode)
+                        Button(action: { showCashSheet = true }) { DashboardCard(title: "Cash", value: viewModel.availableCash.formatted(.currency(code: viewModel.preferredCurrency)), privacyMode: $privacyMode) }.buttonStyle(.plain)
+                        Button(action: { showInvestedSheet = true }) { DashboardCard(title: "Initial Investment", value: viewModel.manuallyInvested.formatted(.currency(code: viewModel.preferredCurrency)), privacyMode: $privacyMode) }.buttonStyle(.plain)
+                        DashboardCard(title: "Total (Current + Cash)", value: viewModel.currentTotalCapital.formatted(.currency(code: viewModel.preferredCurrency)), privacyMode: $privacyMode)
+                        DashboardCard(title: "Stock Value", value: viewModel.totalValue.formatted(.currency(code: viewModel.preferredCurrency)), privacyMode: $privacyMode)
                     }
                     HStack(spacing: 16) {
                         VStack(alignment: .leading, spacing: 4) {
                             Text("Unrealized P/L").font(.subheadline).foregroundColor(.secondary).lineLimit(1)
-                            Text(trueROIValue.formatted(.currency(code: "EUR").sign(strategy: .always()))).font(.title2).fontWeight(.bold).foregroundColor(getColor(for: trueROIValue)).blur(radius: privacyMode ? 8 : 0)
+                            Text(trueROIValue.formatted(.currency(code: viewModel.preferredCurrency).sign(strategy: .always()))).font(.title2).fontWeight(.bold).foregroundColor(getColor(for: trueROIValue)).blur(radius: privacyMode ? 8 : 0)
                             Text(trueROIPercent.formatted(.percent.precision(.fractionLength(2)).sign(strategy: .always()))).font(.caption).padding(.horizontal, 6).padding(.vertical, 2).background(getColor(for: trueROIValue).opacity(0.1)).foregroundColor(getColor(for: trueROIValue)).cornerRadius(4).blur(radius: privacyMode ? 8 : 0)
                         }.padding().frame(maxWidth: .infinity, alignment: .leading).frame(height: 110).background(Color(NSColor.controlBackgroundColor)).cornerRadius(10).shadow(color: Color.black.opacity(0.05), radius: 2, x: 0, y: 1)
                         
                         DashboardCard(title: "Positions", value: "\(viewModel.positionCount)", privacyMode: $privacyMode)
-                        DashboardCard(title: "Annual Dividends", value: viewModel.totalDividends.formatted(.currency(code: "EUR")), privacyMode: $privacyMode)
+                        DashboardCard(title: "Annual Dividends", value: viewModel.totalDividends.formatted(.currency(code: viewModel.preferredCurrency)), privacyMode: $privacyMode)
                         DashboardCard(title: "Total Yield", value: viewModel.portfolioYield.formatted(.percent.precision(.fractionLength(2))), privacyMode: $privacyMode)
                     }
                 }
                 
-                GoalProgressBar(title: viewModel.currentGoalType.rawValue, currentValue: viewModel.currentGoalValue, targetValue: viewModel.currentGoalTarget, privacyMode: $privacyMode).contentShape(Rectangle()).onTapGesture(count: 2) { showGoalSheet = true }
+                let goalSym = AppCurrency(rawValue: viewModel.preferredCurrency)?.symbol ?? "€"
+                GoalProgressBar(title: viewModel.currentGoalType.rawValue.replacingOccurrences(of: "€", with: goalSym), currentValue: viewModel.currentGoalValue, targetValue: viewModel.currentGoalTarget, privacyMode: $privacyMode, currency: $viewModel.preferredCurrency).contentShape(Rectangle()).onTapGesture(count: 2) { showGoalSheet = true }
                 
                 // --- TABLE ---
                 VStack(alignment: .leading, spacing: 8) {
@@ -812,8 +810,10 @@ struct CompositionTabView: View {
                             TableColumn("Qty", value: \.quantity) { pos in Text("\(pos.quantity, specifier: "%.2f")").blur(radius: privacyMode ? 6 : 0).frame(maxWidth: .infinity, alignment: .leading).contentShape(Rectangle()).onTapGesture(count: 2) { positionToEdit = pos } }
                             TableColumn("Price", value: \.currentPrice) { pos in Text(pos.currentPrice, format: .currency(code: pos.currency)).blur(radius: privacyMode ? 6 : 0).frame(maxWidth: .infinity, alignment: .leading).contentShape(Rectangle()).onTapGesture(count: 2) { positionToEdit = pos } }
                             TableColumn("Avg Cost", value: \.averageCost) { pos in Text(pos.averageCost, format: .currency(code: pos.currency)).foregroundColor(.secondary).blur(radius: privacyMode ? 6 : 0).frame(maxWidth: .infinity, alignment: .leading).contentShape(Rectangle()).onTapGesture(count: 2) { positionToEdit = pos } }
-                            TableColumn("Total Value", value: \.currentValueEUR) { pos in Text(pos.currentValueEUR, format: .currency(code: "EUR")).fontWeight(.medium).blur(radius: privacyMode ? 6 : 0).frame(maxWidth: .infinity, alignment: .leading).contentShape(Rectangle()).onTapGesture(count: 2) { positionToEdit = pos } }
-                            TableColumn("P/L €", value: \.roiValue) { pos in Text(pos.roiValue, format: .currency(code: "EUR").sign(strategy: .always())).foregroundColor(getColor(for: pos.roiValue)).fontWeight(.medium).blur(radius: privacyMode ? 6 : 0).frame(maxWidth: .infinity, alignment: .leading).contentShape(Rectangle()).onTapGesture(count: 2) { positionToEdit = pos } }
+                            TableColumn("Total Value", value: \.currentValueEUR) { pos in Text(pos.currentValueEUR, format: .currency(code: viewModel.preferredCurrency)).fontWeight(.medium).blur(radius: privacyMode ? 6 : 0).frame(maxWidth: .infinity, alignment: .leading).contentShape(Rectangle()).onTapGesture(count: 2) { positionToEdit = pos } }
+                            
+                            let sym = AppCurrency(rawValue: viewModel.preferredCurrency)?.symbol ?? "€"
+                            TableColumn("P/L \(sym)", value: \.roiValue) { pos in Text(pos.roiValue, format: .currency(code: viewModel.preferredCurrency).sign(strategy: .always())).foregroundColor(getColor(for: pos.roiValue)).fontWeight(.medium).blur(radius: privacyMode ? 6 : 0).frame(maxWidth: .infinity, alignment: .leading).contentShape(Rectangle()).onTapGesture(count: 2) { positionToEdit = pos } }
                             TableColumn("P/L %", value: \.roiPercent) { pos in Text(pos.roiPercent, format: .percent.precision(.fractionLength(2)).sign(strategy: .always())).padding(.horizontal, 8).padding(.vertical, 2).background(getColor(for: pos.roiValue).opacity(0.1)).foregroundColor(getColor(for: pos.roiValue)).cornerRadius(4).blur(radius: privacyMode ? 6 : 0).frame(maxWidth: .infinity, alignment: .leading).contentShape(Rectangle()).onTapGesture(count: 2) { positionToEdit = pos } }
                         }
                         .tableStyle(.inset)
@@ -829,23 +829,23 @@ struct CompositionTabView: View {
                 VStack(alignment: .leading, spacing: 12) {
                     Text("Asset Allocation Overview").font(.title2).fontWeight(.bold).foregroundColor(.secondary)
                     HStack(spacing: 24) {
-                        ModernDonutChart(data: viewModel.allocationByPosition, title: "Weight by Position", zoomType: .positions, palette: positionColors, expandedChart: $chartToZoom, privacyMode: $privacyMode)
-                        ModernDonutChart(data: viewModel.allocationByCountry, title: "Geographic Exposure", zoomType: .countries, palette: geographicColors, expandedChart: $chartToZoom, privacyMode: $privacyMode)
+                        ModernDonutChart(data: viewModel.allocationByPosition, title: "Weight by Position", zoomType: .positions, palette: positionColors, expandedChart: $chartToZoom, privacyMode: $privacyMode, viewModel: viewModel)
+                        ModernDonutChart(data: viewModel.allocationByCountry, title: "Geographic Exposure", zoomType: .countries, palette: geographicColors, expandedChart: $chartToZoom, privacyMode: $privacyMode, viewModel: viewModel)
                     }
                 }
                 
                 VStack(alignment: .leading, spacing: 12) {
                     Text("Sector & Market Cap Breakdown").font(.title2).fontWeight(.bold).foregroundColor(.secondary)
                     HStack(spacing: 24) {
-                        ModernDonutChart(data: viewModel.allocationBySector, title: "Sector Allocation", zoomType: .sectors, palette: sectorColors, expandedChart: $chartToZoom, privacyMode: $privacyMode)
-                        ModernDonutChart(data: viewModel.allocationByMarketCap, title: "Market Cap Allocation", zoomType: .marketCaps, palette: marketCapColors, expandedChart: $chartToZoom, privacyMode: $privacyMode)
+                        ModernDonutChart(data: viewModel.allocationBySector, title: "Sector Allocation", zoomType: .sectors, palette: sectorColors, expandedChart: $chartToZoom, privacyMode: $privacyMode, viewModel: viewModel)
+                        ModernDonutChart(data: viewModel.allocationByMarketCap, title: "Market Cap Allocation", zoomType: .marketCaps, palette: marketCapColors, expandedChart: $chartToZoom, privacyMode: $privacyMode, viewModel: viewModel)
                     }
                 }
                 
                 VStack(alignment: .leading, spacing: 12) {
                     Text("Currency Exposure & Asset Correlation").font(.title2).fontWeight(.bold).foregroundColor(.secondary)
                     HStack(spacing: 24) {
-                        ModernDonutChart(data: allocationByCurrency, title: "Currency Exposure", zoomType: .currencies, palette: [.blue, .green, .orange, .purple, .teal, .indigo, .pink], expandedChart: $chartToZoom, privacyMode: $privacyMode)
+                        ModernDonutChart(data: allocationByCurrency, title: "Currency Exposure", zoomType: .currencies, palette: [.blue, .green, .orange, .purple, .teal, .indigo, .pink], expandedChart: $chartToZoom, privacyMode: $privacyMode, viewModel: viewModel)
                         CorrelationMatrixChart(viewModel: viewModel, expandedChart: $chartToZoom, privacyMode: $privacyMode)
                     }
                 }
@@ -862,21 +862,21 @@ struct CompositionTabView: View {
                     Text("Risk & Capital Status").font(.title2).fontWeight(.bold).foregroundColor(.secondary)
                     HStack(spacing: 24) {
                         ModernScatterPlotChart(viewModel: viewModel, data: viewModel.scatterData, expandedChart: $chartToZoom, privacyMode: $privacyMode)
-                        CapitalStatusChart(data: viewModel.capitalStatusData, expandedChart: $chartToZoom, privacyMode: $privacyMode)
+                        CapitalStatusChart(data: viewModel.capitalStatusData, expandedChart: $chartToZoom, privacyMode: $privacyMode, currency: viewModel.preferredCurrency)
                     }
                 }
                 
                 VStack(alignment: .leading, spacing: 12) {
                     Text("Momentum & Daily Action").font(.title2).fontWeight(.bold).foregroundColor(.secondary)
                     HStack(spacing: 24) {
-                        PerformanceHeatmap(positions: viewModel.positions, expandedChart: $chartToZoom, privacyMode: $privacyMode)
+                        PerformanceHeatmap(positions: viewModel.positions, expandedChart: $chartToZoom, privacyMode: $privacyMode, currency: viewModel.preferredCurrency)
                         DailyROIChart(viewModel: viewModel, positions: viewModel.positions, expandedChart: $chartToZoom, privacyMode: $privacyMode)
                     }
                 }
             }.padding()
         }
-        .sheet(isPresented: $showCashSheet) { SimpleNumberEditView(title: "Edit Cash", value: $viewModel.availableCash) }
-        .sheet(isPresented: $showInvestedSheet) { SimpleNumberEditView(title: "Edit Initial Investment", value: $viewModel.manuallyInvested) }
+        .sheet(isPresented: $showCashSheet) { SimpleNumberEditView(title: "Edit Cash", value: $viewModel.availableCash, currencySymbol: AppCurrency(rawValue: viewModel.preferredCurrency)?.symbol ?? "€") }
+        .sheet(isPresented: $showInvestedSheet) { SimpleNumberEditView(title: "Edit Initial Investment", value: $viewModel.manuallyInvested, currencySymbol: AppCurrency(rawValue: viewModel.preferredCurrency)?.symbol ?? "€") }
         .sheet(isPresented: $showGoalSheet) { EditGoalView(viewModel: viewModel) }
         
         .sheet(isPresented: $showAddPositionSheet) { EditPositionView(viewModel: viewModel, position: nil) }
@@ -1018,7 +1018,8 @@ struct EditPositionView: View {
                                     TextField("0.0", value: $quantity, format: .number).textFieldStyle(.roundedBorder)
                                 }
                                 VStack(alignment: .leading, spacing: 4) {
-                                    Text("Average Price").font(.caption).foregroundColor(.secondary)
+                                    let currency = position?.currency ?? "Local"
+                                    Text("Average Price (\(currency))").font(.caption).foregroundColor(.secondary)
                                     TextField("0.00", value: $averageCost, format: .number).textFieldStyle(.roundedBorder)
                                 }
                             }
@@ -1035,7 +1036,7 @@ struct EditPositionView: View {
                         VStack(spacing: 16) {
                             HStack(spacing: 12) {
                                 VStack(alignment: .leading, spacing: 4) {
-                                    Text("Dividend per Share (\(ticker.isEmpty ? "Original Cur." : "Local"))").font(.caption).foregroundColor(.secondary)
+                                    Text("Dividend per Share (\(ticker.isEmpty ? "Local" : position?.currency ?? "Local"))").font(.caption).foregroundColor(.secondary)
                                     TextField("0.00", value: $annualDividendNet, format: .number).textFieldStyle(.roundedBorder)
                                 }
                                 VStack(alignment: .leading, spacing: 4) {
@@ -1146,7 +1147,6 @@ struct EditPositionView: View {
             pos.dividendGrowth5Y = safeGrow
             pos.dividendMonths = selectedMonths
             
-            // NOUVEAU : Force le recalcul immédiat des graphes
             viewModel.updateDividendsViewData()
             viewModel.objectWillChange.send()
         } else {
@@ -1167,19 +1167,19 @@ struct EditPositionView: View {
                 }
                 if safeDiv > 0 { existingPos.annualDividendNet = safeDiv }
                 
-                // NOUVEAU : Force le recalcul immédiat des graphes
                 viewModel.updateDividendsViewData()
                 viewModel.objectWillChange.send()
                 
             } else {
+                // Par défaut à l'ajout manuel sans prix connu, on init avec usdToEurRate = 1.0 (on le rafraichira après)
                 let newPos = Position(
                     id: UUID(),
                     ticker: cleanTicker,
                     quantity: safeQty,
                     averageCost: safeAvg,
                     currentPrice: 0.0,
-                    currency: "USD",
-                    usdToEurRate: 0.92,
+                    currency: viewModel.preferredCurrency,
+                    usdToEurRate: 1.0,
                     annualDividendNet: safeDiv,
                     country: country,
                     sector: sector,
@@ -1194,36 +1194,26 @@ struct EditPositionView: View {
                 
                 context.insert(newPos)
                 viewModel.positions.append(newPos)
-                
-                // NOUVEAU : Force le recalcul immédiat des graphes
                 viewModel.updateDividendsViewData()
                 
+                // On met à jour asynchrone le prix ET le vrai taux de conversion avec la base currency
                 Task {
                     let service = YahooFinanceService()
                     if let data = await service.fetchStockData(for: cleanTicker) {
-                        await MainActor.run {
-                            newPos.currentPrice = data.price
-                            newPos.currency = data.currency
+                        let stockCurrency = data.currency
+                        let targetCurrency = await MainActor.run { viewModel.preferredCurrency }
+                        var conversionRate = 1.0
+                        
+                        if stockCurrency != targetCurrency {
+                            conversionRate = await service.fetchExchangeRate(from: stockCurrency, to: targetCurrency)
                         }
                         
-                        if data.currency.uppercased() == "USD" {
-                            if let fxData = await service.fetchStockData(for: "EUR=X") {
-                                await MainActor.run {
-                                    newPos.usdToEurRate = fxData.price
-                                    viewModel.updateDividendsViewData() // <-- NOUVEAU
-                                    viewModel.objectWillChange.send()
-                                }
-                            } else {
-                                await MainActor.run { viewModel.objectWillChange.send() }
-                            }
-                        } else if data.currency.uppercased() == "EUR" {
-                            await MainActor.run {
-                                newPos.usdToEurRate = 1.0
-                                viewModel.updateDividendsViewData() // <-- NOUVEAU
-                                viewModel.objectWillChange.send()
-                            }
-                        } else {
-                            await MainActor.run { viewModel.objectWillChange.send() }
+                        await MainActor.run {
+                            newPos.currentPrice = data.price
+                            newPos.currency = stockCurrency
+                            newPos.usdToEurRate = conversionRate
+                            viewModel.updateDividendsViewData()
+                            viewModel.objectWillChange.send()
                         }
                     }
                 }

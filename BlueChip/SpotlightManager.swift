@@ -7,7 +7,10 @@ class SpotlightManager {
     
     private let domainIdentifier = "com.bluechip.spotlight"
     
-    func indexPortfolio(positions: [Position], transactions: [Transaction], watchlistItems: [WatchlistItem], calendarEvents: [CalendarEvent]) {
+    // NOUVEAU: Ajout de 'preferredCurrency' en paramètre pour gérer le formatage dynamiquement
+    func indexPortfolio(positions: [Position], transactions: [Transaction], watchlistItems: [WatchlistItem], calendarEvents: [CalendarEvent], preferredCurrency: String) {
+        
+        let sym = AppCurrency(rawValue: preferredCurrency)?.symbol ?? "€"
         
         CSSearchableIndex.default().deleteSearchableItems(withDomainIdentifiers: [domainIdentifier]) { error in
             if let error = error {
@@ -62,7 +65,7 @@ class SpotlightManager {
                 let attributeSet = CSSearchableItemAttributeSet(contentType: .content)
                 let name = pos.companyName.isEmpty ? "Position" : pos.companyName
                 attributeSet.title = "\(pos.ticker) - \(name)"
-                attributeSet.contentDescription = "You own \(pos.quantity) shares at an average cost of \(pos.averageCost.formatted(.currency(code: pos.currency.isEmpty ? "USD" : pos.currency)))."
+                attributeSet.contentDescription = "You own \(pos.quantity) shares at an average cost of \(pos.averageCost.formatted(.currency(code: pos.currency.isEmpty ? preferredCurrency : pos.currency)))."
                 attributeSet.thumbnailData = pos.logoData
                 
                 let item = CSSearchableItem(uniqueIdentifier: "position_\(pos.id.uuidString)", domainIdentifier: self.domainIdentifier, attributeSet: attributeSet)
@@ -75,7 +78,7 @@ class SpotlightManager {
             for tx in transactions {
                 let attributeSet = CSSearchableItemAttributeSet(contentType: .content)
                 attributeSet.title = "\(tx.type.rawValue.capitalized) \(tx.ticker.isEmpty ? "Cash" : tx.ticker) - BlueChip"
-                attributeSet.contentDescription = "Date: \(dateFormatter.string(from: tx.date)) | Amount: \(tx.amountEUR.formatted(.currency(code: "EUR")))"
+                attributeSet.contentDescription = "Date: \(dateFormatter.string(from: tx.date)) | Amount: \(tx.amountEUR.formatted(.currency(code: preferredCurrency)))"
                 
                 let item = CSSearchableItem(uniqueIdentifier: "transaction_\(tx.id.uuidString)", domainIdentifier: self.domainIdentifier, attributeSet: attributeSet)
                 searchableItems.append(item)
@@ -86,8 +89,9 @@ class SpotlightManager {
                 let attributeSet = CSSearchableItemAttributeSet(contentType: .content)
                 attributeSet.title = "👀 \(watch.ticker) - Watchlist"
                 let targetText = watch.targetPrice > 0 ? watch.targetPrice.formatted() : "None"
-                attributeSet.contentDescription = "Current Price: \(watch.currentPrice.formatted(.currency(code: watch.currency.isEmpty ? "USD" : watch.currency))) | Target: \(targetText)"
+                attributeSet.contentDescription = "Current Price: \(watch.currentPrice.formatted(.currency(code: watch.currency.isEmpty ? preferredCurrency : watch.currency))) | Target: \(targetText)"
                 
+                // MODIFIÉ : On aligne l'ID Spotlight sur la logique interne de la Watchlist et du GlobalSearch
                 let item = CSSearchableItem(uniqueIdentifier: "watchlist_\(watch.id.uuidString)", domainIdentifier: self.domainIdentifier, attributeSet: attributeSet)
                 searchableItems.append(item)
             }
@@ -102,7 +106,14 @@ class SpotlightManager {
                 searchableItems.append(item)
             }
             
-            
+            // Lancement de l'indexation
+            CSSearchableIndex.default().indexSearchableItems(searchableItems) { error in
+                if let error = error {
+                    print("Erreur d'indexation Spotlight : \(error.localizedDescription)")
+                } else {
+                    print("Indexation Spotlight réussie pour \(searchableItems.count) éléments.")
+                }
+            }
         }
     }
 }

@@ -116,6 +116,8 @@ struct DashboardCard: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 6) {
             HStack {
+                // MODIFIÉ : On remplace le "(€)" écrit en dur dans le titre s'il y est, par le symbole approprié
+                // Optionnel: si tu veux nettoyer le titre, tu peux le faire ici, mais vu qu'on passe 'value' formaté, c'est bon.
                 Text(title).font(.subheadline).foregroundColor(.secondary).lineLimit(1).minimumScaleFactor(0.8)
                 if let icon = titleIcon { Image(systemName: icon).foregroundColor(.secondary).font(.caption) }
             }
@@ -133,32 +135,35 @@ struct GoalProgressBar: View {
     let targetValue: Double
     @Binding var privacyMode: Bool
     
+    // NOUVEAU: On passe la devise
+    @Binding var currency: String
+    
     var isPercentage: Bool = false
-    var isCount: Bool = false // <-- NOUVEAU : Option pour les nombres entiers (années, nombre de transactions)
+    var isCount: Bool = false
 
     var progress: Double {
         guard targetValue > 0 else { return 0 }
         return min(max(currentValue / targetValue, 0), 1)
     }
     
-    // MODIFIÉ : On gère les 3 cas (Pourcentage, Compteur, Euro)
     var currentValueString: String {
         if isPercentage { return (currentValue / 100).formatted(.percent.precision(.fractionLength(2))) }
-        if isCount { return Int(currentValue).formatted() } // Affiche simplement "3"
-        return currentValue.formatted(.currency(code: "EUR").precision(.fractionLength(2)))
+        if isCount { return Int(currentValue).formatted() }
+        // MODIFIÉ: Utilise la devise dynamique
+        return currentValue.formatted(.currency(code: currency).precision(.fractionLength(2)))
     }
     
-    // MODIFIÉ : On gère les 3 cas (Pourcentage, Compteur, Euro)
     var targetValueString: String {
         if isPercentage { return (targetValue / 100).formatted(.percent.precision(.fractionLength(2))) }
-        if isCount { return Int(targetValue).formatted() } // Affiche simplement "3"
-        return targetValue.formatted(.currency(code: "EUR").precision(.fractionLength(2)))
+        if isCount { return Int(targetValue).formatted() }
+        // MODIFIÉ: Utilise la devise dynamique
+        return targetValue.formatted(.currency(code: currency).precision(.fractionLength(2)))
     }
 
     var body: some View {
-        // ... (Le reste du `body` ne change pas du tout)
         VStack(alignment: .leading, spacing: 8) {
             HStack {
+                // Nettoyage potentiel du (xxx) dans le titre si nécessaire, mais souvent on le passe déjà nettoyé
                 Text("\(title) Goal").font(.headline)
                 Spacer()
                 Text("\(currentValueString) / \(targetValueString)")
@@ -217,6 +222,9 @@ struct SimpleNumberEditView: View {
     @Environment(\.dismiss) var dismiss
     let title: String
     @Binding var value: Double
+    // NOUVEAU: Devise pour l'affichage dans le TextField
+    let currencySymbol: String
+    
     @State private var input: Double = 0
     
     var body: some View {
@@ -234,7 +242,8 @@ struct SimpleNumberEditView: View {
                     HStack {
                         Text("Amount:")
                         Spacer()
-                        TextField("€", value: $input, format: .number)
+                        // MODIFIÉ: On utilise le symbole de la devise
+                        TextField(currencySymbol, value: $input, format: .number)
                             .textFieldStyle(.roundedBorder)
                             .frame(width: 140)
                             .multilineTextAlignment(.trailing)
@@ -263,6 +272,11 @@ struct EditGoalView: View {
     @State private var selectedGoal: GoalType
     @State private var targetInput: Double
     
+    // NOUVEAU: Symbole pour l'affichage
+    var currencySymbol: String {
+        AppCurrency(rawValue: viewModel.preferredCurrency)?.symbol ?? "€"
+    }
+    
     init(viewModel: PortfolioViewModel) {
         self.viewModel = viewModel
         _selectedGoal = State(initialValue: viewModel.currentGoalType)
@@ -286,14 +300,20 @@ struct EditGoalView: View {
                             Text("Goal Type:")
                             Spacer()
                             Picker("", selection: $selectedGoal) {
-                                ForEach(GoalType.allCases, id: \.self) { type in Text(type.rawValue).tag(type) }
+                                // Nettoyage du (€) dans les options si on veut être puriste,
+                                // ou on le laisse tel quel puisque "GoalType" a des rawValues écrites en dur (Total Value (€))
+                                // L'idéal serait de changer les rawValues mais pour ne pas casser la base de données existante on le garde tel quel
+                                ForEach(GoalType.allCases, id: \.self) { type in
+                                    Text(type.rawValue.replacingOccurrences(of: "€", with: currencySymbol)).tag(type)
+                                }
                             }.frame(width: 200)
                         }
                         
                         HStack {
                             Text("Target Amount:")
                             Spacer()
-                            TextField("€", value: $targetInput, format: .number)
+                            // MODIFIÉ
+                            TextField(currencySymbol, value: $targetInput, format: .number)
                                 .textFieldStyle(.roundedBorder)
                                 .frame(width: 140)
                                 .multilineTextAlignment(.trailing)

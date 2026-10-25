@@ -140,10 +140,12 @@ struct SimulationView: View {
     var simulationDiffs: [SimulationDiff] {
         var diffs = [SimulationDiff]()
         
+        let currency = viewModel.preferredCurrency
+        
         // 1. Log exclusif pour les ajouts/retraits manuels de cash
         if abs(manualCashOffset) > 0.01 {
             diffs.append(SimulationDiff(
-                text: manualCashOffset > 0 ? "Manual Cash added: \(manualCashOffset.formatted(.currency(code: "EUR")))" : "Manual Cash removed: \((-manualCashOffset).formatted(.currency(code: "EUR")))",
+                text: manualCashOffset > 0 ? "Manual Cash added: \(manualCashOffset.formatted(.currency(code: currency)))" : "Manual Cash removed: \((-manualCashOffset).formatted(.currency(code: currency)))",
                 type: manualCashOffset > 0 ? .add : .remove,
                 onUndo: {
                     simulatedCash -= manualCashOffset
@@ -161,7 +163,7 @@ struct SimulationView: View {
                 if abs(simPos.quantity - realPos.quantity) > 0.001 || abs(simPos.averageCost - realPos.averageCost) > 0.001 {
                     let qtyDiff = simPos.quantity - realPos.quantity
                     let impact = tradeCashImpacts[ticker] ?? 0.0
-                    let impactStr = impact != 0 ? " (\(impact > 0 ? "+" : "")\(impact.formatted(.currency(code: "EUR"))))" : ""
+                    let impactStr = impact != 0 ? " (\(impact > 0 ? "+" : "")\(impact.formatted(.currency(code: currency))))" : ""
                     
                     let text = abs(qtyDiff) > 0.001 ? (qtyDiff > 0 ? "Added \(qtyDiff.formatted()) shares of \(ticker)\(impactStr)" : "Sold \((-qtyDiff).formatted()) shares of \(ticker)\(impactStr)") : "Modified \(ticker) (Avg Cost or Sector)"
                     
@@ -176,7 +178,7 @@ struct SimulationView: View {
                 }
             } else {
                 let impact = tradeCashImpacts[ticker] ?? 0.0
-                let impactStr = impact != 0 ? " (\(impact > 0 ? "+" : "")\(impact.formatted(.currency(code: "EUR"))))" : ""
+                let impactStr = impact != 0 ? " (\(impact > 0 ? "+" : "")\(impact.formatted(.currency(code: currency))))" : ""
                 diffs.append(SimulationDiff(text: "New position added: \(simPos.quantity.formatted())x \(ticker)\(impactStr)", type: .add, onUndo: {
                     simulatedPositions.removeAll { $0.ticker == ticker }
                     simulatedCash -= impact
@@ -189,7 +191,7 @@ struct SimulationView: View {
         for (ticker, realPos) in realDict {
             if simDict[ticker] == nil {
                 let impact = tradeCashImpacts[ticker] ?? 0.0
-                let impactStr = impact != 0 ? " (\(impact > 0 ? "+" : "")\(impact.formatted(.currency(code: "EUR"))))" : ""
+                let impactStr = impact != 0 ? " (\(impact > 0 ? "+" : "")\(impact.formatted(.currency(code: currency))))" : ""
                 diffs.append(SimulationDiff(text: "Liquidated position: \(ticker)\(impactStr)", type: .remove, onUndo: {
                     // Clone ajouté au lieu de la vraie référence
                     simulatedPositions.append(clonePosition(realPos))
@@ -228,10 +230,10 @@ struct SimulationView: View {
                             HStack {
                                 Text("Current Portfolio").font(.headline).foregroundColor(.secondary)
                                 Spacer()
-                                Text(viewModel.currentTotalCapital.formatted(.currency(code: "EUR"))).font(.subheadline).foregroundColor(.primary).blur(radius: privacyMode ? 6 : 0)
+                                Text(viewModel.currentTotalCapital.formatted(.currency(code: viewModel.preferredCurrency))).font(.subheadline).foregroundColor(.primary).blur(radius: privacyMode ? 6 : 0)
                             }
-                            CurrentPortfolioTable(positions: viewModel.positions, totalCapital: viewModel.currentTotalCapital, privacyMode: $privacyMode)
-                                .frame(height: dynamicTableHeight) // Hauteur dynamique
+                            CurrentPortfolioTable(viewModel: viewModel, positions: viewModel.positions, totalCapital: viewModel.currentTotalCapital, privacyMode: $privacyMode)
+                                .frame(height: dynamicTableHeight)
                         }.frame(maxWidth: .infinity)
                         
                         Divider()
@@ -240,13 +242,24 @@ struct SimulationView: View {
                             HStack {
                                 Text("Simulated Sandbox").font(.headline).foregroundColor(.blue)
                                 Spacer()
-                                Text(simulatedTotalCapital.formatted(.currency(code: "EUR"))).font(.subheadline).foregroundColor(.blue).blur(radius: privacyMode ? 6 : 0)
+                                Text(simulatedTotalCapital.formatted(.currency(code: viewModel.preferredCurrency))).font(.subheadline).foregroundColor(.blue).blur(radius: privacyMode ? 6 : 0)
                                 
-                                Button(action: { showSimulatedCashSheet = true }) { Image(systemName: "eurosign.circle.fill").foregroundColor(.green).font(.title3) }.buttonStyle(.plain).help("Modify Simulated Cash")
+                                // MODIFIÉ : Récupération du symbole pour le bouton d'ajout de cash
+                                let sym = AppCurrency(rawValue: viewModel.preferredCurrency)?.symbol ?? "€"
+                                Button(action: { showSimulatedCashSheet = true }) {
+                                    // Utilisation d'un texte pour le bouton plutôt que eurosign s'il n'y a pas d'icône SF Symbol pour toutes les devises (yens, etc.)
+                                    // On garde l'esthétique du bouton "plus" mais avec un texte pour être 100% multidevise
+                                    ZStack {
+                                        Circle().fill(Color.green.opacity(0.2)).frame(width: 20, height: 20)
+                                        Text(sym).font(.caption).foregroundColor(.green).fontWeight(.bold)
+                                    }
+                                }.buttonStyle(.plain).help("Modify Simulated Cash")
+                                
                                 Button(action: { showAddSimulatedStock = true }) { Image(systemName: "plus.circle.fill").foregroundColor(.blue).font(.title3) }.buttonStyle(.plain).help("Add Simulated Stock")
                                 Button(action: resetSimulation) { Image(systemName: "arrow.counterclockwise.circle.fill").foregroundColor(.secondary).font(.title3) }.buttonStyle(.plain).help("Reset Sandbox")
                             }
                             SimulatedPortfolioTable(
+                                viewModel: viewModel,
                                 positions: $simulatedPositions,
                                 totalCapital: simulatedTotalCapital,
                                 privacyMode: $privacyMode,
@@ -287,8 +300,8 @@ struct SimulationView: View {
                 VStack(alignment: .leading, spacing: 12) {
                     Text("Portfolio Value & Yield Impact").font(.title2).fontWeight(.bold).foregroundColor(.secondary)
                     HStack(spacing: 24) {
-                        SimulationBarChart(data: totalValueComparisonData, title: "Total Value Comparison", zoomType: .totalValueCompare, isEuro: true, colorCurrent: .blue, colorSimulated: .purple, privacyMode: $privacyMode, expandedChart: $chartToZoom)
-                        SimulationBarChart(data: yieldComparisonData, title: "Portfolio Yield Impact", zoomType: .yieldImpact, isEuro: false, colorCurrent: .orange, colorSimulated: .green, privacyMode: $privacyMode, expandedChart: $chartToZoom)
+                        SimulationBarChart(viewModel: viewModel, data: totalValueComparisonData, title: "Total Value Comparison", zoomType: .totalValueCompare, isCurrency: true, colorCurrent: .blue, colorSimulated: .purple, privacyMode: $privacyMode, expandedChart: $chartToZoom)
+                        SimulationBarChart(viewModel: viewModel, data: yieldComparisonData, title: "Portfolio Yield Impact", zoomType: .yieldImpact, isCurrency: false, colorCurrent: .orange, colorSimulated: .green, privacyMode: $privacyMode, expandedChart: $chartToZoom)
                     }
                 }
                 
@@ -320,13 +333,13 @@ struct SimulationView: View {
             )
         }
         .sheet(isPresented: $showAddSimulatedStock) {
-            SimulatedAddEditSheet(simulatedPositions: $simulatedPositions, simulatedCash: $simulatedCash, tradeCashImpacts: $tradeCashImpacts, totalCapital: simulatedTotalCapital, itemToEdit: nil)
+            SimulatedAddEditSheet(viewModel: viewModel, simulatedPositions: $simulatedPositions, simulatedCash: $simulatedCash, tradeCashImpacts: $tradeCashImpacts, totalCapital: simulatedTotalCapital, itemToEdit: nil)
         }
         .sheet(item: $editingSimulatedPosition) { pos in
-            SimulatedAddEditSheet(simulatedPositions: $simulatedPositions, simulatedCash: $simulatedCash, tradeCashImpacts: $tradeCashImpacts, totalCapital: simulatedTotalCapital, itemToEdit: pos)
+            SimulatedAddEditSheet(viewModel: viewModel, simulatedPositions: $simulatedPositions, simulatedCash: $simulatedCash, tradeCashImpacts: $tradeCashImpacts, totalCapital: simulatedTotalCapital, itemToEdit: pos)
         }
         .sheet(isPresented: $showSimulatedCashSheet) {
-            SimulatedCashSheet(simulatedCash: $simulatedCash, manualCashOffset: $manualCashOffset)
+            SimulatedCashSheet(viewModel: viewModel, simulatedCash: $simulatedCash, manualCashOffset: $manualCashOffset)
         }
     }
     
@@ -352,10 +365,6 @@ struct SimulationView: View {
 // MARK: - DASHBOARD & DIFF SECTION
 // =========================================================================
 
-// =========================================================================
-// MARK: - DASHBOARD & DIFF SECTION
-// =========================================================================
-
 struct SimulationDashboardSection: View {
     @ObservedObject var viewModel: PortfolioViewModel
     let simulatedTotalCapital: Double
@@ -367,15 +376,14 @@ struct SimulationDashboardSection: View {
     var body: some View {
         VStack(spacing: 16) {
             HStack(spacing: 16) {
-                // Remplacement des couleurs des Cards Dashboard par .primary (noir par défaut)
-                DashboardCard(title: "Current Portfolio Value", value: viewModel.currentTotalCapital.formatted(.currency(code: "EUR")), titleIcon: nil, privacyMode: $privacyMode)
-                DashboardCard(title: "Simulated Portfolio Value", value: simulatedTotalCapital.formatted(.currency(code: "EUR")), titleIcon: nil, privacyMode: $privacyMode)
-                DashboardCard(title: "Current Cash", value: viewModel.availableCash.formatted(.currency(code: "EUR")), titleIcon: nil, privacyMode: $privacyMode)
-                DashboardCard(title: "Simulated Cash", value: simulatedCash.formatted(.currency(code: "EUR")), titleIcon: nil, privacyMode: $privacyMode)
+                DashboardCard(title: "Current Portfolio Value", value: viewModel.currentTotalCapital.formatted(.currency(code: viewModel.preferredCurrency)), titleIcon: nil, privacyMode: $privacyMode)
+                DashboardCard(title: "Simulated Portfolio Value", value: simulatedTotalCapital.formatted(.currency(code: viewModel.preferredCurrency)), titleIcon: nil, privacyMode: $privacyMode)
+                DashboardCard(title: "Current Cash", value: viewModel.availableCash.formatted(.currency(code: viewModel.preferredCurrency)), titleIcon: nil, privacyMode: $privacyMode)
+                DashboardCard(title: "Simulated Cash", value: simulatedCash.formatted(.currency(code: viewModel.preferredCurrency)), titleIcon: nil, privacyMode: $privacyMode)
             }
             HStack(spacing: 16) {
-                DashboardCard(title: "Current Annual Div.", value: viewModel.totalDividends.formatted(.currency(code: "EUR")), titleIcon: nil, privacyMode: $privacyMode)
-                DashboardCard(title: "Simulated Annual Div.", value: simulatedTotalDividends.formatted(.currency(code: "EUR")), titleIcon: nil, privacyMode: $privacyMode)
+                DashboardCard(title: "Current Annual Div.", value: viewModel.totalDividends.formatted(.currency(code: viewModel.preferredCurrency)), titleIcon: nil, privacyMode: $privacyMode)
+                DashboardCard(title: "Simulated Annual Div.", value: simulatedTotalDividends.formatted(.currency(code: viewModel.preferredCurrency)), titleIcon: nil, privacyMode: $privacyMode)
                 DashboardCard(title: "Current Total Yield", value: viewModel.portfolioYield.formatted(.percent.precision(.fractionLength(2))), titleIcon: nil, privacyMode: $privacyMode)
                 DashboardCard(title: "Simulated Total Yield", value: simulatedYield.formatted(.percent.precision(.fractionLength(2))), titleIcon: nil, privacyMode: $privacyMode)
             }
@@ -383,8 +391,6 @@ struct SimulationDashboardSection: View {
     }
 }
 
-// Pour faire les valeurs en noir, je dois redéfinir `DashboardCard` ici pour enlever les couleurs s'il y a lieu,
-// mais je présume que c'est géré globalement (sinon il faut m'envoyer DashboardCard).
 
 struct SimulationDiffSection: View {
     let diffs: [SimulationDiff]
@@ -428,6 +434,7 @@ struct SimulationDiffSection: View {
 // =========================================================================
 
 struct CurrentPortfolioTable: View {
+    @ObservedObject var viewModel: PortfolioViewModel
     let positions: [Position]
     let totalCapital: Double
     @Binding var privacyMode: Bool
@@ -446,6 +453,7 @@ struct CurrentPortfolioTable: View {
 }
 
 struct SimulatedPortfolioTable: View {
+    @ObservedObject var viewModel: PortfolioViewModel
     @Binding var positions: [Position]
     let totalCapital: Double
     @Binding var privacyMode: Bool
@@ -527,7 +535,6 @@ struct SimulationDonutChart: View {
     
     var filteredData: [ChartDataItem] { sortedData.filter { !hiddenItems.contains($0.name) } }
     
-    // NOUVEAU FIX : Utilisation exacte de la même méthode que sur la page Composition
     func color(for name: String) -> Color {
         if name == "Cash" || name == "Remaining Cash" {
             return Color(red: 0.76, green: 0.84, blue: 0.18)
@@ -572,13 +579,13 @@ struct SimulationDonutChart: View {
                             let item = findItem(for: value)
                             VStack {
                                 Text(item.name).font(.headline)
-                                Text(item.value.formatted(.currency(code: "EUR"))).font(.subheadline).foregroundColor(.secondary).blur(radius: privacyMode ? 6 : 0)
+                                let currency = viewModel?.preferredCurrency ?? "EUR"
+                                Text(item.value.formatted(.currency(code: currency))).font(.subheadline).foregroundColor(.secondary).blur(radius: privacyMode ? 6 : 0)
                             }.position(x: geometry.frame(in: .local).midX, y: geometry.frame(in: .local).midY)
                         }
                     }
                 }.animation(.easeInOut(duration: 0.2), value: selectedAngleValue)
             }
-            // NOUVEAU : Description contextuelle pour les Donuts
             HStack {
                 Text(getDescription(for: zoomType))
                     .font(.caption2).foregroundColor(.secondary)
@@ -590,7 +597,6 @@ struct SimulationDonutChart: View {
     
     func findItem(for value: Double) -> ChartDataItem { var cum = 0.0; for item in filteredData { cum += item.value; if value <= cum { return item } }; return filteredData.last! }
     
-    // Fournit une description personnalisée selon le type de graphe
     private func getDescription(for type: SimulationChartZoomType) -> String {
         switch type {
         case .currentPositions, .simulatedPositions: return "Shows the distribution of your assets by position"
@@ -604,7 +610,8 @@ struct SimulationDonutChart: View {
 
 
 struct SimulationBarChart: View {
-    let data: [ChartDataItem]; let title: String; let zoomType: SimulationChartZoomType; let isEuro: Bool
+    @ObservedObject var viewModel: PortfolioViewModel
+    let data: [ChartDataItem]; let title: String; let zoomType: SimulationChartZoomType; let isCurrency: Bool
     var colorCurrent: Color = .blue
     var colorSimulated: Color = .purple
     @Binding var privacyMode: Bool
@@ -626,7 +633,7 @@ struct SimulationBarChart: View {
                     .cornerRadius(6)
                     .annotation(position: .top) {
                         if hoveredName == item.name {
-                            Text(isEuro ? item.value.formatted(.currency(code: "EUR").precision(.fractionLength(0))) : "\(item.value.formatted(.number.precision(.fractionLength(2))))%")
+                            Text(isCurrency ? item.value.formatted(.currency(code: viewModel.preferredCurrency).precision(.fractionLength(0))) : "\(item.value.formatted(.number.precision(.fractionLength(2))))%")
                                 .font(.caption).fontWeight(.bold).foregroundColor(.secondary).blur(radius: privacyMode ? 6 : 0)
                         }
                     }
@@ -635,11 +642,10 @@ struct SimulationBarChart: View {
             .chartYAxis {
                 AxisMarks(position: .leading) { value in
                     AxisGridLine(); AxisTick()
-                    if let val = value.as(Double.self) { AxisValueLabel(isEuro ? val.formatted(.currency(code: "EUR").notation(.compactName)) : "\(val.formatted(.number.precision(.fractionLength(0))))%") }
+                    if let val = value.as(Double.self) { AxisValueLabel(isCurrency ? val.formatted(.currency(code: viewModel.preferredCurrency).notation(.compactName)) : "\(val.formatted(.number.precision(.fractionLength(0))))%") }
                 }
             }
             Spacer()
-            // NOUVEAU : Description contextuelle pour les Bar Charts
             HStack {
                 Text(zoomType == .totalValueCompare ? "Compares total portfolio valuation" : "Compares the overall dividend yield")
                     .font(.caption2).foregroundColor(.secondary)
@@ -684,8 +690,8 @@ struct SimulationFullScreenChartView: View {
             case .currentSectors: SimulationDonutChart(data: currentSecData, title: titleForZoom, zoomType: zoomType, palette: sectorColors, privacyMode: $privacyMode, isExpanded: true, expandedChart: .constant(nil), viewModel: viewModel)
             case .simulatedSectors: SimulationDonutChart(data: simSecData, title: titleForZoom, zoomType: zoomType, palette: sectorColors, privacyMode: $privacyMode, isExpanded: true, expandedChart: .constant(nil), viewModel: viewModel)
             case .cashAllocation: SimulationDonutChart(data: cashAllocData, title: titleForZoom, zoomType: zoomType, palette: marketCapColors, privacyMode: $privacyMode, isExpanded: true, expandedChart: .constant(nil), viewModel: viewModel)
-            case .totalValueCompare: SimulationBarChart(data: totalValData, title: titleForZoom, zoomType: zoomType, isEuro: true, colorCurrent: .blue, colorSimulated: .purple, privacyMode: $privacyMode, isExpanded: true, expandedChart: .constant(nil))
-            case .yieldImpact: SimulationBarChart(data: yieldData, title: titleForZoom, zoomType: zoomType, isEuro: false, colorCurrent: .orange, colorSimulated: .green, privacyMode: $privacyMode, isExpanded: true, expandedChart: .constant(nil))
+            case .totalValueCompare: SimulationBarChart(viewModel: viewModel, data: totalValData, title: titleForZoom, zoomType: zoomType, isCurrency: true, colorCurrent: .blue, colorSimulated: .purple, privacyMode: $privacyMode, isExpanded: true, expandedChart: .constant(nil))
+            case .yieldImpact: SimulationBarChart(viewModel: viewModel, data: yieldData, title: titleForZoom, zoomType: zoomType, isCurrency: false, colorCurrent: .orange, colorSimulated: .green, privacyMode: $privacyMode, isExpanded: true, expandedChart: .constant(nil))
             case .simulatedDividends: SimulationDonutChart(data: simDivData, title: titleForZoom, zoomType: zoomType, palette: positionColors, privacyMode: $privacyMode, isExpanded: true, expandedChart: .constant(nil), viewModel: viewModel)
             }
         }.padding(30).frame(minWidth: 900, minHeight: 700)
@@ -716,6 +722,7 @@ enum CashAction: String, CaseIterable {
 
 struct SimulatedCashSheet: View {
     @Environment(\.dismiss) var dismiss
+    @ObservedObject var viewModel: PortfolioViewModel
     @Binding var simulatedCash: Double
     @Binding var manualCashOffset: Double // Mémorise la transaction pour l'historique
     @State private var cashInput: Double? = nil
@@ -743,8 +750,9 @@ struct SimulatedCashSheet: View {
                 }
                 .pickerStyle(.segmented)
                 
+                let sym = AppCurrency(rawValue: viewModel.preferredCurrency)?.symbol ?? "€"
                 VStack(alignment: .leading, spacing: 8) {
-                    Text("Amount (€)").font(.headline).foregroundColor(.secondary)
+                    Text("Amount (\(sym))").font(.headline).foregroundColor(.secondary)
                     TextField("0.00", value: $cashInput, format: .number)
                         .textFieldStyle(.roundedBorder)
                         .font(.title3)
@@ -754,13 +762,13 @@ struct SimulatedCashSheet: View {
                     HStack {
                         Text("Current Cash:").foregroundColor(.secondary)
                         Spacer()
-                        Text(simulatedCash.formatted(.currency(code: "EUR"))).foregroundColor(.secondary)
+                        Text(simulatedCash.formatted(.currency(code: viewModel.preferredCurrency))).foregroundColor(.secondary)
                     }
                     Divider()
                     HStack {
                         Text("New Balance:").fontWeight(.semibold)
                         Spacer()
-                        Text(newBalance.formatted(.currency(code: "EUR")))
+                        Text(newBalance.formatted(.currency(code: viewModel.preferredCurrency)))
                             .fontWeight(.bold)
                             .foregroundColor(action == .add ? .green : .orange)
                     }
@@ -796,6 +804,7 @@ enum TradeAction: String, CaseIterable {
 
 struct SimulatedAddEditSheet: View {
     @Environment(\.dismiss) var dismiss
+    @ObservedObject var viewModel: PortfolioViewModel
     @Binding var simulatedPositions: [Position]
     @Binding var simulatedCash: Double
     @Binding var tradeCashImpacts: [String: Double] // Mémorise l'impact financier du trade
@@ -918,23 +927,26 @@ struct SimulatedAddEditSheet: View {
                         HStack(spacing: 16) {
                             VStack(alignment: .leading, spacing: 4) {
                                 Text("Broker Tax").font(.caption).foregroundColor(.secondary)
-                                HStack { TextField("Broker Tax", value: $brokerTax, format: .number).textFieldStyle(.roundedBorder); Picker("", selection: $brokerTaxIsPercent) { Text("€").tag(false); Text("%").tag(true) }.frame(width: 60) }
+                                let sym = AppCurrency(rawValue: viewModel.preferredCurrency)?.symbol ?? "€"
+                                HStack { TextField("Broker Tax", value: $brokerTax, format: .number).textFieldStyle(.roundedBorder); Picker("", selection: $brokerTaxIsPercent) { Text(sym).tag(false); Text("%").tag(true) }.frame(width: 60) }
                             }
                             VStack(alignment: .leading, spacing: 4) {
                                 Text("Country Tax").font(.caption).foregroundColor(.secondary)
-                                HStack { TextField("Country Tax", value: $countryTax, format: .number).textFieldStyle(.roundedBorder); Picker("", selection: $countryTaxIsPercent) { Text("€").tag(false); Text("%").tag(true) }.frame(width: 60) }
+                                let sym = AppCurrency(rawValue: viewModel.preferredCurrency)?.symbol ?? "€"
+                                HStack { TextField("Country Tax", value: $countryTax, format: .number).textFieldStyle(.roundedBorder); Picker("", selection: $countryTaxIsPercent) { Text(sym).tag(false); Text("%").tag(true) }.frame(width: 60) }
                             }
                         }
                     }
                     
-                    GroupBox("Transaction Impact (in EUR)") {
+                    let sym = AppCurrency(rawValue: viewModel.preferredCurrency)?.symbol ?? "€"
+                    GroupBox("Transaction Impact (in \(viewModel.preferredCurrency))") {
                         VStack(alignment: .leading, spacing: 6) {
-                            HStack { Text("Base Trade Value:"); Spacer(); Text(baseValueEUR.formatted(.currency(code: "EUR"))) }
-                            HStack { Text("Total Taxes:"); Spacer(); Text((calcBrokerTaxEUR + calcCountryTaxEUR).formatted(.currency(code: "EUR"))).foregroundColor(.red) }
+                            HStack { Text("Base Trade Value:"); Spacer(); Text(baseValueEUR.formatted(.currency(code: viewModel.preferredCurrency))) }
+                            HStack { Text("Total Taxes:"); Spacer(); Text((calcBrokerTaxEUR + calcCountryTaxEUR).formatted(.currency(code: viewModel.preferredCurrency))).foregroundColor(.red) }
                             Divider()
-                            HStack { Text("Net Cash Impact:"); Spacer(); Text(cashImpactEUR.formatted(.currency(code: "EUR").sign(strategy: .always()))).fontWeight(.bold).foregroundColor(cashImpactEUR >= 0 ? .green : .red) }
+                            HStack { Text("Net Cash Impact:"); Spacer(); Text(cashImpactEUR.formatted(.currency(code: viewModel.preferredCurrency).sign(strategy: .always()))).fontWeight(.bold).foregroundColor(cashImpactEUR >= 0 ? .green : .red) }
                             
-                            Text("Remaining Cash will be: \((simulatedCash + cashImpactEUR).formatted(.currency(code: "EUR")))")
+                            Text("Remaining Cash will be: \((simulatedCash + cashImpactEUR).formatted(.currency(code: viewModel.preferredCurrency)))")
                                 .font(.caption).foregroundColor(.secondary)
                                 .padding(.top, 8)
                             
@@ -970,9 +982,26 @@ struct SimulatedAddEditSheet: View {
         isFetching = true
         Task {
             let service = YahooFinanceService()
-            let rate = await service.fetchUSDEURRate()
+            
+            // MODIFIÉ : On récupère le vrai taux de conversion (devise locale -> devise préférée)
+            let targetCurrency = await MainActor.run { viewModel.preferredCurrency }
+            
             if let data = await service.fetchStockData(for: ticker) {
-                await MainActor.run { currentPrice = data.price; currency = data.currency; usdToEurRate = rate; isFetching = false }
+                let stockCurrency = data.currency
+                var conversionRate = 1.0
+                
+                if stockCurrency != targetCurrency {
+                    conversionRate = await service.fetchExchangeRate(from: stockCurrency, to: targetCurrency)
+                }
+                
+                let finalRate = conversionRate
+                
+                await MainActor.run {
+                    currentPrice = data.price
+                    currency = data.currency
+                    usdToEurRate = finalRate
+                    isFetching = false
+                }
             } else { await MainActor.run { isFetching = false } }
         }
     }

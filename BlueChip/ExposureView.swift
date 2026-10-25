@@ -385,7 +385,7 @@ struct ExposureView: View {
                     Text("Portfolio Visual Exposure").font(.title2).fontWeight(.bold).foregroundColor(.secondary)
                     HStack(alignment: .top, spacing: 24) {
                         let totalPortfolioValue = viewModel.totalValue
-                        ExposureDonutChart(data: donutData, totalValue: totalPortfolioValue, privacyMode: $privacyMode, expandedChart: $chartToZoom)
+                        ExposureDonutChart(viewModel: viewModel, data: donutData, totalValue: totalPortfolioValue, privacyMode: $privacyMode, expandedChart: $chartToZoom)
                         ExposureStackedBarChart(data: stackedBarData, allRegions: allRegions, privacyMode: $privacyMode, expandedChart: $chartToZoom)
                     }
                 }
@@ -408,6 +408,7 @@ struct ExposureView: View {
             let totalPortfolioValue = viewModel.totalValue
             ExposureFullScreenChartView(
                 zoomType: type,
+                viewModel: viewModel,
                 donutData: donutData,
                 stackedBarData: stackedBarData,
                 allRegions: allRegions,
@@ -432,6 +433,7 @@ struct ExposureView: View {
 // =========================================================================
 
 struct ExposureDonutChart: View {
+    @ObservedObject var viewModel: PortfolioViewModel
     let data: [ChartDataItem]
     let totalValue: Double
     @Binding var privacyMode: Bool
@@ -891,6 +893,8 @@ struct ExposureFullScreenChartView: View {
     @Environment(\.dismiss) var dismiss
     let zoomType: ExposureChartZoomType
     
+    @ObservedObject var viewModel: PortfolioViewModel
+    
     let donutData: [ChartDataItem]
     let stackedBarData: [StackedBarItem]
     let allRegions: [String]
@@ -914,7 +918,7 @@ struct ExposureFullScreenChartView: View {
             
             switch zoomType {
             case .donutExposure:
-                ExposureDonutChart(data: donutData, totalValue: totalValue, privacyMode: $privacyMode, isExpanded: true, expandedChart: .constant(nil))
+                ExposureDonutChart(viewModel: viewModel, data: donutData, totalValue: totalValue, privacyMode: $privacyMode, isExpanded: true, expandedChart: .constant(nil))
             case .stackedBarExposure:
                 ExposureStackedBarChart(data: stackedBarData, allRegions: allRegions, privacyMode: $privacyMode, isExpanded: true, expandedChart: .constant(nil))
             case .geographicTreemap:
