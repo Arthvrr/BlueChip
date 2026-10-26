@@ -20,7 +20,9 @@ struct BlueChipApp: App {
             FundamentalCriterion.self,
             WealthAsset.self,
             WealthLiability.self,
-            WatchlistItem.self
+            WatchlistItem.self,
+            InvestmentJournal.self,
+            JournalEntry.self
         ])
         let modelConfiguration = ModelConfiguration(schema: schema, isStoredInMemoryOnly: false)
 

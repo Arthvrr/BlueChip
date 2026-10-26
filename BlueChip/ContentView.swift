@@ -184,6 +184,7 @@ struct ContentView: View {
                 case .fundamentals: FundamentalsView(viewModel: viewModel, privacyMode: $privacyMode)
                 case .wealth: WealthView(viewModel: viewModel, privacyMode: $privacyMode)
                 case .valuation: ValuationView(viewModel: viewModel, privacyMode: $privacyMode)
+                case .thesis: ThesisView(viewModel: viewModel, privacyMode: $privacyMode)
                 
                 default:
                     VStack(spacing: 20) {

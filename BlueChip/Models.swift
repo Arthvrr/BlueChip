@@ -1,6 +1,6 @@
 import Foundation
 import SwiftUI
-import SwiftData // <-- NOUVEAU : Importation du framework d'Apple
+import SwiftData
 
 // MARK: - COLOR PALETTES GLOBALES
 let positionColors: [Color] = [.blue, .green, .orange, .purple, .red, .teal, .yellow, .pink, .indigo, .mint, .cyan, .brown]
@@ -464,4 +464,117 @@ struct LegacyWatchlistItem: Codable {
     var currency: String
     var note: String
     var fundamentalValues: [String: Double]?
+}
+
+
+enum EventSentiment: String, Codable, CaseIterable {
+    case none = "Neutral"
+    case strongBull = "Strong Bullish"
+    case mildBull = "Mild Bullish"
+    case mildBear = "Mild Bearish"
+    case strongBear = "Strong Bearish"
+    
+    var color: Color {
+        switch self {
+        case .none: return .gray
+        case .strongBull: return .green
+        case .mildBull: return .mint
+        case .mildBear: return .orange
+        case .strongBear: return .red
+        }
+    }
+}
+
+enum ThesisStatus: String, Codable, CaseIterable {
+    case none = "Unrated"
+    case strong = "Strong Conviction"
+    case intact = "Intact"
+    case underReview = "Under Review"
+    case broken = "Broken"
+    
+    var color: Color {
+        switch self {
+        case .none: return .clear
+        case .strong: return .green
+        case .intact: return .mint
+        case .underReview: return .orange
+        case .broken: return .red
+        }
+    }
+}
+
+@Model
+class InvestmentJournal {
+    @Attribute(.unique) var ticker: String
+    
+    // 1. Business Anatomy
+    var valueProposition: String = ""
+    var targetMarket: String = ""
+    var customers: String = ""
+    var customerConcentration: String = ""
+    var leadership: String = ""
+    var ownership: String = ""
+    var revenueSegmentation: String = ""
+    var competitors: String = ""
+    var competitivePosition: String = ""
+    var sectorDynamics: String = ""
+    
+    var postMortem: String = ""
+    var thesisStatusRaw: String = ThesisStatus.none.rawValue
+    
+    var thesisStatus: ThesisStatus {
+        get { ThesisStatus(rawValue: thesisStatusRaw) ?? .none }
+        set { thesisStatusRaw = newValue.rawValue }
+    }
+    
+    // 2. The Moat (Booléens pour les Checkboxes)
+    var hasNetworkEffect: Bool = false
+    var hasSwitchingCosts: Bool = false
+    var hasIntangibles: Bool = false
+    var hasCostAdvantage: Bool = false
+    var hasEfficientScale: Bool = false
+    
+    // Explications détaillées pour chaque Moat
+    var networkEffectNotes: String = ""
+    var switchingCostsNotes: String = ""
+    var intangiblesNotes: String = ""
+    var costAdvantageNotes: String = ""
+    var efficientScaleNotes: String = ""
+    
+    // 3 & 4. Tableaux de chaînes pour les listes dynamiques (Threats & Exit Rules)
+    var bearCaseThreats: [String] = []
+    var exitStrategyRules: [String] = []
+    
+    // Explications détaillées pour chaque point des Threats et Exit Rules
+    var bearCaseNotes: [String: String] = [:]
+    var exitStrategyNotes: [String: String] = [:]
+    
+    // 5. One-to-Many relation : Le fil d'actualité chronologique
+    @Relationship(deleteRule: .cascade)
+    var logEntries: [JournalEntry] = []
+    
+    init(ticker: String) {
+        self.ticker = ticker
+    }
+}
+
+@Model
+class JournalEntry {
+    var id: UUID
+    var date: Date
+    var tag: String
+    var content: String
+    
+    var sentimentRaw: String = EventSentiment.none.rawValue
+    var sentiment: EventSentiment {
+        get { EventSentiment(rawValue: sentimentRaw) ?? .none }
+        set { sentimentRaw = newValue.rawValue }
+    }
+    
+    init(date: Date = Date(), tag: String, content: String) {
+        self.id = UUID()
+        self.date = date
+        self.tag = tag
+        self.content = content
+    }
 }

@@ -9,7 +9,7 @@ enum AppTab: String, CaseIterable {
     case composition = "Composition", fundamentals = "Fundamentals", growth = "Growth", dividends = "Dividends"
     case valuation = "Valuation", projection = "Projection", simulation = "Simulation", watchlist = "Watchlist"
     case exposure = "Exposure", transactions = "Transactions", benchmark = "Benchmark", calendar = "Calendar"
-    case wealth = "Wealth"
+    case wealth = "Wealth", thesis = "Thesis"
 }
 
 struct CustomTabBar: View {
