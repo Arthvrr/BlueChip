@@ -480,6 +480,32 @@ struct TutorialView: View {
                 *Pro-tip: Click the magnifying glass icon on any chart to open a detailed full-screen view!*
                 """
             )
+                
+        case .thesis:
+            return (
+                "Investment Thesis",
+                "text.book.closed",
+                """
+                **The Institutional Analyst Desk**
+                The Thesis page transforms BlueChip from a mere tracking tool into a professional research environment. This is where qualitative analysis meets conviction. It is designed to force rigorous thinking, document your strategic reasoning, and protect you from emotional decision-making during market volatility.
+                
+                **Global Event Stream**
+                At the top of the page, the *Global Event Stream* acts as your personal news feed. It aggregates all the chronological notes and catalyst events you have logged across every company in your portfolio. You can filter this stream by Ticker, Event Tag (e.g., *Quarterly Earnings*, *Dividend Raise*), or Sentiment to quickly review your recent macro and micro analysis.
+                
+                **Core Convictions & Deep Dives**
+                Below the stream, your entire portfolio is broken down into structured *Company Deep Dives*. Every company features a comprehensive analysis framework divided into 5 critical sections:
+                - **Business Anatomy:** Details exactly how the company makes money, its target market, customer concentration, and leadership quality.
+                - **Competitive Advantage:** Identifies the structural "Moats" protecting the business (e.g., Network Effects, Switching Costs, Intangibles).
+                - **Bear Case Threats:** Documents the fundamental risks that could permanently impair the company's earning power.
+                - **Exit Strategy:** Pre-defined, rational rules dictating exactly when you should sell the stock, protecting you from panic selling.
+                - **Post-Mortem:** If you sell a stock, this section allows you to write a summary of the lessons learned to improve your future capital allocation.
+                
+                **Thesis Status & Sentiments**
+                Every thesis allows you to set a *Conviction Status* (e.g., Strong Conviction, Under Review, Broken) represented by a color-coded dot next to the ticker. Additionally, when you add a new note to the Event Stream, you can attach an *Event Sentiment* (e.g., Mild Bearish, Strong Bullish) to track how your psychology evolves alongside the stock's price over time.
+                
+                *To edit a company's thesis, simply **double-click** its card. To add a quick note, click the **Add Thesis Log** button at the top right of the page.*
+                """
+            )
 
         default:
             return (

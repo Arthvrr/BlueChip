@@ -27,11 +27,12 @@ struct ThesisView: View {
     
     @Environment(\.modelContext) private var modelContext
     @Query(sort: \Position.ticker) private var positions: [Position]
+    @Query(sort: \WatchlistItem.ticker) private var watchlistItems: [WatchlistItem]
     @Query private var thesisList: [InvestmentJournal]
     
-    @State private var readingTicker: String? = nil
     @State private var editingTicker: String? = nil
     @State private var readingLogEntry: GlobalJournalEntry? = nil
+    @State private var showAddLogSheet: Bool = false
     
     // Filtres
     @State private var searchText = ""
@@ -43,6 +44,13 @@ struct ThesisView: View {
         GridItem(.flexible(), spacing: 20),
         GridItem(.flexible(), spacing: 20)
     ]
+    
+    // Toutes les entités combinées pour le Picker du Add Log
+    var allTrackedTickers: [String] {
+        let posTickers = positions.map { $0.ticker }
+        let watchTickers = watchlistItems.map { $0.ticker }
+        return Array(Set(posTickers + watchTickers)).sorted()
+    }
     
     // 1. Filtrage des Logs
     var filteredLogs: [GlobalJournalEntry] {
@@ -119,7 +127,7 @@ struct ThesisView: View {
         ScrollView {
             VStack(alignment: .leading, spacing: 30) {
                 
-                // BARRE DE RECHERCHE ET FILTRES
+                // BARRE DE RECHERCHE, FILTRES ET BOUTON ADD LOG
                 HStack(spacing: 16) {
                     HStack {
                         Image(systemName: "magnifyingglass").foregroundColor(.secondary)
@@ -162,15 +170,23 @@ struct ThesisView: View {
                     .background(Color(NSColor.controlBackgroundColor))
                     .cornerRadius(10)
                     .shadow(color: .black.opacity(0.05), radius: 2)
+                    
+                    Spacer()
+                    
+                    // NOUVEAU BOUTON ADD LOG
+                    Button(action: { showAddLogSheet = true }) {
+                        Label("Add Thesis Note", systemImage: "plus")
+                    }
+                    .buttonStyle(.borderedProminent)
                 }
                 .padding(.horizontal, 20)
-                .padding(.top, 10)
+                .padding(.top, 20)
                 
                 // 1. LE FIL D'ACTUALITÉ GLOBAL
                 if !filteredLogs.isEmpty {
                     VStack(alignment: .leading, spacing: 14) {
                         HStack {
-                            Text("Catalyst Stream").font(.title2).fontWeight(.bold).foregroundColor(.secondary)
+                            Text("Thesis Notes Tracker").font(.title2).fontWeight(.bold).foregroundColor(.secondary)
                             Spacer()
                         }.padding(.bottom, 4)
                         
@@ -213,9 +229,6 @@ struct ThesisView: View {
                                 .onTapGesture(count: 2) {
                                     editingTicker = position.ticker
                                 }
-                                .onTapGesture(count: 1) {
-                                    readingTicker = position.ticker
-                                }
                         }
                     }
                 }
@@ -230,12 +243,137 @@ struct ThesisView: View {
         .sheet(item: $readingLogEntry) { entry in
             LogEntryReaderSheet(globalEntry: entry, editingTicker: $editingTicker, readingLogEntry: $readingLogEntry)
         }
-        .sheet(item: $readingTicker) { ticker in
-            ThesisReaderSheet(ticker: ticker, editingTicker: $editingTicker, readingTicker: $readingTicker)
-        }
         .sheet(item: $editingTicker) { ticker in
             EditThesisSheet(ticker: ticker)
         }
+        .sheet(isPresented: $showAddLogSheet) {
+            AddLogEntrySheet(availableTickers: allTrackedTickers, isPresented: $showAddLogSheet)
+        }
+    }
+}
+
+// =========================================================================
+// SHEET D'AJOUT RAPIDE DE LOG
+// =========================================================================
+struct AddLogEntrySheet: View {
+    let availableTickers: [String]
+    @Binding var isPresented: Bool
+    
+    @Environment(\.modelContext) private var modelContext
+    @Query private var thesisList: [InvestmentJournal]
+    
+    @State private var selectedTicker: String
+    @State private var date: Date = Date()
+    @State private var tag: String = "Quarterly Earnings"
+    @State private var sentiment: EventSentiment = .none
+    @State private var content: String = ""
+    
+    init(availableTickers: [String], isPresented: Binding<Bool>) {
+        self.availableTickers = availableTickers
+        self._isPresented = isPresented
+        _selectedTicker = State(initialValue: availableTickers.first ?? "")
+    }
+    
+    var body: some View {
+        VStack(spacing: 0) {
+            HStack {
+                Text("Add Thesis Log").font(.title2).fontWeight(.bold)
+                Spacer()
+                Button(action: { isPresented = false }) { Image(systemName: "xmark.circle.fill").font(.title2).foregroundColor(.secondary) }.buttonStyle(.plain)
+            }.padding()
+            
+            Divider()
+            
+            VStack(alignment: .leading, spacing: 16) {
+                if availableTickers.isEmpty {
+                    Text("No positions or watchlist items found. Add a stock first.")
+                        .foregroundColor(.secondary)
+                        .frame(maxWidth: .infinity, alignment: .center)
+                        .padding()
+                } else {
+                    GroupBox {
+                        VStack(spacing: 12) {
+                            HStack {
+                                Text("Company:")
+                                Spacer()
+                                Picker("", selection: $selectedTicker) {
+                                    ForEach(availableTickers, id: \.self) { t in Text(t).tag(t) }
+                                }
+                                // Suppression du .frame(width: 200)
+                            }
+                            
+                            HStack {
+                                Text("Date:")
+                                Spacer()
+                                DatePicker("", selection: $date, displayedComponents: .date)
+                                    .labelsHidden()
+                            }
+                            
+                            HStack {
+                                Text("Event Tag:")
+                                Spacer()
+                                Picker("", selection: $tag) {
+                                    ForEach(thesisTags, id: \.self) { t in Text(t).tag(t) }
+                                }
+                                // Suppression du .frame(width: 200)
+                            }
+                            
+                            HStack {
+                                Text("Sentiment:")
+                                Spacer()
+                                Picker("", selection: $sentiment) {
+                                    ForEach(EventSentiment.allCases, id: \.self) { s in Text(s.rawValue).tag(s) }
+                                }
+                                // Suppression du .frame(width: 200)
+                            }
+                        }
+                    }
+                    
+                    GroupBox {
+                        VStack(alignment: .leading, spacing: 8) {
+                            Text("Content").fontWeight(.semibold)
+                            // Agrandissement significatif de la zone de texte
+                            TextEditor(text: $content)
+                                .font(.body) // Assure une police lisible
+                                .frame(maxHeight: .infinity) // Prend tout l'espace restant
+                                .overlay(RoundedRectangle(cornerRadius: 8).stroke(Color.secondary.opacity(0.2)))
+                        }
+                    }
+                }
+            }
+            .padding()
+            
+            Spacer()
+            Divider()
+            
+            HStack {
+                Button("Cancel") { isPresented = false }.keyboardShortcut(.cancelAction)
+                Spacer()
+                Button("Save Log") {
+                    saveLog()
+                }
+                .keyboardShortcut(.defaultAction)
+                .buttonStyle(.borderedProminent)
+                .disabled(selectedTicker.isEmpty || content.trimmingCharacters(in: .whitespaces).isEmpty)
+            }.padding()
+        }
+        // Agrandissement de la modale en largeur et en hauteur
+        .frame(width: 600, height: 700)
+    }
+    
+    private func saveLog() {
+        let thesis = thesisList.first(where: { $0.ticker == selectedTicker }) ?? {
+            let newThesis = InvestmentJournal(ticker: selectedTicker)
+            modelContext.insert(newThesis)
+            return newThesis
+        }()
+        
+        let newEntry = JournalEntry(date: date, tag: tag, content: content)
+        newEntry.sentiment = sentiment
+        thesis.logEntries.append(newEntry)
+        
+        try? modelContext.save()
+        isPresented = false
     }
 }
 
@@ -275,18 +413,23 @@ struct CompanyThesisCard: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 20) {
-            // HEADER
-            HStack {
-                Text(thesis.ticker).font(.title).fontWeight(.black)
-                Text(companyName).font(.title3).foregroundColor(.secondary)
+            // HEADER STYLE SOBRE
+            HStack(spacing: 12) {
+                VStack(alignment: .leading, spacing: 2) {
+                    Text(thesis.ticker).font(.headline).fontWeight(.bold)
+                    if !companyName.isEmpty {
+                        Text(companyName).font(.caption).foregroundColor(.secondary)
+                    }
+                }
                 
                 // Pastille Status
                 if thesis.thesisStatus != .none {
                     Circle()
                         .fill(thesis.thesisStatus.color)
-                        .frame(width: 12, height: 12)
+                        .frame(width: 8, height: 8)
                         .padding(.leading, 8)
                 }
+                
                 Spacer()
             }
             
@@ -376,7 +519,7 @@ struct CompanyThesisCard: View {
                     .frame(maxWidth: .infinity, alignment: .center)
                     .padding(.vertical, 20)
             } else {
-                Text("Click to read full screen • Double-click to edit")
+                Text("Double-click to edit")
                     .font(.caption).foregroundColor(.secondary.opacity(0.6))
                     .frame(maxWidth: .infinity, alignment: .center)
                     .padding(.top, 10)
@@ -391,7 +534,7 @@ struct CompanyThesisCard: View {
 }
 
 // =========================================================================
-// MODALE ZOOM POUR LE LOG (ÉNORME)
+// MODALE ZOOM POUR LE LOG
 // =========================================================================
 struct LogEntryReaderSheet: View {
     let globalEntry: GlobalJournalEntry
@@ -402,9 +545,9 @@ struct LogEntryReaderSheet: View {
     @Binding var readingLogEntry: GlobalJournalEntry?
     
     var body: some View {
-        VStack(alignment: .leading, spacing: 24) {
+        VStack(alignment: .leading, spacing: 20) {
             HStack {
-                Text("\(globalEntry.ticker) - Catalyst Detail").font(.largeTitle).fontWeight(.heavy)
+                Text("\(globalEntry.ticker) - Log Event Detail").font(.title2).fontWeight(.bold)
                 Spacer()
                 Button(action: {
                     readingLogEntry = nil
@@ -414,110 +557,51 @@ struct LogEntryReaderSheet: View {
                         Image(systemName: "pencil")
                         Text("Edit")
                     }
-                    .padding(.horizontal, 12).padding(.vertical, 6)
+                    .padding(.horizontal, 10).padding(.vertical, 4)
                     .background(Color(NSColor.controlBackgroundColor))
-                    .cornerRadius(8)
+                    .cornerRadius(6)
                     .shadow(radius: 1)
+                    .font(.subheadline)
                 }
                 .buttonStyle(.plain)
                 .padding(.trailing, 10)
                 
-                Button(action: { dismiss() }) { Image(systemName: "xmark.circle.fill").font(.title).foregroundColor(.secondary) }.buttonStyle(.plain)
+                Button(action: { dismiss() }) { Image(systemName: "xmark.circle.fill").font(.title2).foregroundColor(.secondary) }.buttonStyle(.plain)
             }
             
             Divider()
             
             HStack {
                 Text(globalEntry.entry.tag)
-                    .font(.title3).fontWeight(.bold)
-                    .padding(.horizontal, 16).padding(.vertical, 10)
-                    .background(Color.blue.opacity(0.1)).foregroundColor(.blue).cornerRadius(10)
+                    .font(.headline).fontWeight(.bold)
+                    .padding(.horizontal, 12).padding(.vertical, 6)
+                    .background(Color.blue.opacity(0.1)).foregroundColor(.blue).cornerRadius(8)
                 
                 if globalEntry.entry.sentiment != .none {
                     HStack {
-                        Circle().fill(globalEntry.entry.sentiment.color).frame(width: 14, height: 14)
-                        Text(globalEntry.entry.sentiment.rawValue).font(.headline).foregroundColor(globalEntry.entry.sentiment.color)
+                        Circle().fill(globalEntry.entry.sentiment.color).frame(width: 10, height: 10)
+                        Text(globalEntry.entry.sentiment.rawValue).font(.subheadline).foregroundColor(globalEntry.entry.sentiment.color)
                     }
-                    .padding(.horizontal, 16).padding(.vertical, 10)
-                    .background(globalEntry.entry.sentiment.color.opacity(0.1)).cornerRadius(10)
-                    .padding(.leading, 10)
+                    .padding(.horizontal, 12).padding(.vertical, 6)
+                    .background(globalEntry.entry.sentiment.color.opacity(0.1)).cornerRadius(8)
+                    .padding(.leading, 8)
                 }
                 
                 Spacer()
                 Text(globalEntry.entry.date, style: .date)
-                    .font(.title2).foregroundColor(.secondary)
+                    .font(.subheadline).foregroundColor(.secondary)
             }
-            .padding(.vertical, 14)
+            .padding(.vertical, 10)
             
             ScrollView {
                 Text(globalEntry.entry.content)
-                    .font(.title3)
-                    .lineSpacing(8)
+                    .font(.body)
+                    .lineSpacing(6)
                     .frame(maxWidth: .infinity, alignment: .leading)
             }
         }
-        .padding(50)
-        .frame(width: 900, height: 750)
-    }
-}
-
-// =========================================================================
-// MODALE ZOOM POUR LA THÈSE (ÉNORME)
-// =========================================================================
-struct ThesisReaderSheet: View {
-    let ticker: String
-    @Environment(\.dismiss) var dismiss
-    @Query private var thesisList: [InvestmentJournal]
-    
-    // Bindings pour transition vers édition
-    @Binding var editingTicker: String?
-    @Binding var readingTicker: String?
-    
-    init(ticker: String, editingTicker: Binding<String?>, readingTicker: Binding<String?>) {
-        self.ticker = ticker
-        self._editingTicker = editingTicker
-        self._readingTicker = readingTicker
-        
-        let predicate = #Predicate<InvestmentJournal> { $0.ticker == ticker }
-        _thesisList = Query(filter: predicate)
-    }
-    
-    var body: some View {
-        VStack(spacing: 0) {
-            HStack {
-                Text("\(ticker) Analysis Report").font(.largeTitle).fontWeight(.heavy)
-                Spacer()
-                Button(action: {
-                    readingTicker = nil
-                    editingTicker = ticker
-                }) {
-                    HStack {
-                        Image(systemName: "pencil")
-                        Text("Edit Thesis")
-                    }
-                    .padding(.horizontal, 16).padding(.vertical, 8)
-                    .background(Color.blue)
-                    .foregroundColor(.white)
-                    .fontWeight(.bold)
-                    .cornerRadius(8)
-                }
-                .buttonStyle(.plain)
-                .padding(.trailing, 20)
-                
-                Button(action: { dismiss() }) { Image(systemName: "xmark.circle.fill").font(.title).foregroundColor(.secondary) }.buttonStyle(.plain)
-            }
-            .padding(30)
-            
-            Divider()
-            
-            if let thesis = thesisList.first {
-                ScrollView {
-                    CompanyThesisCard(thesis: thesis, companyName: "", privacyMode: false)
-                        .padding(30)
-                }
-            }
-        }
-        .frame(width: 1000, height: 850)
+        .padding(30)
+        .frame(width: 600, height: 500)
     }
 }
 
@@ -572,6 +656,15 @@ struct EditThesisSheet: View {
 // =========================================================================
 // SOUS-COMPOSANTS UTILITAIRES
 // =========================================================================
+extension String: Identifiable {
+    public var id: String { self }
+}
+
+struct GlobalJournalEntry: Identifiable {
+    var id: UUID { entry.id }
+    let ticker: String
+    let entry: JournalEntry
+}
 
 struct GlobalLogCard: View {
     let globalEntry: GlobalJournalEntry
@@ -707,10 +800,8 @@ struct ThesisEditorForm: View {
                     }
                 }
                 
-                GroupBox(label: Label("Catalyst Stream", systemImage: "list.bullet.rectangle.portrait").font(.title2)) {
+                GroupBox(label: Label("Thesis History Logs", systemImage: "list.bullet.rectangle.portrait").font(.title2)) {
                     VStack(alignment: .leading, spacing: 16) {
-                        LogEntryCreator(thesis: thesis)
-                        Divider()
                         ForEach(thesis.logEntries.sorted(by: { $0.date > $1.date }), id: \.id) { entry in
                             LogEntryRow(entry: entry, thesis: thesis)
                         }
@@ -809,51 +900,6 @@ struct DynamicListSection: View {
     }
 }
 
-struct LogEntryCreator: View {
-    let thesis: InvestmentJournal
-    @Environment(\.modelContext) private var modelContext
-    
-    @State private var date: Date = Date()
-    @State private var tag: String = "Quarterly Earnings"
-    @State private var sentiment: EventSentiment = .none
-    @State private var content: String = ""
-    
-    var body: some View {
-        VStack(alignment: .leading, spacing: 10) {
-            HStack {
-                DatePicker("", selection: $date, displayedComponents: .date).labelsHidden()
-                
-                Picker("Tag", selection: $tag) {
-                    ForEach(thesisTags, id: \.self) { t in Text(t).tag(t) }
-                }.pickerStyle(.menu)
-                
-                Picker("Sentiment", selection: $sentiment) {
-                    ForEach(EventSentiment.allCases, id: \.self) { s in Text(s.rawValue).tag(s) }
-                }.pickerStyle(.menu)
-                
-                Spacer()
-                
-                Button("Add Note") { addNote() }
-                .disabled(content.trimmingCharacters(in: .whitespaces).isEmpty)
-                .buttonStyle(.borderedProminent)
-            }
-            TextField("Write your log entry...", text: $content, axis: .vertical)
-                .textFieldStyle(.roundedBorder).lineLimit(3...8)
-        }
-        .padding()
-        .background(Color.secondary.opacity(0.05))
-        .cornerRadius(10)
-    }
-    
-    private func addNote() {
-        let newEntry = JournalEntry(date: date, tag: tag, content: content)
-        newEntry.sentiment = sentiment
-        thesis.logEntries.append(newEntry)
-        try? modelContext.save()
-        date = Date(); content = ""; sentiment = .none
-    }
-}
-
 struct LogEntryRow: View {
     let entry: JournalEntry
     let thesis: InvestmentJournal
@@ -891,14 +937,4 @@ struct LogEntryRow: View {
             try? modelContext.save()
         }
     }
-}
-
-extension String: Identifiable {
-    public var id: String { self }
-}
-
-struct GlobalJournalEntry: Identifiable {
-    var id: UUID { entry.id }
-    let ticker: String
-    let entry: JournalEntry
 }

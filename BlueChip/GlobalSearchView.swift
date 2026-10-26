@@ -289,7 +289,19 @@ struct GlobalSearchView: View {
             ("Liabilities & Debts Ledger", "Data Table • Wealth", "mortgage loan credit list table wealth", "tablecells.fill", .red, .wealth),
             ("FIRE Simulator", "Analysis Tool • Wealth", "financial independence retire early passive income swr wealth", "flame.fill", .orange, .wealth),
             ("Assets Allocation (Macro)", "Chart • Wealth", "distribution donut pie chart wealth", "chart.pie.fill", .blue, .wealth),
-            ("Return on Investment (ROI % by Asset)", "Chart • Wealth", "roi performance bar chart wealth", "chart.bar.fill", .green, .wealth)
+            ("Return on Investment (ROI % by Asset)", "Chart • Wealth", "roi performance bar chart wealth", "chart.bar.fill", .green, .wealth),
+            
+            // ================= THESIS / CONVICTIONS =================
+            ("Thesis Notes Tracker", "Dashboard Section • Thesis", "timeline events logs news alerts", "bolt.horizontal.fill", .orange, .thesis),
+            ("Positions Core Convictions", "Dashboard Section • Thesis", "positions breakdown deep dive companies", "shield.fill", .purple, .thesis),
+            ("Conviction Status", "Target Tracking • Thesis", "rating score confidence intact broken review", "circle.fill", .green, .thesis),
+            ("Business Anatomy", "Analysis Tool • Thesis", "company structure management market customers", "building.2.fill", .blue, .thesis),
+            ("Competitive Advantage", "Analysis Tool • Thesis", "moat network effect switching costs scale", "lock.shield.fill", .indigo, .thesis),
+            ("Bear Case Threats", "Analysis Tool • Thesis", "risks dangers threats downside", "exclamationmark.triangle.fill", .orange, .thesis),
+            ("Exit Strategy", "Analysis Tool • Thesis", "sell rules conditions target exit", "door.right.hand.open", .red, .thesis),
+            ("Post-Mortem Lessons", "Analysis Tool • Thesis", "sold archive learning history", "brain.head.profile", .purple, .thesis),
+            
+            
         ]
         
         // --- 1. PAGES DE L'APPLICATION ---

@@ -203,6 +203,18 @@ class PortfolioViewModel: ObservableObject {
     // ==========================================
     // GESTION DES AJOUTS / SUPPRESSIONS (CRUD)
     // ==========================================
+
+    func getThesis(for ticker: String) -> InvestmentJournal? {
+        guard let context = modelContext else { return nil }
+        
+        // On cherche dans SwiftData la thèse qui correspond exactement au ticker
+        let predicate = #Predicate<InvestmentJournal> { $0.ticker == ticker }
+        var fetchDescriptor = FetchDescriptor<InvestmentJournal>(predicate: predicate)
+        fetchDescriptor.fetchLimit = 1 // Optimisation : on s'arrête au premier trouvé
+        
+        return try? context.fetch(fetchDescriptor).first
+    }
+
     
     // --- POSITIONS ---
     func addPosition(ticker: String, quantity: Double, pru: Double, dividend: Double, dividendGrowth5Y: Double, country: String, sector: String, marketCap: String, purchaseDate: Date) {

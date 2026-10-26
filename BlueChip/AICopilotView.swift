@@ -1065,6 +1065,70 @@ struct AICopilotView: View {
             Be highly analytical, objective, and use professional wealth management terminology (e.g., 'leverage ratio', 'asset class diversification', 'sequence of returns risk', 'liability management', 'illiquidity premium'). Use bolding for metrics and asset names.
             """
             
+        case .thesis:
+            // 1. Statistiques globales des convictions
+            let totalTheses = viewModel.positions.count
+            let thesesData = viewModel.positions.compactMap { pos -> InvestmentJournal? in
+                // (En supposant que thesisList soit accessible dans le ViewModel ou passé d'une manière ou d'une autre.
+                // Sinon, si les thess ne sont pas dans le ViewModel, on analyse simplement les positions qui ont des thèses)
+                // Pour cet exemple, on suppose que viewModel.getThesis(for: pos.ticker) existe ou qu'on y a accès.
+                return viewModel.getThesis(for: pos.ticker)
+            }
+            
+            let strongConviction = thesesData.filter { $0.thesisStatus == .strong }.count
+            let intact = thesesData.filter { $0.thesisStatus == .intact }.count
+            let underReview = thesesData.filter { $0.thesisStatus == .underReview }.count
+            let broken = thesesData.filter { $0.thesisStatus == .broken }.count
+            
+            prompt += "\n--- CONVICTION STATUS OVERVIEW ---\n"
+            prompt += "Total Active Investment Theses: \(thesesData.count) (out of \(totalTheses) positions)\n"
+            prompt += "Strong Conviction (Core Holds): \(strongConviction)\n"
+            prompt += "Intact (Performing as Expected): \(intact)\n"
+            prompt += "Under Review (Catalyst or Macro Shift): \(underReview)\n"
+            prompt += "Broken (Exit Condition Met): \(broken)\n"
+            
+            // 2. Extraire les thèses "À Risque" (Under Review ou Broken) pour analyse urgente
+            let riskyTheses = thesesData.filter { $0.thesisStatus == .underReview || $0.thesisStatus == .broken }
+            
+            if !riskyTheses.isEmpty {
+                prompt += "\n--- ⚠️ CRITICAL THEMES: POSITIONS UNDER REVIEW OR BROKEN ---\n"
+                for thesis in riskyTheses.prefix(3) {
+                    prompt += "**\(thesis.ticker)** (Status: \(thesis.thesisStatus.rawValue)):\n"
+                    prompt += "- Bear Case Threats: \(thesis.bearCaseThreats.joined(separator: ", "))\n"
+                    prompt += "- Exit Strategy Rules: \(thesis.exitStrategyRules.joined(separator: ", "))\n"
+                }
+            }
+            
+            // 3. Extraire le Top 3 des "Strong Convictions" pour s'assurer que la thèse tient la route
+            let topTheses = thesesData.filter { $0.thesisStatus == .strong }
+            
+            if !topTheses.isEmpty {
+                prompt += "\n--- 🛡️ CORE CONVICTIONS (STRONG STATUS) ---\n"
+                for thesis in topTheses.prefix(3) {
+                    prompt += "**\(thesis.ticker)** (Status: \(thesis.thesisStatus.rawValue)):\n"
+                    prompt += "- Value Proposition: \(thesis.valueProposition.prefix(150))...\n"
+                    
+                    var moats: [String] = []
+                    if thesis.hasNetworkEffect { moats.append("Network Effect") }
+                    if thesis.hasSwitchingCosts { moats.append("Switching Costs") }
+                    if thesis.hasIntangibles { moats.append("Intangibles") }
+                    if thesis.hasCostAdvantage { moats.append("Cost Advantage") }
+                    if thesis.hasEfficientScale { moats.append("Efficient Scale") }
+                    
+                    prompt += "- Structural Moats: \(moats.isEmpty ? "None Identified" : moats.joined(separator: ", "))\n"
+                    prompt += "- Sector Dynamics: \(thesis.sectorDynamics.prefix(100))...\n"
+                }
+            }
+            
+            prompt += """
+            \nTask: Act as a buy-side Equity Research Director and Portfolio Strategist reviewing the user's fundamental investment theses.
+            1. Evaluate the overall Conviction Status distribution. Is the user holding too many 'Broken' or 'Under Review' theses instead of executing their exit strategies?
+            2. Critically analyze the 'Positions Under Review or Broken' (if any). Challenge the user: based on the listed Bear Cases and Exit Strategies, should they sell immediately or wait for the next catalyst?
+            3. Stress-test the 'Core Convictions'. Are the structural moats (Network Effects, Switching Costs, etc.) correctly identified and robust enough to defend against market downturns?
+            4. Provide 2-3 blunt, actionable recommendations regarding portfolio concentration and psychological discipline. Tell the user exactly where they might be experiencing 'confirmation bias' or failing to follow their own rules.
+            Be highly analytical, objective, and use professional institutional research terminology (e.g., 'thesis drift', 'catalyst realization', 'structural moat erosion', 'confirmation bias'). Use bolding for metrics, statuses, and tickers.
+            """
+            
         default:
             prompt += "\nTask: Give a general health check of the portfolio based on the provided metrics."
         }
