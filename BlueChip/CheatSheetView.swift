@@ -21,6 +21,7 @@ struct CheatSheetView: View {
                     ShortcutRow(title: "Add Position", keys: ["⌘", "N"])
                     ShortcutRow(title: "Add Transaction", keys: ["⌘", "T"])
                     ShortcutRow(title: "Add Calendar Event", keys: ["⌘", "E"])
+                    ShortcutRow(title: "Add Thesis Note", keys: ["⌘", "B"])
                     ShortcutRow(title: "Refresh Prices", keys: ["⌘", "R"])
                     ShortcutRow(title: "AI Copilot Insights", keys: ["⌘", "I"])
 

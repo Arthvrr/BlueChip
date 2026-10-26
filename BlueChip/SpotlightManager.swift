@@ -49,7 +49,8 @@ class SpotlightManager {
                 ("page_transactions", "Transactions"),
                 ("page_benchmark", "Benchmark"),
                 ("page_calendar", "Calendar"),
-                ("page_wealth", "Wealth")
+                ("page_wealth", "Wealth"),
+                ("page_thesis", "Thesis")
             ]
             for page in pages {
                 let attributeSet = CSSearchableItemAttributeSet(contentType: .content)

@@ -20,6 +20,7 @@ struct ContentView: View {
         
     @State private var showAddTransaction = false
     @State private var showAddEvent = false
+    @State private var showAddThesisLog = false
     @State private var showCheatSheet = false
     @State private var showAbout = false
     @State private var showTutorial = false
@@ -214,6 +215,14 @@ struct ContentView: View {
         .sheet(isPresented: $showAddEvent) {
             AddEditEventSheet(viewModel: viewModel, event: nil, initialDate: Date())
         }
+        // NOUVELLE MODALE POUR LE LOG GLOBAL
+        .sheet(isPresented: $showAddThesisLog) {
+            let posTickers = viewModel.positions.map { $0.ticker }
+            let watchTickers = viewModel.watchlistItems.map { $0.ticker }
+            let allTickers = Array(Set(posTickers + watchTickers)).sorted()
+            
+            AddLogEntrySheet(availableTickers: allTickers, isPresented: $showAddThesisLog)
+        }
 
         .sheet(isPresented: $showCheatSheet) { CheatSheetView() }
         .sheet(isPresented: $showAbout) { AboutBlueChipView() }
@@ -228,6 +237,7 @@ struct ContentView: View {
         // --- NOUVEAUX ÉCOUTEURS ---
         .onReceive(NotificationCenter.default.publisher(for: NSNotification.Name("OpenAddTransaction"))) { _ in showAddTransaction = true }
         .onReceive(NotificationCenter.default.publisher(for: NSNotification.Name("OpenAddEvent"))) { _ in showAddEvent = true }
+        .onReceive(NotificationCenter.default.publisher(for: NSNotification.Name("OpenAddThesisLog"))) { _ in showAddThesisLog = true }
         .onReceive(NotificationCenter.default.publisher(for: NSNotification.Name("OpenCheatSheet"))) { _ in showCheatSheet = true }
         .onReceive(NotificationCenter.default.publisher(for: NSNotification.Name("OpenAbout"))) { _ in showAbout = true }
         .onReceive(NotificationCenter.default.publisher(for: NSNotification.Name("OpenTutorial"))) { _ in showTutorial = true }

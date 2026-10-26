@@ -113,6 +113,11 @@ struct BlueChipApp: App {
                     NotificationCenter.default.post(name: NSNotification.Name("OpenAddEvent"), object: nil)
                 }
                 .keyboardShortcut("e", modifiers: .command)
+                
+                Button("Add Thesis Log...") {
+                    NotificationCenter.default.post(name: NSNotification.Name("OpenAddThesisLog"), object: nil)
+                }
+                .keyboardShortcut("b", modifiers: .command)
             }
             
             CommandMenu("Tools") {

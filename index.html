@@ -89,7 +89,7 @@
                 <div class="hidden md:flex items-center space-x-8 text-sm font-medium text-slate-600 dark:text-slate-300">
                     <a href="#manifesto" class="hover:text-blue-600 dark:hover:text-white transition-colors">Manifesto</a>
                     <a href="#features" class="hover:text-blue-600 dark:hover:text-white transition-colors">Core Engine</a>
-                    <a href="#modules" class="hover:text-blue-600 dark:hover:text-white transition-colors">13 Modules</a>
+                    <a href="#modules" class="hover:text-blue-600 dark:hover:text-white transition-colors">14 Modules</a>
                     <a href="#pricing" class="hover:text-blue-600 dark:hover:text-white transition-colors">Pricing</a>
                     <a href="#founder" class="hover:text-blue-600 dark:hover:text-white transition-colors">The Founder</a>
                 </div>
@@ -193,7 +193,7 @@
             <!-- Stat 2 -->
             <div class="p-8 rounded-2xl bg-white/60 dark:bg-white/5 border border-slate-200 dark:border-white/10 backdrop-blur-xl flex flex-col items-center justify-center text-center transition-all duration-300 hover:-translate-y-1 hover:shadow-2xl hover:shadow-purple-500/10 group">
                 <span class="text-5xl font-black bg-clip-text text-transparent bg-gradient-to-br from-purple-500 to-pink-600 dark:from-purple-400 dark:to-purple-600 mb-3 group-hover:scale-105 transition-transform duration-300">
-                    23,561
+                    24 751
                 </span>
                 <span class="text-slate-600 dark:text-slate-400 font-semibold tracking-wider uppercase text-xs">
                     Lines of Native Swift Code
@@ -395,11 +395,11 @@
         </div>
     </section>
 
-    <!-- 13 Modules Grid -->
+    <!-- 14 Modules Grid -->
     <section id="modules" class="py-24 bg-slate-100 dark:bg-slate-900/50 border-t border-slate-200 dark:border-white/5 relative z-10 transition-colors duration-300">
         <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
             <div class="text-center mb-16">
-                <h2 class="text-3xl font-extrabold tracking-tight text-slate-900 dark:text-white">13 Dedicated Analytical Modules</h2>
+                <h2 class="text-3xl font-extrabold tracking-tight text-slate-900 dark:text-white">14 Dedicated Analytical Modules</h2>
                 <p class="mt-4 text-lg text-slate-600 dark:text-slate-400 font-light">An exhaustive suite of tools, covering every single aspect of wealth management. <span class="font-medium text-blue-500">Click any card to explore.</span></p>
             </div>
             
@@ -508,6 +508,17 @@
                     </div>
                     <span class="font-semibold text-slate-900 dark:text-slate-200">Wealth</span>
                     <span class="text-xs text-slate-500">Net Balance & FIRE Simulator</span>
+                </button>
+
+                <button onclick="openModule('thesis')" class="p-5 rounded-2xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-white/5 hover:border-blue-500/50 hover:shadow-lg dark:hover:shadow-[0_4px_20px_-5px_rgba(59,130,246,0.15)] transition-all transform hover:scale-[1.02] group text-left flex flex-col gap-2 md:col-start-2 lg:col-start-auto focus:outline-none">
+                    <div class="w-10 h-10 rounded-xl bg-blue-50 dark:bg-blue-500/10 flex items-center justify-center">
+                        <!-- SVG "book-closed" (Carnet de notes) -->
+                        <svg class="w-5 h-5 text-blue-600 dark:text-blue-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 6.253v13m0-13C10.832 5.477 9.246 5 7.5 5S4.168 5.477 3 6.253v13C4.168 18.477 5.754 18 7.5 18s3.332.477 4.5 1.253m0-13C13.168 5.477 14.754 5 16.5 5c1.747 0 3.332.477 4.5 1.253v13C19.832 18.477 18.247 18 16.5 18c-1.746 0-3.332.477-4.5 1.253"></path>
+                        </svg>
+                    </div>
+                    <span class="font-semibold text-slate-900 dark:text-slate-200">Thesis</span>
+                    <span class="text-xs text-slate-500">Convictions & Fundamental Research</span>
                 </button>
 
             </div>
@@ -818,7 +829,7 @@
         <!-- Ambient Glow -->
         <div class="absolute left-0 top-1/2 -translate-y-1/2 w-[400px] h-[400px] bg-blue-500/10 dark:bg-blue-600/5 blur-[100px] rounded-full pointer-events-none"></div>
 
-        <div class="max-w-5xl mx-auto px-4 sm:px-6 lg:px-8 relative z-10">
+        <div class="mx-auto px-4 sm:px-6 lg:px-8 relative z-10 max-w-7xl">
             <div class="bg-slate-50 dark:bg-slate-900/80 rounded-3xl p-8 md:p-12 border border-slate-200 dark:border-white/10 shadow-xl relative overflow-hidden group hover:shadow-2xl transition-shadow duration-300">
                 <!-- Decorative background element -->
                 <div class="absolute top-0 right-0 w-64 h-64 bg-gradient-to-br from-blue-500/10 to-purple-500/10 rounded-full blur-[40px] group-hover:scale-110 transition-transform duration-700"></div>
@@ -1534,6 +1545,33 @@
                     <p class="mb-6">At the bottom of the page lies the FIRE Simulator. This powerful tool uses your <em>True Net Worth</em> to estimate your passive income potential. Use the slider to set your <em>Safe Withdrawal Rate (SWR)</em>—the percentage of your wealth you plan to withdraw annually to cover living expenses—and the system will instantly calculate your <em>Estimated Passive Income</em> in both yearly and monthly amounts.</p>
                     
                     
+                `
+            },
+            'thesis': {
+                title: 'Investment Thesis',
+                iconSvg: '<svg class="w-10 h-10 text-blue-600 dark:text-blue-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 6.253v13m0-13C10.832 5.477 9.246 5 7.5 5S4.168 5.477 3 6.253v13C4.168 18.477 5.754 18 7.5 18s3.332.477 4.5 1.253m0-13C13.168 5.477 14.754 5 16.5 5c1.747 0 3.332.477 4.5 1.253v13C19.832 18.477 18.247 18 16.5 18c-1.746 0-3.332.477-4.5 1.253"></path></svg>',
+                colorClass: 'bg-blue-50 dark:bg-blue-500/10',
+                content: `
+                    <p class="font-bold text-lg text-slate-900 dark:text-white mb-2">The Institutional Analyst Desk</p>
+                    <p class="mb-6">The Thesis page transforms BlueChip from a mere tracking tool into a professional research environment. This is where qualitative analysis meets conviction. It is designed to force rigorous thinking, document your strategic reasoning, and protect you from emotional decision-making during market volatility.</p>
+                    
+                    <p class="font-bold text-lg text-slate-900 dark:text-white mb-2">Global Event Stream</p>
+                    <p class="mb-6">At the top of the page, the <em>Global Event Stream</em> acts as your personal news feed. It aggregates all the chronological notes and catalyst events you have logged across every company in your portfolio. You can filter this stream by Ticker, Event Tag (e.g., <em>Quarterly Earnings</em>, <em>Dividend Raise</em>), or Sentiment to quickly review your recent macro and micro analysis.</p>
+                    
+                    <p class="font-bold text-lg text-slate-900 dark:text-white mb-2">Core Convictions & Deep Dives</p>
+                    <p class="mb-3">Below the stream, your entire portfolio is broken down into structured <em>Company Deep Dives</em>. Every company features a comprehensive analysis framework divided into 5 critical sections:</p>
+                    <ul class="list-disc pl-5 mb-6 space-y-2">
+                        <li><strong>Business Anatomy:</strong> Details exactly how the company makes money, its target market, customer concentration, and leadership quality.</li>
+                        <li><strong>Competitive Advantage:</strong> Identifies the structural "Moats" protecting the business (e.g., Network Effects, Switching Costs, Intangibles).</li>
+                        <li><strong>Bear Case Threats:</strong> Documents the fundamental risks that could permanently impair the company's earning power.</li>
+                        <li><strong>Exit Strategy:</strong> Pre-defined, rational rules dictating exactly when you should sell the stock, protecting you from panic selling.</li>
+                        <li><strong>Post-Mortem:</strong> If you sell a stock, this section allows you to write a summary of the lessons learned to improve your future capital allocation.</li>
+                    </ul>
+                    
+                    <p class="font-bold text-lg text-slate-900 dark:text-white mb-2">Thesis Status & Sentiments</p>
+                    <p class="mb-6">Every thesis allows you to set a <em>Conviction Status</em> (e.g., Strong Conviction, Under Review, Broken) represented by a color-coded dot next to the ticker. Additionally, when you add a new note to the Event Stream, you can attach an <em>Event Sentiment</em> (e.g., Mild Bearish, Strong Bullish) to track how your psychology evolves alongside the stock's price over time.</p>
+                    
+                    <p class="mb-6 italic opacity-80">To edit a company's thesis, simply <strong>double-click</strong> its card. To add a quick note, click the <strong>Add Thesis Log</strong> button at the top right of the page.</p>
                 `
             }
         };
