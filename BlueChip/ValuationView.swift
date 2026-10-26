@@ -739,6 +739,7 @@ struct ValuationCashMatrixChart: View {
         
         VStack(alignment: .leading, spacing: 8) {
             HStack {
+                if !isExpanded { Text("Quality Matrix (Cash vs Accounting)").font(.headline).foregroundColor(.secondary) }
                 Spacer()
                 if !isExpanded { Button(action: { expandedChart = .cashMatrix }) { Image(systemName: "plus.magnifyingglass").foregroundColor(.secondary) }.buttonStyle(.plain) }
             }.padding(.bottom, 4)
@@ -826,6 +827,7 @@ struct ValuationPEGScatterChart: View {
         
         VStack(alignment: .leading, spacing: 8) {
             HStack {
+                if !isExpanded { Text("PEG Ratio Matrix (Price vs Growth)").font(.headline).foregroundColor(.secondary) }
                 Spacer()
                 if !isExpanded { Button(action: { expandedChart = .pegScatter }) { Image(systemName: "plus.magnifyingglass").foregroundColor(.secondary) }.buttonStyle(.plain) }
             }.padding(.bottom, 4)

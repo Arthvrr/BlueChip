@@ -139,12 +139,12 @@ struct WealthView: View {
                     Text("Assets Breakdown & Performance").font(.title2).fontWeight(.bold).foregroundColor(.secondary)
                     HStack(alignment: .top, spacing: 24) {
                         VStack(alignment: .leading) {
-                            HStack { Text("Assets Allocation").font(.headline).foregroundColor(.secondary); Spacer() }
+                            //HStack { Text("Assets Allocation").font(.headline).foregroundColor(.secondary); Spacer() }
                             WealthAllocationChart(viewModel: viewModel, privacyMode: $privacyMode, expandedChart: $chartToZoom)
                         }
                         
                         VStack(alignment: .leading) {
-                            HStack { Text("Return on Investment by Asset").font(.headline).foregroundColor(.secondary); Spacer() }
+                            //HStack { Text("Return on Investment by Asset").font(.headline).foregroundColor(.secondary); Spacer() }
                             WealthROIChart(viewModel: viewModel, privacyMode: $privacyMode, expandedChart: $chartToZoom)
                         }
                     }
@@ -529,6 +529,7 @@ struct WealthAllocationChart: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 16) {
             HStack {
+                if !isExpanded { Text("Assets Allocation").font(.headline).foregroundColor(.secondary) }
                 Spacer()
                 if !isExpanded { Button(action: { expandedChart = .allocation }) { Image(systemName: "plus.magnifyingglass").foregroundColor(.secondary) }.buttonStyle(.plain) }
             }
@@ -604,6 +605,7 @@ struct WealthROIChart: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 16) {
             HStack {
+                if !isExpanded { Text("Return on Investment by Asset").font(.headline).foregroundColor(.secondary) }
                 Spacer()
                 if !isExpanded { Button(action: { expandedChart = .roi }) { Image(systemName: "plus.magnifyingglass").foregroundColor(.secondary) }.buttonStyle(.plain) }
             }

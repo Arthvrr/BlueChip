@@ -277,9 +277,10 @@
                 <div class="w-24 h-1 bg-gradient-to-r from-blue-500 to-purple-500 mx-auto mt-6 rounded-full"></div>
             </div>
 
-            <div class="grid grid-cols-1 md:grid-cols-3 gap-6 auto-rows-[minmax(260px,auto)]">
+            <!-- Grid Layout modified to accommodate 6 cards -->
+            <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 auto-rows-[minmax(280px,auto)]">
                 
-                <!-- Feature 1: AI Copilot -->
+                <!-- Feature 1: AI Copilot (Large Card) -->
                 <div class="md:col-span-2 bg-slate-50 dark:bg-slate-950 rounded-3xl p-8 bento-card relative overflow-hidden group border border-slate-200 dark:border-white/5">
                     <div class="absolute top-0 right-0 p-8 opacity-5 dark:opacity-10 group-hover:opacity-10 dark:group-hover:opacity-20 transition-opacity">
                         <svg class="w-48 h-48 text-blue-600 dark:text-blue-500" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="1" d="M9.75 17L9 20l-1 1h8l-1-1-.75-3M3 13h18M5 17h14a2 2 0 002-2V5a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z"></path></svg>
@@ -293,7 +294,7 @@
                             BYOK Model (Bring Your Own Key)
                         </div>
                         <h3 class="text-2xl font-bold mb-3 text-slate-900 dark:text-white">AI Copilot Insights</h3>
-                        <p class="text-slate-600 dark:text-slate-400 mb-6 max-w-lg font-light leading-relaxed">
+                        <p class="text-slate-600 dark:text-slate-400 mb-6 max-w-lg font-light leading-relaxed flex-grow">
                             Leverage institutional-grade quantitative analysis directly on your portfolio. Simply provide your own Google Gemini API key to unlock a context-aware financial conversational agent across every page of the app. Your data is sent securely and ephemerally to the LLM, with no middlemen collecting your prompts.
                         </p>
                         <ul class="space-y-3 text-sm text-slate-700 dark:text-slate-300 mt-auto">
@@ -301,6 +302,30 @@
                             <li class="flex items-center gap-3"><svg class="w-4 h-4 text-green-500 dark:text-green-400 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" d="M5 13l4 4L19 7"></path></svg> Interact with your historical transaction data in a localized, secure chat environment.</li>
                         </ul>
                     </div>
+                </div>
+
+                <!-- NEW: Live Market Sync -->
+                <div class="bg-slate-50 dark:bg-slate-950 rounded-3xl p-8 bento-card flex flex-col border border-slate-200 dark:border-white/5 relative group overflow-hidden">
+                    <div class="absolute -right-4 -bottom-4 w-24 h-24 bg-orange-500/10 rounded-full blur-[30px] group-hover:bg-orange-500/20 transition-colors"></div>
+                    <div class="w-12 h-12 rounded-xl bg-orange-50 dark:bg-orange-500/10 flex items-center justify-center mb-6 border border-orange-100 dark:border-orange-500/20">
+                        <svg class="w-6 h-6 text-orange-600 dark:text-orange-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"></path></svg>
+                    </div>
+                    <h3 class="text-xl font-bold mb-3 text-slate-900 dark:text-white">Live Market Sync</h3>
+                    <p class="text-slate-600 dark:text-slate-400 text-sm font-light leading-relaxed flex-grow">
+                        Stop updating spreadsheets manually. BlueChip connects seamlessly to Yahoo Finance to automatically fetch live stock prices and real-time FX exchange rates for every position, keeping your global net worth accurate to the minute.
+                    </p>
+                </div>
+
+                <!-- NEW: Smart Local Alerts -->
+                <div class="bg-slate-50 dark:bg-slate-950 rounded-3xl p-8 bento-card flex flex-col border border-slate-200 dark:border-white/5 relative group overflow-hidden">
+                    <div class="absolute -right-4 -bottom-4 w-24 h-24 bg-yellow-500/10 rounded-full blur-[30px] group-hover:bg-yellow-500/20 transition-colors"></div>
+                    <div class="w-12 h-12 rounded-xl bg-yellow-50 dark:bg-yellow-500/10 flex items-center justify-center mb-6 border border-yellow-100 dark:border-yellow-500/20">
+                        <svg class="w-6 h-6 text-yellow-600 dark:text-yellow-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 17h5l-1.405-1.405A2.032 2.032 0 0118 14.158V11a6.002 6.002 0 00-4-5.659V5a2 2 0 10-4 0v.341C7.67 6.165 6 8.388 6 11v3.159c0 .538-.214 1.055-.595 1.436L4 17h5m6 0v1a3 3 0 11-6 0v-1m6 0H9"></path></svg>
+                    </div>
+                    <h3 class="text-xl font-bold mb-3 text-slate-900 dark:text-white">Smart Local Alerts</h3>
+                    <p class="text-slate-600 dark:text-slate-400 text-sm font-light leading-relaxed flex-grow">
+                        BlueChip works for you in the background. The native macOS notification engine proactively delivers custom scheduled calendar events, weekly portfolio performance recaps, and monthly dividend collection reminders—all processed 100% locally.
+                    </p>
                 </div>
 
                 <!-- Feature 2: Security -->
@@ -335,7 +360,7 @@
                     </div>
                     <h3 class="text-xl font-bold mb-3 text-slate-900 dark:text-white">Advanced Custom Settings</h3>
                     <p class="text-slate-600 dark:text-slate-400 text-sm font-light leading-relaxed flex-grow">
-                        Designed for the international investor. Define your base currency (USD, EUR, GBP, CHF) and set your local dividend tax rate. BlueChip automatically calculates live FX rates to consolidate your global wealth.
+                        Designed for the international investor. Define your base currency (USD, EUR, GBP, CHF) and set your local dividend tax rate.
                     </p>
                 </div>
 
@@ -348,6 +373,21 @@
                     <h3 class="text-xl font-bold mb-3 text-slate-900 dark:text-white">Total Data Sovereignty</h3>
                     <p class="text-slate-600 dark:text-slate-400 text-sm font-light leading-relaxed flex-grow">
                         You are never trapped. Migrate seamlessly thanks to powerful CSV import/export capabilities for your positions and transactions. Export scheduled events in `.ical` format to sync directly with Apple Calendar.
+                    </p>
+                </div>
+
+                <!-- NEW: Menu Bar Companion -->
+                <div class="bg-slate-50 dark:bg-slate-950 rounded-3xl p-8 bento-card flex flex-col border border-slate-200 dark:border-white/5 relative group overflow-hidden">
+                    <div class="absolute -right-4 -bottom-4 w-24 h-24 bg-pink-500/10 rounded-full blur-[30px] group-hover:bg-pink-500/20 transition-colors"></div>
+                    <div class="w-12 h-12 rounded-xl bg-pink-50 dark:bg-pink-500/10 flex items-center justify-center mb-6 border border-pink-100 dark:border-pink-500/20">
+                        <svg class="w-6 h-6 text-pink-600 dark:text-pink-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 5a1 1 0 011-1h14a1 1 0 011 1v2a1 1 0 01-1 1H5a1 1 0 01-1-1V5z"></path>
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 13h16v6a1 1 0 01-1 1H5a1 1 0 01-1-1v-6z"></path>
+                        </svg>
+                    </div>
+                    <h3 class="text-xl font-bold mb-3 text-slate-900 dark:text-white">Menu Bar Companion</h3>
+                    <p class="text-slate-600 dark:text-slate-400 text-sm font-light leading-relaxed flex-grow">
+                        Keep an eye on your wealth without breaking focus. BlueChip lives natively in your macOS status bar, providing instant access to your daily performance, live dividend tracker, and upcoming events with a single click.
                     </p>
                 </div>
 

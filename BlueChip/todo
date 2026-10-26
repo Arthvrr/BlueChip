@@ -1,5 +1,9 @@
 PLUS TARD :
 
+page journal de bord pour chaque position avec son lot de questions
+
+page taxe avec ses propres règles à mettre soi-même
+
 page Renforcement (voir quelles actions renforcer, avec delta pru - prix actuel, score de qualité, valorisation)
 
 créer plusieurs portefeuilles
@@ -11,3 +15,11 @@ widgets (calendrier, montant total, dividendes par mois)
 ajouter clic sur chaque case du header du dashboard (avec petite explication de ce que c'est en anglais + valeur en grand)
 
 section hard refresh data of 1 stocks
+
+ajouter bouton action ne verse pas de dividendes
+
+rendre plus joli le tableau de qualité watchlist
+
+ajouter rappels tout les mois calendar
+
+Rapport mensuel pdf

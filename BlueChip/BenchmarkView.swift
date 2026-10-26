@@ -732,11 +732,11 @@ struct BenchmarkChartsSection: View {
             Text("Performance Analytics").font(.title2).fontWeight(.bold).foregroundColor(.secondary)
             HStack(alignment: .top, spacing: 24) {
                 VStack(alignment: .leading) {
-                    HStack { Text("Annual Return (%)").font(.headline).foregroundColor(.secondary); Spacer() }
+                    //HStack { Text("Annual Return (%)").font(.headline).foregroundColor(.secondary); Spacer() }
                     BenchmarkAnnualBarsChart(viewModel: viewModel, privacyMode: $privacyMode, expandedChart: $chartToZoom)
                 }
                 VStack(alignment: .leading) {
-                    HStack { Text("\(sym)10,000 Simulated Growth").font(.headline).foregroundColor(.secondary); Spacer() }
+                    //HStack { Text("\(sym)10,000 Simulated Growth").font(.headline).foregroundColor(.secondary); Spacer() }
                     BenchmarkGrowth10kChart(viewModel: viewModel, privacyMode: $privacyMode, expandedChart: $chartToZoom)
                 }
             }
