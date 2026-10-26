@@ -106,12 +106,11 @@ class SpotlightManager {
                 searchableItems.append(item)
             }
             
-            // Lancement de l'indexation
             CSSearchableIndex.default().indexSearchableItems(searchableItems) { error in
                 if let error = error {
-                    print("Erreur d'indexation Spotlight : \(error.localizedDescription)")
+                    //print("Erreur d'indexation Spotlight : \(error.localizedDescription)")
                 } else {
-                    print("Indexation Spotlight réussie pour \(searchableItems.count) éléments.")
+                    //print("Indexation Spotlight réussie pour \(searchableItems.count) éléments.")
                 }
             }
         }
