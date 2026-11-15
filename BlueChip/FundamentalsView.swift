@@ -49,6 +49,7 @@ struct FundamentalsView: View {
     @State private var showReorderSheet: Bool = false
     @State private var editingCriterion: FundamentalCriterion? = nil
     @State private var editingCell: (position: Position, criterion: FundamentalCriterion)? = nil
+    @State private var viewingHistoryCell: (position: Position, criterion: FundamentalCriterion)? = nil
     @State private var chartToZoom: FundamentalsChartZoomType? = nil
     
     var groupedCriteria: [(section: String, criteria: [FundamentalCriterion])] {
@@ -138,6 +139,7 @@ struct FundamentalsView: View {
                     getTotalScore: getTotalScore,
                     privacyMode: $privacyMode,
                     onCellTap: { pos, crit in editingCell = (pos, crit) },
+                    onHistoryTap: { pos, crit in viewingHistoryCell = (pos, crit) },
                     onCriterionTap: { crit in editingCriterion = crit },
                     onAddCriterion: { showAddCriterion = true },
                     onReorder: { showReorderSheet = true }
@@ -218,9 +220,11 @@ struct FundamentalsView: View {
         .sheet(item: $editingCriterion) { crit in CriterionFormSheet(viewModel: viewModel, criterionToEdit: crit) }
         .sheet(isPresented: $showReorderSheet) { ReorderScreenerSheet(viewModel: viewModel) }
         .sheet(item: Binding<EditingCellWrapper?>(
-            get: { editingCell != nil ? EditingCellWrapper(position: editingCell!.position, criterion: editingCell!.criterion) : nil },
-            set: { _ in editingCell = nil }
-        )) { wrapper in ValueEntrySheet(viewModel: viewModel, position: wrapper.position, criterion: wrapper.criterion) }
+            get: { viewingHistoryCell != nil ? EditingCellWrapper(position: viewingHistoryCell!.position, criterion: viewingHistoryCell!.criterion) : nil },
+            set: { _ in viewingHistoryCell = nil }
+        )) { wrapper in
+            FundamentalHistorySheet(position: wrapper.position, criterion: wrapper.criterion, privacyMode: $privacyMode)
+        }
         .sheet(item: $chartToZoom) { type in
             FundamentalsFullScreenChartView(
                 zoomType: type,
@@ -236,6 +240,18 @@ struct FundamentalsView: View {
             )
         }
     }
+    
+    // Fonction qui extrait la dernière valeur d'un critère pour une position donnée
+    func getLatestFundamentalValue(for pos: Position, criterionId: String) -> Double? {
+        let history = pos.fundamentalHistory.filter { $0.criterionId == criterionId }
+        return history.max(by: { $0.date < $1.date })?.value
+    }
+}
+
+// Fonction qui extrait la dernière valeur d'un critère pour une position donnée
+func getLatestFundamentalValue(for pos: Position, criterionId: String) -> Double? {
+    let history = pos.fundamentalHistory.filter { $0.criterionId == criterionId }
+    return history.max(by: { $0.date < $1.date })?.value
 }
 
 struct EditingCellWrapper: Identifiable {
@@ -383,6 +399,7 @@ struct FundamentalsSpreadsheetSection: View {
     let getTotalScore: (Position) -> Double
     @Binding var privacyMode: Bool
     let onCellTap: (Position, FundamentalCriterion) -> Void
+    let onHistoryTap: (Position, FundamentalCriterion) -> Void
     let onCriterionTap: (FundamentalCriterion) -> Void
     
     let onAddCriterion: () -> Void
@@ -459,16 +476,15 @@ struct FundamentalsSpreadsheetSection: View {
                                 
                                 ForEach(groupedCriteria, id: \.section) { group in
                                     ForEach(group.criteria) { crit in
-                                        let val = pos.fundamentalValues?[crit.id.uuidString]
-                                        let statusInfo = val != nil ? ScoreEngine.getScoreStatus(value: val!, criterion: crit) : (0.0, .none)
-                                        
-                                        Button(action: { onCellTap(pos, crit) }) {
-                                            Text(formatValue(val, type: crit.type))
-                                                .font(.subheadline).fontWeight(.semibold).foregroundColor(statusColor(statusInfo.status))
-                                                .blur(radius: privacyMode ? 6 : 0)
-                                                .frame(width: colWidthCrit, height: rowHeight).background(Color(NSColor.controlBackgroundColor))
-                                                .border(Color.gray.opacity(0.2), width: 0.5).contentShape(Rectangle())
-                                        }.buttonStyle(.plain)
+                                        FundamentalsDataCell(
+                                            pos: pos,
+                                            crit: crit,
+                                            privacyMode: $privacyMode,
+                                            colWidthCrit: colWidthCrit,
+                                            rowHeight: rowHeight,
+                                            onCellTap: { onCellTap(pos, crit) },
+                                            onHistoryTap: { onHistoryTap(pos, crit) }
+                                        )
                                     }
                                 }
                             }
@@ -537,6 +553,18 @@ struct FundamentalsSpreadsheetSection: View {
         case .failed: return .red
         case .none: return .secondary
         }
+    }
+    
+    // Sépare le calcul pour éviter le timeout du compilateur
+    private func getDisplayData(for pos: Position, crit: FundamentalCriterion) -> (value: Double?, text: String, color: Color) {
+        let history = pos.fundamentalHistory.filter { $0.criterionId == crit.id.uuidString }
+        let latestVal = history.max(by: { $0.date < $1.date })?.value
+        
+        let statusInfo = latestVal != nil ? ScoreEngine.getScoreStatus(value: latestVal!, criterion: crit) : (0.0, .none)
+        let color = statusColor(statusInfo.status)
+        let text = formatValue(latestVal, type: crit.type)
+        
+        return (latestVal, text, color)
     }
 }
 
@@ -1570,6 +1598,10 @@ struct CriterionFormSheet: View {
 // MARK: - SHEET : ENTRER UNE VALEUR POUR UNE ACTION
 // =========================================================================
 
+// =========================================================================
+// MARK: - SHEET : ENTRER UNE VALEUR POUR UNE ACTION
+// =========================================================================
+
 struct ValueEntrySheet: View {
     @Environment(\.dismiss) var dismiss
     @ObservedObject var viewModel: PortfolioViewModel
@@ -1653,7 +1685,16 @@ struct ValueEntrySheet: View {
                         } else {
                             finalValue = inputValue ?? 0.0
                         }
+                        
+                        let critKey = criterion.id.uuidString
+                        
+                        // 1. Sauvegarder dans l'historique
+                        let newHistory = FundamentalValueHistory(criterionId: critKey, date: Date(), value: finalValue)
+                        position.fundamentalHistory.append(newHistory)
+                        
+                        // 2. Mettre à jour l'ancienne structure (utile pour le scoring global actuel)
                         viewModel.updateFundamentalValue(for: position.id, criterionId: criterion.id, value: finalValue)
+                        
                         dismiss()
                     }
                     .keyboardShortcut(.defaultAction)
@@ -1671,6 +1712,238 @@ struct ValueEntrySheet: View {
                     inputValue = existing
                 }
             }
+        }
+    }
+}
+
+// =========================================================================
+// MARK: - SHEET : HISTORIQUE D'UN CRITÈRE (SIMPLE CLIC)
+// =========================================================================
+
+struct FundamentalHistorySheet: View {
+    @Environment(\.dismiss) var dismiss
+    let position: Position
+    let criterion: FundamentalCriterion
+    @Binding var privacyMode: Bool
+    
+    var history: [FundamentalValueHistory] {
+        let critKey = criterion.id.uuidString
+        let saved = (position.fundamentalHistory ?? [])
+            .filter { $0.criterionId == critKey }
+            .sorted(by: { $0.date < $1.date })
+        
+        if !saved.isEmpty {
+            return saved
+        }
+        if let currentVal = position.fundamentalValues?[critKey] {
+            return [FundamentalValueHistory(criterionId: critKey, date: Date(), value: currentVal)]
+        }
+        return []
+    }
+    
+    var averageValue: Double {
+        guard !history.isEmpty else { return 0.0 }
+        let sum = history.reduce(0.0) { $0 + $1.value }
+        return sum / Double(history.count)
+    }
+    
+    let dateFormatter: DateFormatter = {
+        let f = DateFormatter()
+        f.dateStyle = .medium
+        f.timeStyle = .none
+        return f
+    }()
+    
+    var body: some View {
+        VStack(alignment: .leading, spacing: 20) {
+            HStack {
+                VStack(alignment: .leading, spacing: 2) {
+                    Text("\(position.ticker) — \(criterion.name)").font(.title2).fontWeight(.bold)
+                    Text("Historical Criterion Evolution").font(.caption).foregroundColor(.secondary)
+                }
+                Spacer()
+                Button(action: { dismiss() }) {
+                    Image(systemName: "xmark.circle.fill").font(.title2).foregroundColor(.secondary)
+                }.buttonStyle(.plain)
+            }
+            
+            Divider()
+            
+            if history.isEmpty {
+                Spacer()
+                Text("No historical data recorded for this criterion yet.\nDouble-click the cell in the table to log a value.")
+                    .multilineTextAlignment(.center)
+                    .foregroundColor(.secondary)
+                    .frame(maxWidth: .infinity, alignment: .center)
+                Spacer()
+            } else {
+                HStack(spacing: 24) {
+                    VStack(alignment: .leading, spacing: 4) {
+                        Text("Latest Value").font(.caption).foregroundColor(.secondary)
+                        Text(formatValue(history.last?.value, type: criterion.type))
+                            .font(.title3).fontWeight(.bold)
+                            .blur(radius: privacyMode ? 6 : 0)
+                    }
+                    Divider().frame(height: 30)
+                    VStack(alignment: .leading, spacing: 4) {
+                        Text("Historical Average").font(.caption).foregroundColor(.secondary)
+                        Text(formatValue(averageValue, type: criterion.type))
+                            .font(.title3).fontWeight(.bold)
+                            .blur(radius: privacyMode ? 6 : 0)
+                    }
+                    Divider().frame(height: 30)
+                    VStack(alignment: .leading, spacing: 4) {
+                        Text("Entries Logged").font(.caption).foregroundColor(.secondary)
+                        Text("\(history.count)").font(.title3).fontWeight(.bold)
+                    }
+                }
+                .padding(12)
+                .background(Color(NSColor.controlBackgroundColor))
+                .cornerRadius(10)
+                
+                // GRAPHIQUE D'ÉVOLUTION
+                Chart(history) { item in
+                    LineMark(
+                        x: .value("Date", item.date),
+                        y: .value("Value", item.value)
+                    )
+                    .foregroundStyle(Color.blue)
+                    .lineStyle(StrokeStyle(lineWidth: 2.5))
+                    .interpolationMethod(.monotone)
+                    
+                    PointMark(
+                        x: .value("Date", item.date),
+                        y: .value("Value", item.value)
+                    )
+                    .foregroundStyle(Color.blue)
+                    .symbolSize(60)
+                    
+                    RuleMark(y: .value("Average", averageValue))
+                        .foregroundStyle(Color.gray.opacity(0.5))
+                        .lineStyle(StrokeStyle(lineWidth: 1.5, dash: [4, 4]))
+                }
+                .frame(height: 220)
+                .padding()
+                .background(Color(NSColor.controlBackgroundColor))
+                .cornerRadius(12)
+                
+                // LISTE CHRONOLOGIQUE (STACK)
+                Text("Logged Values History").font(.headline).foregroundColor(.secondary)
+                
+                ScrollView {
+                    VStack(spacing: 8) {
+                        ForEach(history.reversed()) { log in
+                            HStack {
+                                Text(dateFormatter.string(from: log.date))
+                                    .font(.subheadline)
+                                    .foregroundColor(.secondary)
+                                
+                                Spacer()
+                                
+                                Text(formatValue(log.value, type: criterion.type))
+                                    .font(.subheadline)
+                                    .fontWeight(.bold)
+                                    .blur(radius: privacyMode ? 6 : 0)
+                            }
+                            .padding(.horizontal, 14)
+                            .padding(.vertical, 10)
+                            .background(Color(NSColor.controlBackgroundColor))
+                            .cornerRadius(8)
+                        }
+                    }
+                }
+            }
+        }
+        .padding(24)
+        .frame(width: 650, height: 600)
+    }
+    
+    func formatValue(_ value: Double?, type: CriterionType) -> String {
+        guard let v = value else { return "-" }
+        switch type {
+        case .boolean: return v == 1.0 ? "Yes" : "No"
+        case .percentage: return (v / 100.0).formatted(.percent.precision(.fractionLength(2)))
+        case .number: return v.formatted(.number.precision(.fractionLength(2)))
+        }
+    }
+}
+
+struct FundamentalsDataCell: View {
+    let pos: Position
+    let crit: FundamentalCriterion
+    @Binding var privacyMode: Bool
+    let colWidthCrit: CGFloat
+    let rowHeight: CGFloat
+    let onCellTap: () -> Void
+    let onHistoryTap: () -> Void
+    
+    // NOUVEAU : Un gestionnaire de tâche pour différer le simple clic
+    @State private var singleTapTask: Task<Void, Never>? = nil
+    
+    var body: some View {
+        let displayData = getDisplayData()
+        
+        Text(displayData.text)
+            .font(.subheadline)
+            .fontWeight(.semibold)
+            .foregroundColor(displayData.color)
+            .blur(radius: privacyMode ? 6 : 0)
+            .frame(width: colWidthCrit, height: rowHeight)
+            .background(Color(NSColor.controlBackgroundColor))
+            .border(Color.gray.opacity(0.2), width: 0.5)
+            .contentShape(Rectangle())
+            // 1. Double-clic (Prioritaire) : On annule le timer du simple clic et on édite
+            .onTapGesture(count: 2) {
+                singleTapTask?.cancel()
+                onCellTap()
+            }
+            // 2. Simple clic : On attend 1/4 de seconde pour voir si un 2e clic arrive
+            .onTapGesture(count: 1) {
+                singleTapTask = Task {
+                    try? await Task.sleep(nanoseconds: 250_000_000) // Délai de 250 ms
+                    if !Task.isCancelled {
+                        await MainActor.run {
+                            onHistoryTap()
+                        }
+                    }
+                }
+            }
+    }
+    
+    private func getDisplayData() -> (value: Double?, text: String, color: Color) {
+        let critKey = crit.id.uuidString
+        let history = pos.fundamentalHistory.filter { $0.criterionId == critKey }
+        
+        // On cherche dans l'historique d'abord...
+        var latestVal = history.max(by: { $0.date < $1.date })?.value
+        
+        // ... S'il n'y a rien (ex: données du JSON), on récupère l'ancienne valeur !
+        if latestVal == nil {
+            latestVal = pos.fundamentalValues?[critKey]
+        }
+        
+        let statusInfo = latestVal != nil ? ScoreEngine.getScoreStatus(value: latestVal!, criterion: crit) : (0.0, .none)
+        let color = statusColor(statusInfo.status)
+        let text = formatValue(latestVal, type: crit.type)
+        
+        return (latestVal, text, color)
+    }
+    
+    private func statusColor(_ status: ScoreEngine.ScoreStatus) -> Color {
+        switch status {
+        case .premium: return .green
+        case .standard: return .blue
+        case .failed: return .red
+        case .none: return .secondary
+        }
+    }
+    
+    private func formatValue(_ value: Double?, type: CriterionType) -> String {
+        guard let v = value else { return "-" }
+        switch type {
+        case .boolean: return v == 1.0 ? "Yes" : "No"
+        case .percentage: return (v / 100.0).formatted(.percent.precision(.fractionLength(2)))
+        case .number: return v.formatted(.number.precision(.fractionLength(2)))
         }
     }
 }

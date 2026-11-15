@@ -131,6 +131,13 @@ struct RevenueSegment: Identifiable, Codable {
     var percentage: Double
 }
 
+struct FundamentalValueHistory: Identifiable, Codable {
+    var id = UUID()
+    var criterionId: String
+    var date: Date
+    var value: Double
+}
+
 
 // =========================================================================
 // MARK: - SWIFTDATA MODELS (Les tables de la base de données)
@@ -194,6 +201,7 @@ struct RevenueSegment: Identifiable, Codable {
     var revenueExposures: [RevenueSegment]?
     
     var fundamentalValues: [String: Double]?
+    var fundamentalHistory: [FundamentalValueHistory] = []
     
     var targetPrice: Double?
     var guruFocusPrice: Double?
@@ -210,9 +218,9 @@ struct RevenueSegment: Identifiable, Codable {
     
     var investorRelationsURL: String? = nil
     
-    init(id: UUID = UUID(), ticker: String, quantity: Double, averageCost: Double, currentPrice: Double, currency: String = "EUR", usdToEurRate: Double = 1.0, annualDividendNet: Double = 0.0, country: String = "", sector: String = "", marketCap: String = "", dividendMonths: Set<Int> = [], purchaseDate: Date = Date(), dividendGrowth5Y: Double, revenueExposures: [RevenueSegment]? = nil, fundamentalValues: [String: Double]? = nil) {
-        self.id = id; self.ticker = ticker; self.quantity = quantity; self.averageCost = averageCost; self.currentPrice = currentPrice; self.currency = currency; self.usdToEurRate = usdToEurRate; self.annualDividendNet = annualDividendNet; self.country = country; self.sector = sector; self.marketCap = marketCap; self.dividendMonths = dividendMonths; self.purchaseDate = purchaseDate; self.dividendGrowth5Y = dividendGrowth5Y; self.revenueExposures = revenueExposures; self.fundamentalValues = fundamentalValues;
-    }
+    init(id: UUID = UUID(), ticker: String, quantity: Double, averageCost: Double, currentPrice: Double, currency: String = "EUR", usdToEurRate: Double = 1.0, annualDividendNet: Double = 0.0, country: String = "", sector: String = "", marketCap: String = "", dividendMonths: Set<Int> = [], purchaseDate: Date = Date(), dividendGrowth5Y: Double, revenueExposures: [RevenueSegment]? = nil, fundamentalValues: [String: Double]? = nil, fundamentalHistory: [FundamentalValueHistory] = []) {
+            self.id = id; self.ticker = ticker; self.quantity = quantity; self.averageCost = averageCost; self.currentPrice = currentPrice; self.currency = currency; self.usdToEurRate = usdToEurRate; self.annualDividendNet = annualDividendNet; self.country = country; self.sector = sector; self.marketCap = marketCap; self.dividendMonths = dividendMonths; self.purchaseDate = purchaseDate; self.dividendGrowth5Y = dividendGrowth5Y; self.revenueExposures = revenueExposures; self.fundamentalValues = fundamentalValues; self.fundamentalHistory = fundamentalHistory
+        }
     
     // Les propriétés calculées sont ignorées par la base de données (ce qui est parfait)
     @Transient var investedAmountEUR: Double { quantity * averageCost * (currency == "USD" ? usdToEurRate : 1.0) }
@@ -441,7 +449,7 @@ struct LegacyPortfolioSaveData: Codable {
     
 }
 
-struct LegacyPosition: Codable { var id: UUID; let ticker: String; var quantity: Double; var averageCost: Double; var currentPrice: Double; var currency: String; var usdToEurRate: Double; var annualDividendNet: Double; var country: String; var sector: String; var marketCap: String; var dividendMonths: Set<Int>; var purchaseDate: Date; var dividendGrowth5Y: Double; var revenueExposures: [RevenueSegment]?; var fundamentalValues: [String: Double]?; var targetPrice: Double?; var guruFocusPrice: Double?; var tipRanksPrice: Double?; var currentPE: Double?; var forwardPE: Double?; var historicalPE10Y: Double?; var peg: Double?; var pFcf: Double? }
+struct LegacyPosition: Codable { var id: UUID; let ticker: String; var quantity: Double; var averageCost: Double; var currentPrice: Double; var currency: String; var usdToEurRate: Double; var annualDividendNet: Double; var country: String; var sector: String; var marketCap: String; var dividendMonths: Set<Int>; var purchaseDate: Date; var dividendGrowth5Y: Double; var revenueExposures: [RevenueSegment]?; var fundamentalValues: [String: Double]?; var fundamentalHistory: [FundamentalValueHistory]?; var targetPrice: Double?; var guruFocusPrice: Double?; var tipRanksPrice: Double?; var currentPE: Double?; var forwardPE: Double?; var historicalPE10Y: Double?; var peg: Double?; var pFcf: Double? }
 struct LegacyDividendYear: Codable { var id: UUID; var year: Int; var jan: Double; var feb: Double; var mar: Double; var apr: Double; var may: Double; var jun: Double; var jul: Double; var aug: Double; var sep: Double; var oct: Double; var nov: Double; var dec: Double }
 struct LegacyCalendarEvent: Codable { var id: UUID; var date: Date; var type: CalendarEventType; var ticker: String; var note: String }
 struct LegacyBenchmarkIndex: Codable { var id: UUID; var name: String; var returns: [Int: Double]; var referenceLink: String? }
