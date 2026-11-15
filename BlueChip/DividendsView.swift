@@ -41,13 +41,17 @@ struct DividendsView: View {
                 DividendsDashboardSection(viewModel: viewModel, privacyMode: $privacyMode)
                 
                 let goalSym = AppCurrency(rawValue: viewModel.preferredCurrency)?.symbol ?? "€"
+                // NOUVEAU : On s'assure d'avoir une valeur non-nil pour le type de goal
+                let currentGoalType = viewModel.dividendGoalType ?? .dividendsAnnual
+                
                 GoalProgressBar(
-                    title: viewModel.wealthGoalType.rawValue.replacingOccurrences(of: "€", with: goalSym),
+                    // NOUVEAU : On utilise currentGoalType au lieu de wealthGoalType, et on remplace l'icône de devise
+                    title: currentGoalType.rawValue.replacingOccurrences(of: "€", with: goalSym),
                     currentValue: currentGoalValueForProgressBar,
                     targetValue: viewModel.dividendGoalTarget ?? 0.0,
                     privacyMode: $privacyMode,
                     currency: $viewModel.preferredCurrency,
-                    isPercentage: viewModel.dividendGoalType == .portfolioYield
+                    isPercentage: currentGoalType == .portfolioYield
                 )
                 .contentShape(Rectangle())
                 .onTapGesture(count: 2) { showGoalSheet = true }

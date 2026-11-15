@@ -534,37 +534,72 @@ struct CompanyThesisCard: View {
 }
 
 // =========================================================================
-// MODALE ZOOM POUR LE LOG
+// MODALE ZOOM POUR LE LOG (ET ÉDITION)
 // =========================================================================
 struct LogEntryReaderSheet: View {
     let globalEntry: GlobalJournalEntry
     @Environment(\.dismiss) var dismiss
+    @Environment(\.modelContext) private var modelContext // Requis pour sauvegarder
+    @Query private var thesisList: [InvestmentJournal]
     
-    // Binding pour ouvrir la modale d'édition et fermer celle-ci
     @Binding var editingTicker: String?
     @Binding var readingLogEntry: GlobalJournalEntry?
+    
+    // États pour le mode édition
+    @State private var isEditing: Bool = false
+    @State private var editTag: String = ""
+    @State private var editSentiment: EventSentiment = .none
+    @State private var editContent: String = ""
+    
+    init(globalEntry: GlobalJournalEntry, editingTicker: Binding<String?>, readingLogEntry: Binding<GlobalJournalEntry?>) {
+        self.globalEntry = globalEntry
+        self._editingTicker = editingTicker
+        self._readingLogEntry = readingLogEntry
+        
+        // On initialise la requête pour trouver la bonne thèse
+        let ticker = globalEntry.ticker
+        let predicate = #Predicate<InvestmentJournal> { $0.ticker == ticker }
+        _thesisList = Query(filter: predicate)
+    }
     
     var body: some View {
         VStack(alignment: .leading, spacing: 20) {
             HStack {
                 Text("\(globalEntry.ticker) - Log Event Detail").font(.title2).fontWeight(.bold)
                 Spacer()
-                Button(action: {
-                    readingLogEntry = nil
-                    editingTicker = globalEntry.ticker
-                }) {
-                    HStack {
-                        Image(systemName: "pencil")
-                        Text("Edit")
+                
+                if isEditing {
+                    // Mode Édition : Boutons Save et Cancel
+                    Button("Cancel") {
+                        isEditing = false
                     }
-                    .padding(.horizontal, 10).padding(.vertical, 4)
-                    .background(Color(NSColor.controlBackgroundColor))
-                    .cornerRadius(6)
-                    .shadow(radius: 1)
-                    .font(.subheadline)
+                    .buttonStyle(.plain)
+                    .padding(.trailing, 10)
+                    
+                    Button("Save") {
+                        saveEdits()
+                    }
+                    .buttonStyle(.borderedProminent)
+                    .padding(.trailing, 10)
+                    .disabled(editContent.trimmingCharacters(in: .whitespaces).isEmpty)
+                } else {
+                    // Mode Lecture : Bouton Edit classique
+                    Button(action: {
+                        startEditing()
+                    }) {
+                        HStack {
+                            Image(systemName: "pencil")
+                            Text("Edit")
+                        }
+                        .padding(.horizontal, 10).padding(.vertical, 4)
+                        .background(Color(NSColor.controlBackgroundColor))
+                        .cornerRadius(6)
+                        .shadow(radius: 1)
+                        .font(.subheadline)
+                    }
+                    .buttonStyle(.plain)
+                    .padding(.trailing, 10)
                 }
-                .buttonStyle(.plain)
-                .padding(.trailing, 10)
                 
                 Button(action: { dismiss() }) { Image(systemName: "xmark.circle.fill").font(.title2).foregroundColor(.secondary) }.buttonStyle(.plain)
             }
@@ -572,19 +607,36 @@ struct LogEntryReaderSheet: View {
             Divider()
             
             HStack {
-                Text(globalEntry.entry.tag)
-                    .font(.headline).fontWeight(.bold)
-                    .padding(.horizontal, 12).padding(.vertical, 6)
-                    .background(Color.blue.opacity(0.1)).foregroundColor(.blue).cornerRadius(8)
-                
-                if globalEntry.entry.sentiment != .none {
-                    HStack {
-                        Circle().fill(globalEntry.entry.sentiment.color).frame(width: 10, height: 10)
-                        Text(globalEntry.entry.sentiment.rawValue).font(.subheadline).foregroundColor(globalEntry.entry.sentiment.color)
+                if isEditing {
+                    Picker("", selection: $editTag) {
+                        ForEach(thesisTags, id: \.self) { tag in
+                            Text(tag).tag(tag)
+                        }
                     }
-                    .padding(.horizontal, 12).padding(.vertical, 6)
-                    .background(globalEntry.entry.sentiment.color.opacity(0.1)).cornerRadius(8)
+                    .frame(width: 150)
+                    
+                    Picker("Sentiment:", selection: $editSentiment) {
+                        ForEach(EventSentiment.allCases, id: \.self) { s in
+                            Text(s.rawValue).tag(s)
+                        }
+                    }
+                    .frame(width: 180)
                     .padding(.leading, 8)
+                } else {
+                    Text(globalEntry.entry.tag)
+                        .font(.headline).fontWeight(.bold)
+                        .padding(.horizontal, 12).padding(.vertical, 6)
+                        .background(Color.blue.opacity(0.1)).foregroundColor(.blue).cornerRadius(8)
+                    
+                    if globalEntry.entry.sentiment != .none {
+                        HStack {
+                            Circle().fill(globalEntry.entry.sentiment.color).frame(width: 10, height: 10)
+                            Text(globalEntry.entry.sentiment.rawValue).font(.subheadline).foregroundColor(globalEntry.entry.sentiment.color)
+                        }
+                        .padding(.horizontal, 12).padding(.vertical, 6)
+                        .background(globalEntry.entry.sentiment.color.opacity(0.1)).cornerRadius(8)
+                        .padding(.leading, 8)
+                    }
                 }
                 
                 Spacer()
@@ -593,15 +645,48 @@ struct LogEntryReaderSheet: View {
             }
             .padding(.vertical, 10)
             
-            ScrollView {
-                Text(globalEntry.entry.content)
+            if isEditing {
+                TextEditor(text: $editContent)
                     .font(.body)
                     .lineSpacing(6)
-                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .frame(maxWidth: .infinity, maxHeight: .infinity)
+                    .overlay(RoundedRectangle(cornerRadius: 8).stroke(Color.secondary.opacity(0.2)))
+            } else {
+                ScrollView {
+                    Text(globalEntry.entry.content)
+                        .font(.body)
+                        .lineSpacing(6)
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                }
             }
         }
         .padding(30)
-        .frame(width: 600, height: 500)
+        // 1) Agrandissement de la fenêtre (de 600x500 à 800x700)
+        .frame(width: 800, height: 700)
+    }
+    
+    private func startEditing() {
+        // Pré-remplir les champs d'édition avec les données actuelles
+        editTag = globalEntry.entry.tag
+        editSentiment = globalEntry.entry.sentiment
+        editContent = globalEntry.entry.content
+        isEditing = true
+    }
+    
+    private func saveEdits() {
+        guard let thesis = thesisList.first else { return }
+        
+        // Trouver l'entrée exacte dans la thèse (car `globalEntry.entry` est une copie struct)
+        if let index = thesis.logEntries.firstIndex(where: { $0.id == globalEntry.entry.id }) {
+            // Mettre à jour l'entrée existante
+            thesis.logEntries[index].tag = editTag
+            thesis.logEntries[index].sentiment = editSentiment
+            thesis.logEntries[index].content = editContent
+            
+            try? modelContext.save()
+        }
+        isEditing = false
+        dismiss() // Optionnel : Fermer la modale après sauvegarde
     }
 }
 

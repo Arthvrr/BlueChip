@@ -889,7 +889,7 @@ struct EventDetailSheet: View {
                 if let e = est, let a = act, e != 0 {
                     let diff = a - e
                     let pct = (diff / abs(e))
-                    Text(pct.formatted(.percent.precision(.fractionLength(1)).sign(strategy: .always())))
+                    Text(pct.formatted(.percent.precision(.fractionLength(2)).sign(strategy: .always())))
                         .font(.caption).fontWeight(.bold)
                         .padding(.horizontal, 6).padding(.vertical, 2)
                         .background((diff >= 0 ? Color.green : Color.red).opacity(0.15))
@@ -1113,7 +1113,7 @@ struct AddEditEventSheet: View {
                                         if let e = estRevenue, let a = actRevenue, e != 0 {
                                             let diff = a - e
                                             let pct = diff / abs(e)
-                                            Text(pct.formatted(.percent.precision(.fractionLength(1)).sign(strategy: .always())))
+                                            Text(pct.formatted(.percent.precision(.fractionLength(2)).sign(strategy: .always())))
                                                 .font(.subheadline).bold().padding(.vertical, 2).padding(.horizontal, 6)
                                                 .background((diff >= 0 ? Color.green : Color.red).opacity(0.15))
                                                 .foregroundColor(diff >= 0 ? .green : .red).cornerRadius(4)
@@ -1146,7 +1146,7 @@ struct AddEditEventSheet: View {
                                         if let e = estEPS, let a = actEPS, e != 0 {
                                             let diff = a - e
                                             let pct = diff / abs(e)
-                                            Text(pct.formatted(.percent.precision(.fractionLength(1)).sign(strategy: .always())))
+                                            Text(pct.formatted(.percent.precision(.fractionLength(2)).sign(strategy: .always())))
                                                 .font(.subheadline).bold().padding(.vertical, 2).padding(.horizontal, 6)
                                                 .background((diff >= 0 ? Color.green : Color.red).opacity(0.15))
                                                 .foregroundColor(diff >= 0 ? .green : .red).cornerRadius(4)
@@ -1254,7 +1254,7 @@ struct AddEditEventSheet: View {
         }
         
         // =======================================================
-        // PROGRAMMATION DE LA NOTIFICATION (LOGIQUE 9:00 AM)
+        // PROGRAMMATION DE LA NOTIFICATION (LOGIQUE PERSONNALISÉE)
         // =======================================================
         var notificationDate = targetEvent.date
         
@@ -1268,23 +1268,43 @@ struct AddEditEventSheet: View {
             }
         }
         
+        // PRÉPARATION DU MESSAGE SPÉCIFIQUE
+        var notifTitle = "📅 BlueChip Event: \(targetEvent.ticker)"
+        var notifBody = "\(targetEvent.type.rawValue) scheduled for \(targetEvent.ticker)."
+        
+        // Si c'est un dividende, on calcule les valeurs estimées !
+        if targetEvent.type.rawValue.lowercased().contains("dividend"),
+           let pos = viewModel.positions.first(where: { $0.ticker == safeTicker }) {
+            
+            let paymentsPerYear = max(1.0, Double(pos.dividendMonths.count))
+            let singlePaymentPerShareUSD = pos.annualDividendNet / paymentsPerYear
+            let totalGrossUSD = singlePaymentPerShareUSD * pos.quantity
+            let singlePaymentGrossEUR = totalGrossUSD * pos.usdToEurRate
+            let singlePaymentNetEUR = singlePaymentGrossEUR * max(0.0, 1.0 - (viewModel.dividendTaxRate / 100.0))
+            
+            let sym = AppCurrency(rawValue: viewModel.preferredCurrency)?.symbol ?? "€"
+            
+            notifTitle = "💸 Dividend Payout: \(targetEvent.ticker)"
+            notifBody = "Expected: \(sym)\(String(format: "%.2f", singlePaymentGrossEUR)) Gross (\(sym)\(String(format: "%.2f", singlePaymentNetEUR)) Net)."
+        }
+        
         let now = Date()
         
         if notificationDate > now {
             // Le moment est dans le futur : on programme la notification normalement
             NotificationManager.shared.scheduleCalendarNotification(
                 for: notificationDate,
-                title: "📅 BlueChip Event: \(targetEvent.ticker)",
-                body: "\(targetEvent.type.rawValue) scheduled for \(targetEvent.ticker).",
+                title: notifTitle,
+                body: notifBody,
                 identifier: targetEvent.id.uuidString
             )
         } else if Calendar.current.isDateInToday(targetEvent.date) {
             // Le moment est passé (ex: il est 11h et la notif était pour 9h),
             // MAIS on est toujours le bon jour. On l'affiche tout de suite !
             NotificationManager.shared.sendImmediateNotification(
-                title: "📅 BlueChip Event: \(targetEvent.ticker)",
+                title: notifTitle,
                 subtitle: "Today",
-                body: "\(targetEvent.type.rawValue) scheduled for \(targetEvent.ticker)."
+                body: notifBody
             )
         }
         
