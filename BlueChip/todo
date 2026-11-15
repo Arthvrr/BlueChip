@@ -1,5 +1,3 @@
-Mettre rappels tout les x semaines ou mois
-
 PLUS TARD :
 
 page Renforcement (voir quelles actions renforcer, avec delta pru - prix actuel, score de qualité, valorisation)
@@ -12,7 +10,7 @@ widgets (calendrier, montant total, dividendes par mois)
 
 ajouter clic sur chaque case du header du dashboard (avec petite explication de ce que c'est en anglais + valeur en grand)
 
-section hard refresh data of 1 stocks
+section hard refresh data of 1 stocks --> mauvaise idée selon Gemini
 
 rendre plus joli le tableau de qualité watchlist
 
