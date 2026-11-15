@@ -223,7 +223,12 @@ struct FundamentalsView: View {
             get: { viewingHistoryCell != nil ? EditingCellWrapper(position: viewingHistoryCell!.position, criterion: viewingHistoryCell!.criterion) : nil },
             set: { _ in viewingHistoryCell = nil }
         )) { wrapper in
-            FundamentalHistorySheet(position: wrapper.position, criterion: wrapper.criterion, privacyMode: $privacyMode)
+            FundamentalHistorySheet(
+                viewModel: viewModel,
+                position: wrapper.position,
+                criterion: wrapper.criterion,
+                privacyMode: $privacyMode
+            )
         }
         .sheet(item: $chartToZoom) { type in
             FundamentalsFullScreenChartView(
@@ -1720,31 +1725,61 @@ struct ValueEntrySheet: View {
 // MARK: - SHEET : HISTORIQUE D'UN CRITÈRE (SIMPLE CLIC)
 // =========================================================================
 
+// =========================================================================
+// MARK: - SHEET : HISTORIQUE & AJOUT D'UN CRITÈRE (SIMPLE CLIC)
+// =========================================================================
+
 struct FundamentalHistorySheet: View {
     @Environment(\.dismiss) var dismiss
+    @ObservedObject var viewModel: PortfolioViewModel
     let position: Position
     let criterion: FundamentalCriterion
     @Binding var privacyMode: Bool
     
+    // États pour l'ajout d'une valeur
+    @State private var showAddForm: Bool = false
+    @State private var newDate: Date = Date()
+    @State private var newValue: Double? = nil
+    @State private var newBoolValue: Bool = false
+    
+    // État pour le survol du graphique
+    @State private var hoveredEntry: FundamentalValueHistory? = nil
+    
+    var critKey: String { criterion.id.uuidString }
+    
+    // FIX : La génération du lien dynamique, avec nettoyage des espaces et caractères indésirables
+    var dynamicURL: URL? {
+        if !criterion.referenceLink.isEmpty {
+            // Nettoyage des espaces et ponctuations parasites en début de chaîne
+            let cleanLink = criterion.referenceLink.trimmingCharacters(in: CharacterSet.whitespacesAndNewlines.union(CharacterSet(charactersIn: ".,:;")))
+            let urlString = cleanLink.replacingOccurrences(of: "{ticker}", with: position.ticker)
+            return URL(string: urlString)
+        }
+        return nil
+    }
+    
     var history: [FundamentalValueHistory] {
-        let critKey = criterion.id.uuidString
-        let saved = (position.fundamentalHistory ?? [])
+        position.fundamentalHistory
             .filter { $0.criterionId == critKey }
             .sorted(by: { $0.date < $1.date })
-        
-        if !saved.isEmpty {
-            return saved
-        }
-        if let currentVal = position.fundamentalValues?[critKey] {
-            return [FundamentalValueHistory(criterionId: critKey, date: Date(), value: currentVal)]
-        }
-        return []
     }
     
     var averageValue: Double {
         guard !history.isEmpty else { return 0.0 }
         let sum = history.reduce(0.0) { $0 + $1.value }
         return sum / Double(history.count)
+    }
+    
+    // Moyenne pondérée du portefeuille pour ce critère
+    var portfolioWeightedAverage: Double {
+        let totalValue = viewModel.positions.reduce(0.0) { $0 + $1.currentValueEUR }
+        guard totalValue > 0 else { return 0.0 }
+        return viewModel.positions.reduce(0.0) { sum, pos in
+            let weight = pos.currentValueEUR / totalValue
+            let posHistory = pos.fundamentalHistory.filter { $0.criterionId == critKey }
+            let val = posHistory.max(by: { $0.date < $1.date })?.value ?? pos.fundamentalValues?[critKey] ?? 0.0
+            return sum + (val * weight)
+        }
     }
     
     let dateFormatter: DateFormatter = {
@@ -1755,29 +1790,103 @@ struct FundamentalHistorySheet: View {
     }()
     
     var body: some View {
-        VStack(alignment: .leading, spacing: 20) {
-            HStack {
+        VStack(alignment: .leading, spacing: 18) {
+            // HEADER AVEC BOUTON ADD À GAUCHE DE LA CROIX
+            HStack(spacing: 12) {
                 VStack(alignment: .leading, spacing: 2) {
                     Text("\(position.ticker) — \(criterion.name)").font(.title2).fontWeight(.bold)
                     Text("Historical Criterion Evolution").font(.caption).foregroundColor(.secondary)
                 }
                 Spacer()
+                
+                // AFFICHAGE CONDITIONNEL DU LIEN ET DU BOUTON COPIE
+                if let url = dynamicURL {
+                    HStack(spacing: 6) {
+                        Link(destination: url) {
+                            Label("Data Source", systemImage: "safari")
+                                .font(.subheadline)
+                        }
+                        .buttonStyle(.bordered)
+                        
+                        Button(action: {
+                            NSPasteboard.general.clearContents()
+                            NSPasteboard.general.setString(url.absoluteString, forType: .string)
+                        }) {
+                            Image(systemName: "doc.on.clipboard.fill")
+                                .font(.subheadline)
+                                .foregroundColor(.secondary)
+                        }
+                        .buttonStyle(.bordered)
+                        .help("Copy link to clipboard")
+                    }
+                }
+                
+                Button(action: {
+                    withAnimation(.easeInOut(duration: 0.2)) {
+                        showAddForm.toggle()
+                    }
+                }) {
+                    Label(showAddForm ? "Close Form" : "Add", systemImage: showAddForm ? "minus" : "plus")
+                        .font(.subheadline)
+                        .fontWeight(.semibold)
+                }
+                .buttonStyle(.borderedProminent)
+                
                 Button(action: { dismiss() }) {
-                    Image(systemName: "xmark.circle.fill").font(.title2).foregroundColor(.secondary)
-                }.buttonStyle(.plain)
+                    Image(systemName: "xmark.circle.fill")
+                        .font(.title2)
+                        .foregroundColor(.secondary)
+                }
+                .buttonStyle(.plain)
             }
             
             Divider()
             
+            // FORMULAIRE D'AJOUT DÉPLIANT (VALEUR + DATE)
+            if showAddForm {
+                HStack(spacing: 16) {
+                    DatePicker("Date:", selection: $newDate, displayedComponents: .date)
+                        .frame(width: 170)
+                    
+                    if criterion.type == .boolean {
+                        Toggle("Condition met (Yes/No)", isOn: $newBoolValue)
+                            .toggleStyle(.switch)
+                    } else {
+                        HStack(spacing: 6) {
+                            Text("Value:")
+                            TextField("0.00", value: $newValue, format: .number)
+                                .textFieldStyle(.roundedBorder)
+                                .frame(width: 100)
+                            if criterion.type == .percentage {
+                                Text("%").fontWeight(.bold).foregroundColor(.secondary)
+                            }
+                        }
+                    }
+                    
+                    Spacer()
+                    
+                    Button("Save Entry") {
+                        addNewEntry()
+                    }
+                    .buttonStyle(.borderedProminent)
+                    .disabled(criterion.type != .boolean && newValue == nil)
+                }
+                .padding(12)
+                .background(Color.blue.opacity(0.08))
+                .cornerRadius(10)
+                .overlay(RoundedRectangle(cornerRadius: 10).stroke(Color.blue.opacity(0.25), lineWidth: 1))
+            }
+            
             if history.isEmpty {
                 Spacer()
-                Text("No historical data recorded for this criterion yet.\nDouble-click the cell in the table to log a value.")
+                Text("No historical data recorded for this criterion yet.\nClick '+ Add' in the top right to log a value.")
                     .multilineTextAlignment(.center)
                     .foregroundColor(.secondary)
                     .frame(maxWidth: .infinity, alignment: .center)
                 Spacer()
             } else {
-                HStack(spacing: 24) {
+                // CARTES DE RÉSUMÉ + LÉGENDE DES LIGNES
+                HStack(spacing: 20) {
                     VStack(alignment: .leading, spacing: 4) {
                         Text("Latest Value").font(.caption).foregroundColor(.secondary)
                         Text(formatValue(history.last?.value, type: criterion.type))
@@ -1786,10 +1895,27 @@ struct FundamentalHistorySheet: View {
                     }
                     Divider().frame(height: 30)
                     VStack(alignment: .leading, spacing: 4) {
-                        Text("Historical Average").font(.caption).foregroundColor(.secondary)
+                        HStack(spacing: 4) {
+                            Circle().fill(Color.blue).frame(width: 7, height: 7)
+                            Text("Historical Average").font(.caption).foregroundColor(.secondary)
+                        }
                         Text(formatValue(averageValue, type: criterion.type))
                             .font(.title3).fontWeight(.bold)
+                            .foregroundColor(.blue)
                             .blur(radius: privacyMode ? 6 : 0)
+                    }
+                    if criterion.type != .boolean {
+                        Divider().frame(height: 30)
+                        VStack(alignment: .leading, spacing: 4) {
+                            HStack(spacing: 4) {
+                                Circle().fill(Color.orange).frame(width: 7, height: 7)
+                                Text("Portfolio Weighted Avg").font(.caption).foregroundColor(.secondary)
+                            }
+                            Text(formatValue(portfolioWeightedAverage, type: criterion.type))
+                                .font(.title3).fontWeight(.bold)
+                                .foregroundColor(.orange)
+                                .blur(radius: privacyMode ? 6 : 0)
+                        }
                     }
                     Divider().frame(height: 30)
                     VStack(alignment: .leading, spacing: 4) {
@@ -1798,36 +1924,14 @@ struct FundamentalHistorySheet: View {
                     }
                 }
                 .padding(12)
+                .frame(maxWidth: .infinity, alignment: .leading)
                 .background(Color(NSColor.controlBackgroundColor))
                 .cornerRadius(10)
                 
-                // GRAPHIQUE D'ÉVOLUTION
-                Chart(history) { item in
-                    LineMark(
-                        x: .value("Date", item.date),
-                        y: .value("Value", item.value)
-                    )
-                    .foregroundStyle(Color.blue)
-                    .lineStyle(StrokeStyle(lineWidth: 2.5))
-                    .interpolationMethod(.monotone)
-                    
-                    PointMark(
-                        x: .value("Date", item.date),
-                        y: .value("Value", item.value)
-                    )
-                    .foregroundStyle(Color.blue)
-                    .symbolSize(60)
-                    
-                    RuleMark(y: .value("Average", averageValue))
-                        .foregroundStyle(Color.gray.opacity(0.5))
-                        .lineStyle(StrokeStyle(lineWidth: 1.5, dash: [4, 4]))
-                }
-                .frame(height: 220)
-                .padding()
-                .background(Color(NSColor.controlBackgroundColor))
-                .cornerRadius(12)
+                // GRAPHIQUE D'ÉVOLUTION AVEC SURVOL & DOUBLE MOYENNE
+                historyChartSection
                 
-                // LISTE CHRONOLOGIQUE (STACK)
+                // LISTE CHRONOLOGIQUE (STACK) AVEC BOUTON CROIX DE SUPPRESSION
                 Text("Logged Values History").font(.headline).foregroundColor(.secondary)
                 
                 ScrollView {
@@ -1844,6 +1948,17 @@ struct FundamentalHistorySheet: View {
                                     .font(.subheadline)
                                     .fontWeight(.bold)
                                     .blur(radius: privacyMode ? 6 : 0)
+                                
+                                Button(action: {
+                                    deleteEntry(log)
+                                }) {
+                                    Image(systemName: "xmark.circle.fill")
+                                        .foregroundColor(.secondary.opacity(0.7))
+                                        .font(.body)
+                                }
+                                .buttonStyle(.plain)
+                                .padding(.leading, 8)
+                                .help("Delete this entry")
                             }
                             .padding(.horizontal, 14)
                             .padding(.vertical, 10)
@@ -1855,7 +1970,136 @@ struct FundamentalHistorySheet: View {
             }
         }
         .padding(24)
-        .frame(width: 650, height: 600)
+        .frame(width: 700, height: 640)
+        .onAppear {
+            syncInitialLegacyValueIfNeeded()
+        }
+    }
+    
+    // Sous-vue dédiée au graphique pour garder une compilation instantanée
+    @ViewBuilder
+    private var historyChartSection: some View {
+        Chart {
+            ForEach(history) { item in
+                LineMark(
+                    x: .value("Date", item.date),
+                    y: .value("Value", item.value)
+                )
+                .foregroundStyle(Color.blue)
+                .lineStyle(StrokeStyle(lineWidth: 2.5))
+                .interpolationMethod(.monotone)
+                
+                PointMark(
+                    x: .value("Date", item.date),
+                    y: .value("Value", item.value)
+                )
+                .foregroundStyle(Color.blue)
+                .symbolSize(hoveredEntry?.id == item.id ? 110 : 60)
+            }
+            
+            // Ligne 1 : Moyenne historique de l'action
+            RuleMark(y: .value("Historical Avg", averageValue))
+                .foregroundStyle(Color.blue.opacity(0.6))
+                .lineStyle(StrokeStyle(lineWidth: 1.5, dash: [4, 4]))
+            
+            // Ligne 2 : Moyenne pondérée du portefeuille
+            if criterion.type != .boolean {
+                RuleMark(y: .value("Portfolio Avg", portfolioWeightedAverage))
+                    .foregroundStyle(Color.orange.opacity(0.85))
+                    .lineStyle(StrokeStyle(lineWidth: 1.5, dash: [6, 3]))
+            }
+            
+            // Indicateur de survol
+            if let hovered = hoveredEntry {
+                RuleMark(x: .value("Hovered Date", hovered.date))
+                    .foregroundStyle(Color.secondary.opacity(0.4))
+                    .lineStyle(StrokeStyle(lineWidth: 1, dash: [3, 3]))
+                    .annotation(position: .top, alignment: .center, overflowResolution: .init(x: .fit(to: .chart), y: .fit(to: .chart))) {
+                        VStack(spacing: 2) {
+                            Text(dateFormatter.string(from: hovered.date))
+                                .font(.caption2)
+                                .foregroundColor(.secondary)
+                            Text(formatValue(hovered.value, type: criterion.type))
+                                .font(.caption.bold())
+                                .foregroundColor(.primary)
+                                .blur(radius: privacyMode ? 6 : 0)
+                        }
+                        .padding(.horizontal, 8)
+                        .padding(.vertical, 4)
+                        .background(Color(NSColor.windowBackgroundColor).opacity(0.95))
+                        .cornerRadius(6)
+                        .shadow(radius: 3)
+                    }
+            }
+        }
+        .chartOverlay { proxy in
+            GeometryReader { _ in
+                Rectangle().fill(.clear).contentShape(Rectangle())
+                    .onContinuousHover { phase in
+                        switch phase {
+                        case .active(let location):
+                            if let hoveredDate: Date = proxy.value(atX: location.x) {
+                                hoveredEntry = history.min(by: {
+                                    abs($0.date.timeIntervalSince(hoveredDate)) < abs($1.date.timeIntervalSince(hoveredDate))
+                                })
+                            }
+                        case .ended:
+                            hoveredEntry = nil
+                        }
+                    }
+            }
+        }
+        .frame(height: 220)
+        .padding()
+        .background(Color(NSColor.controlBackgroundColor))
+        .cornerRadius(12)
+    }
+    
+    // Synchronise une éventuelle valeur issue du backup JSON pour qu'elle puisse être supprimée ou complétée
+    private func syncInitialLegacyValueIfNeeded() {
+        let existingHistory = position.fundamentalHistory.filter { $0.criterionId == critKey }
+        if existingHistory.isEmpty, let legacyVal = position.fundamentalValues?[critKey] {
+            let seeded = FundamentalValueHistory(criterionId: critKey, date: Date(), value: legacyVal)
+            position.fundamentalHistory.append(seeded)
+        }
+    }
+    
+    private func addNewEntry() {
+        let finalValue: Double
+        if criterion.type == .boolean {
+            finalValue = newBoolValue ? 1.0 : 0.0
+        } else {
+            guard let val = newValue else { return }
+            finalValue = val
+        }
+        
+        let entry = FundamentalValueHistory(criterionId: critKey, date: newDate, value: finalValue)
+        position.fundamentalHistory.append(entry)
+        
+        // Met à jour la valeur active du tableau avec l'entrée la plus récente chronologiquement
+        let remaining = position.fundamentalHistory.filter { $0.criterionId == critKey }
+        if let latest = remaining.max(by: { $0.date < $1.date }) {
+            viewModel.updateFundamentalValue(for: position.id, criterionId: criterion.id, value: latest.value)
+        }
+        
+        newValue = nil
+        showAddForm = false
+        viewModel.objectWillChange.send()
+    }
+    
+    private func deleteEntry(_ entry: FundamentalValueHistory) {
+        if hoveredEntry?.id == entry.id {
+            hoveredEntry = nil
+        }
+        position.fundamentalHistory.removeAll { $0.id == entry.id }
+        
+        let remaining = position.fundamentalHistory.filter { $0.criterionId == critKey }
+        if let latest = remaining.max(by: { $0.date < $1.date }) {
+            viewModel.updateFundamentalValue(for: position.id, criterionId: criterion.id, value: latest.value)
+        } else {
+            position.fundamentalValues?.removeValue(forKey: critKey)
+        }
+        viewModel.objectWillChange.send()
     }
     
     func formatValue(_ value: Double?, type: CriterionType) -> String {
@@ -1877,9 +2121,6 @@ struct FundamentalsDataCell: View {
     let onCellTap: () -> Void
     let onHistoryTap: () -> Void
     
-    // NOUVEAU : Un gestionnaire de tâche pour différer le simple clic
-    @State private var singleTapTask: Task<Void, Never>? = nil
-    
     var body: some View {
         let displayData = getDisplayData()
         
@@ -1892,21 +2133,8 @@ struct FundamentalsDataCell: View {
             .background(Color(NSColor.controlBackgroundColor))
             .border(Color.gray.opacity(0.2), width: 0.5)
             .contentShape(Rectangle())
-            // 1. Double-clic (Prioritaire) : On annule le timer du simple clic et on édite
-            .onTapGesture(count: 2) {
-                singleTapTask?.cancel()
-                onCellTap()
-            }
-            // 2. Simple clic : On attend 1/4 de seconde pour voir si un 2e clic arrive
-            .onTapGesture(count: 1) {
-                singleTapTask = Task {
-                    try? await Task.sleep(nanoseconds: 250_000_000) // Délai de 250 ms
-                    if !Task.isCancelled {
-                        await MainActor.run {
-                            onHistoryTap()
-                        }
-                    }
-                }
+            .onTapGesture {
+                onHistoryTap()
             }
     }
     
@@ -1914,10 +2142,7 @@ struct FundamentalsDataCell: View {
         let critKey = crit.id.uuidString
         let history = pos.fundamentalHistory.filter { $0.criterionId == critKey }
         
-        // On cherche dans l'historique d'abord...
         var latestVal = history.max(by: { $0.date < $1.date })?.value
-        
-        // ... S'il n'y a rien (ex: données du JSON), on récupère l'ancienne valeur !
         if latestVal == nil {
             latestVal = pos.fundamentalValues?[critKey]
         }
